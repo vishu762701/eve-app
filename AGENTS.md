@@ -20,7 +20,7 @@ Eve: free mock test / exam prep Android app (Indian govt & entrance exams). Andr
 
 ## Repo hygiene
 11. Delete only files proven obsolete for the screen you just finished (grep shows 0 callers). List them in the commit message.
-12. No new report/ledger/provenance/checkpoint documents. The only living docs are `AGENTS.md`, `README.md`, `HANDOFF.md` and `PORT_MANIFEST.json`.
+12. No new report/ledger/provenance/checkpoint documents. The only living docs are `AGENTS.md`, `README.md`, `HANDOFF.md`, `PORT_MANIFEST.json` and `BUILD_FAILURE_RULES.md`.
 13. After every mission update `HANDOFF.md` (max 30 lines): Done, In progress, Next, Known bugs, Open decisions.
 14. Work on `main` in small commits. Never force-push. After pushing, verify the remote SHA and the Actions result.
 
@@ -29,3 +29,4 @@ Eve: free mock test / exam prep Android app (Indian govt & entrance exams). Andr
 
 ## Licensing
 16. Eve is open source (GPL). Telegram-derived files keep their original authorship and license headers. Do not use the Telegram name, logo or branding in the app.
+17. On any CI failure follow BUILD_FAILURE_RULES.md. A mission may make it stricter, never looser.
