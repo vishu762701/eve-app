@@ -7,6 +7,7 @@ import static org.telegram.messenger.AndroidUtilities.lerp;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.Canvas;
+import android.graphics.PorterDuff;
 import android.graphics.drawable.Drawable;
 import android.view.Gravity;
 import android.view.View;
@@ -37,24 +38,17 @@ public class FragmentFloatingButton extends FrameLayout implements FactorAnimato
     private final BoolAnimator animatorProgressVisible = new BoolAnimator(ANIMATOR_ID_PROGRESS_VISIBLE, this,
         CubicBezierInterpolator.EASE_OUT_QUINT, 380);
 
-
-    public final ImageView imageView; // EVE-PATCH: use ImageView without RLottieImageView
+    public final ImageView imageView; // EVE-CUT: use ImageView without RLottieImageView
     public final RadialProgressView progressView;
     private final Theme.ResourcesProvider resourcesProvider;
     private ArrayList<View> additionalContentViews;
-    private final boolean isSubButton;
 
     public FragmentFloatingButton(@NonNull Context context, Theme.ResourcesProvider resourcesProvider) {
-        this(context, resourcesProvider, false);
-    }
-
-    public FragmentFloatingButton(@NonNull Context context, Theme.ResourcesProvider resourcesProvider, boolean isSubButton) {
         super(context);
 
         this.resourcesProvider = resourcesProvider;
-        this.isSubButton = isSubButton;
 
-        imageView = new ImageView(context); // EVE-PATCH: instantiate ImageView without RLottie
+        imageView = new ImageView(context); // EVE-CUT: instantiate standard ImageView
         imageView.setScaleType(ImageView.ScaleType.CENTER);
         addView(imageView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
 
@@ -65,10 +59,8 @@ public class FragmentFloatingButton extends FrameLayout implements FactorAnimato
         setAnimatedVisibility(progressView, 0);
 
         ScaleStateListAnimator.apply(this);
-        if (!isSubButton) {
-            setOutlineProvider(ViewOutlineProviderImpl.BOUNDS_OVAL);
-            setTranslationZ(dpf2(0.5f));
-        }
+        setOutlineProvider(ViewOutlineProviderImpl.BOUNDS_OVAL);
+        setTranslationZ(dpf2(0.5f));
 
         updateColors();
     }
@@ -94,7 +86,7 @@ public class FragmentFloatingButton extends FrameLayout implements FactorAnimato
         if (id == ANIMATOR_ID_BUTTON_VISIBLE) {
             setAnimatedVisibility(this, factor);
             setClickable(factor >= 0.99f);
-            setAdditionalTranslationY(dp(isSubButton ? 64 : 40) * (1f - factor));
+            setAdditionalTranslationY(dp(40) * (1f - factor));
         } else if (id == ANIMATOR_ID_PROGRESS_VISIBLE) {
             setAnimatedVisibility(progressView, factor);
             setAnimatedVisibility(imageView, 1f - factor);
@@ -121,15 +113,31 @@ public class FragmentFloatingButton extends FrameLayout implements FactorAnimato
             return;
         }
         final boolean recolorBackground = themedBackground != null && getBackground() == themedBackground;
+        final int iconColor = Theme.getColor(Theme.key_chats_actionIcon, resourcesProvider);
+        if (iconColor != themedIconColor || !themedIconColorSet) {
+            themedIconColor = iconColor;
+            themedIconColorSet = true;
+            imageView.setColorFilter(iconColor, PorterDuff.Mode.SRC_IN);
+        }
+        progressView.setProgressColor(Theme.getColor(Theme.key_chats_actionIcon, resourcesProvider));
+        final int color = Theme.getColor(Theme.key_featuredStickers_addButton, resourcesProvider);
+        final int pressedColor = Theme.getColor(Theme.key_featuredStickers_addButtonPressed, resourcesProvider);
+        if (recolorBackground) {
+            if (color != themedBackgroundColor || pressedColor != themedBackgroundPressedColor) {
+                themedBackgroundColor = color;
+                themedBackgroundPressedColor = pressedColor;
+                Theme.setSelectorDrawableColor(themedBackground, color, false);
+                Theme.setSelectorDrawableColor(themedBackground, pressedColor, true);
+                themedBackground.invalidateSelf();
+            }
+        } else {
+            themedBackgroundColor = color;
+            themedBackgroundPressedColor = pressedColor;
+            setBackground(themedBackground = Theme.createSimpleSelectorCircleDrawable(dp(48), color, pressedColor));
+        }
     }
 
     public static final int SIZE = 48;
-
-    public static FrameLayout.LayoutParams createSubButtonLayoutParams() {
-        return LayoutHelper.createFrame(48, 48,
-                (LocaleController.isRTL ? Gravity.LEFT : Gravity.RIGHT) | Gravity.BOTTOM,
-                20, 0, 20, 14);
-    }
 
     public static FrameLayout.LayoutParams createDefaultLayoutParams() {
         return LayoutHelper.createFrame(48, 48,
@@ -137,11 +145,10 @@ public class FragmentFloatingButton extends FrameLayout implements FactorAnimato
                 20, 0, 20, 14);
     }
 
-
     public static FrameLayout.LayoutParams createDefaultLayoutParamsBig() {
         return LayoutHelper.createFrame(56, 56,
                 (LocaleController.isRTL ? Gravity.LEFT : Gravity.RIGHT) | Gravity.BOTTOM,
-                20 /*24*/, 0, 20 /*24*/, 14 /*16*/);
+                20, 0, 20, 14);
     }
 
     private float additionalTranslationY;
