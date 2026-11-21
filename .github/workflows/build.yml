@@ -104,6 +104,11 @@ jobs:
         if: ${{ steps.verification_profile.outputs.full == 'true' }}
         run: cargo +1.99.1 test --locked --release --lib --features c-api --manifest-path app/src/main/cpp/vendor/tlottie/Cargo.toml -- --test-threads=1
 
+      - name: Prepare pinned Telegram QR native renderer toolchain
+        env:
+          EVE_ALL_ABIS: ${{ steps.verification_profile.outputs.full == 'true' }}
+        run: bash .github/scripts/prepare-qr-native.sh
+
       # Normal pushes compile only. Manual FULL exercises all checks below.
       - name: FAST compile debug APK only
         run: |
