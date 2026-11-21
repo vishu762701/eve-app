@@ -46,10 +46,24 @@ import org.telegram.ui.Components.StaticLayoutEx;
 import org.telegram.ui.DialogsActivity;
 import org.telegram.ui.Stories.StoriesUtilities;
 public class DialogCell extends BaseCell { // EVE-CUT: cut stories and bio interfaces
+    public boolean drawArchive = true;
     public static final int SENT_STATE_NOTHING = -1;
     public static final int SENT_STATE_PROGRESS = 0;
     public static final int SENT_STATE_SENT = 1;
     public static final int SENT_STATE_READ = 2;
+    public boolean drawMonoforumAvatar = false;
+    private boolean drawCommunityAvatar;
+    private boolean isShareToStoryCell;
+    public int messagePaddingStart = 72;
+    public int heightDefault = 70;
+    public int heightThreeLines = 76;
+    public int addHeightForTags = 3;
+    public int addForumHeightForTags = 11;
+    public TLRPC.TL_forumTopic forumTopic;
+    private boolean twoLinesForName;
+    private boolean nameIsEllipsized;
+    private Paint buttonBackgroundPaint;
+    public boolean drawAvatarSelector;
     public static class CustomDialog {
         public String name;
         public String message;
@@ -68,6 +82,7 @@ public class DialogCell extends BaseCell { // EVE-CUT: cut stories and bio inter
     private int currentAccount;
     private CustomDialog customDialog;
     private long currentDialogId;
+    private int currentEditDate;
     public boolean isDialogCell;
     private int lastMessageDate;
     private int unreadCount;
@@ -75,6 +90,7 @@ public class DialogCell extends BaseCell { // EVE-CUT: cut stories and bio inter
     private boolean dialogMuted;
     private float dialogMutedProgress;
     private int messageId;
+    protected boolean forbidDraft;
     public ImageReceiver avatarImage = new ImageReceiver(this);
     private AvatarDrawable avatarDrawable = new AvatarDrawable();
     public boolean useForceThreeLines;
@@ -97,9 +113,12 @@ public class DialogCell extends BaseCell { // EVE-CUT: cut stories and bio inter
     private int halfCheckDrawLeft;
     private int messageTop;
     private int messageLeft;
+    private int typingLeft;
     private StaticLayout messageLayout;
+    private StaticLayout typingLayout;
     private int messageNameTop;
     private int messageNameLeft;
+    private int errorLeft;
     private boolean drawPin;
     private int pinTop;
     private int pinLeft;
@@ -119,15 +138,13 @@ public class DialogCell extends BaseCell { // EVE-CUT: cut stories and bio inter
     private int lastSize; // EVE-CUT: size tracking
     private RectF rect = new RectF(); // EVE-CUT: temp rect
     private int thumbSize; // EVE-CUT: thumb size
-    private TextPaint currentMessagePaint; // EVE-CUT: message paint
     private boolean drawNameLock; // EVE-CUT: name lock
     private int nameLockTop; // EVE-CUT: name lock top
     private int nameLockLeft; // EVE-CUT: name lock left
     private int nameTop; // EVE-CUT: name top
     private int messageWidth; // EVE-CUT: message width
     private int timeWidth; // EVE-CUT: time width
-    private boolean drawMonoforumAvatar; // EVE-CUT: forum flag
-    private boolean drawCommunityAvatar; // EVE-CUT: community flag
+    private int thumbsCount; // EVE-CUT: thumbs count
     public DialogCell(DialogsActivity fragment, Context context, boolean needCheck, boolean forceThreeLines) {
         this(fragment, context, needCheck, forceThreeLines, UserConfig.selectedAccount, null);
     }
@@ -150,7 +167,7 @@ public class DialogCell extends BaseCell { // EVE-CUT: cut stories and bio inter
         update(0);
     } // EVE-CUT: end setDialog
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), computeHeight());
+        topClip = 0;
     } // EVE-CUT: end onMeasure
     private int computeHeight() {
         int height;
@@ -246,34 +263,11 @@ public class DialogCell extends BaseCell { // EVE-CUT: cut stories and bio inter
         int messagePaddingStart = 72; // EVE-CUT: default flags
         boolean twoLinesForName = false; // EVE-CUT: default flags
         boolean drawError = false; // EVE-CUT: default flags
-        CharSequence messageNameString = null; // EVE-CUT: default flags
         int messageFormatType = 1; // EVE-CUT: default flags
         int avatarStart = 10; // EVE-CUT: default flags
         int thumbsCountFinal = 0; // EVE-CUT: default flags
         Layout.Alignment align = LocaleController.isRTL ? Layout.Alignment.ALIGN_OPPOSITE : Layout.Alignment.ALIGN_NORMAL; // EVE-CUT: align
         if (customDialog != null) {
-            if (customDialog.type == 2) {
-                drawNameLock = true;
-                if (useForceThreeLines || SharedConfig.useThreeLinesLayout) {
-                    nameLockTop = dp(12.5f);
-                    if (!LocaleController.isRTL) {
-                        nameLockLeft = dp(messagePaddingStart + 6);
-                        nameLeft = dp(messagePaddingStart + 10) + Theme.dialogs_lockDrawable.getIntrinsicWidth();
-                    } else {
-                        nameLockLeft = getMeasuredWidth() - dp(messagePaddingStart + 6) - Theme.dialogs_lockDrawable.getIntrinsicWidth();
-                        nameLeft = dp(22);
-                    }
-                } else {
-                    nameLockTop = dp(16.5f);
-                    if (!LocaleController.isRTL) {
-                        nameLockLeft = dp(messagePaddingStart + 4);
-                        nameLeft = dp(messagePaddingStart + 8) + Theme.dialogs_lockDrawable.getIntrinsicWidth();
-                    } else {
-                        nameLockLeft = getMeasuredWidth() - dp(messagePaddingStart + 4) - Theme.dialogs_lockDrawable.getIntrinsicWidth();
-                        nameLeft = dp(18);
-                    }
-                }
-            } else {
                 drawVerified = !forbidVerified && customDialog.verified;
                 if (useForceThreeLines || SharedConfig.useThreeLinesLayout) {
                     if (!LocaleController.isRTL) {
@@ -288,37 +282,9 @@ public class DialogCell extends BaseCell { // EVE-CUT: cut stories and bio inter
                         nameLeft = dp(18);
                     }
                 }
-            }
-
-            if (customDialog.type == 1) {
-                messageNameString = getString(R.string.FromYou);
-                checkMessage = false;
-                SpannableStringBuilder stringBuilder;
-                if (customDialog.isMedia) {
-                    currentMessagePaint = Theme.dialogs_messagePrintingPaint[paintIndex];
-                    stringBuilder = formatInternal(messageFormatType, message.messageText, null);
-                    stringBuilder.setSpan(new ForegroundColorSpanThemable(Theme.key_chats_attachMessage, resourcesProvider), 0, stringBuilder.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-                } else {
-                    String mess = customDialog.message;
-                    if (mess.length() > 150) {
-                        mess = mess.substring(0, 150);
-                    }
-                    if (useForceThreeLines || SharedConfig.useThreeLinesLayout) {
-                        stringBuilder = formatInternal(messageFormatType, mess, messageNameString);
-                    } else {
-                        stringBuilder = formatInternal(messageFormatType, mess.replace('\n', ' '), messageNameString);
-                    }
-                }
-                messageString = Emoji.replaceEmoji(stringBuilder, Theme.dialogs_messagePaint[paintIndex].getFontMetricsInt(), false);
-            } else {
-                messageString = customDialog.message;
-                if (customDialog.isMedia) {
-                    currentMessagePaint = Theme.dialogs_messagePrintingPaint[paintIndex];
-                }
-            }
-
+            messageString = customDialog.message != null ? customDialog.message : ""; // EVE-CUT: simplified messageString
+            if (customDialog.isMedia) { currentMessagePaint = Theme.dialogs_messagePrintingPaint[paintIndex]; } // EVE-CUT: media paint
             if (customDialog.dateString != null) { timeString = customDialog.dateString; } else { timeString = ""; } // EVE-CUT: dateString
-
             if (customDialog.unread_count != 0) {
                 drawCount = true;
                 countString = String.format("%d", customDialog.unread_count);
@@ -371,7 +337,6 @@ public class DialogCell extends BaseCell { // EVE-CUT: cut stories and bio inter
                 thumbLeft = avatarLeft + dp(56 + 13);
             }
             storyParams.originalAvatarRect.set(avatarLeft, avatarTop, avatarLeft + dp(56), avatarTop + dp(56));
-            storyParams.originalAvatarRect.set(avatarLeft, avatarTop, avatarLeft + dp(56), avatarTop + dp(56)); // EVE-CUT: avatarRect
         } else { // EVE-CUT: else
             avatarTop = dp(9);
             messageNameTop = dp(31);
@@ -392,7 +357,6 @@ public class DialogCell extends BaseCell { // EVE-CUT: cut stories and bio inter
                 thumbLeft = avatarLeft + dp(56 + 11);
             }
             storyParams.originalAvatarRect.set(avatarLeft, avatarTop, avatarLeft + dp(52), avatarTop + dp(52));
-            storyParams.originalAvatarRect.set(avatarLeft, avatarTop, avatarLeft + dp(52), avatarTop + dp(52)); // EVE-CUT: avatarRect
         } // EVE-CUT: end if
         if (getIsPinned()) {
             if (!LocaleController.isRTL) {
@@ -401,7 +365,7 @@ public class DialogCell extends BaseCell { // EVE-CUT: cut stories and bio inter
                 pinLeft = dp(14);
             }
         }
-        if (countString != null) { // EVE-CUT: count
+            if (countString != null) {
                 countWidth = Math.max(dp(BADGE_TEXT_MIN_WIDTH), (int) Math.ceil(Theme.dialogs_countTextPaint2.measureText(countString)));
                 countLayout = new StaticLayout(countString, Theme.dialogs_countTextPaint2, countWidth, Layout.Alignment.ALIGN_CENTER, 1.0f, 0.0f, false);
                 int w = countWidth + dp(BADGE_GAP);
@@ -417,7 +381,8 @@ public class DialogCell extends BaseCell { // EVE-CUT: cut stories and bio inter
                 }
                 drawCount = true;
             } else {
-        } // EVE-CUT: count
+                countWidth = 0;
+            }
         TextPaint timePaint = Theme.dialogs_timePaint; // EVE-CUT: timeLayout
         timeWidth = (int) Math.ceil(timePaint.measureText(timeString)); // EVE-CUT: timeLayout
         timeLayout = new StaticLayout(timeString, timePaint, timeWidth, Layout.Alignment.ALIGN_NORMAL, 1.0f, 0.0f, false); // EVE-CUT: timeLayout
@@ -426,6 +391,7 @@ public class DialogCell extends BaseCell { // EVE-CUT: cut stories and bio inter
         if (nameWidth < 0) nameWidth = 0; // EVE-CUT: nameLayout
         CharSequence nameFinal = TextUtils.ellipsize(nameString, Theme.dialogs_namePaint[paintIndex], nameWidth, TextUtils.TruncateAt.END); // EVE-CUT: nameLayout
         nameLayout = StaticLayoutEx.createStaticLayout(nameFinal, Theme.dialogs_namePaint[paintIndex], nameWidth, Layout.Alignment.ALIGN_NORMAL, 1.0f, 0.0f, false, TextUtils.TruncateAt.END, nameWidth, 1); // EVE-CUT: nameLayout
+        messageWidth = getMeasuredWidth() - messageLeft - dp(16) - (drawCount ? countWidth + dp(BADGE_TEXT_PADDING * 2) + dp(6) : (drawPin ? dp(20) : 0)); // EVE-CUT: messageLayout
         if (messageWidth < 0) messageWidth = 0; // EVE-CUT: messageLayout
         CharSequence messageFinal = TextUtils.ellipsize(messageString, currentMessagePaint, messageWidth, TextUtils.TruncateAt.END); // EVE-CUT: messageLayout
         messageLayout = new StaticLayout(messageFinal, currentMessagePaint, messageWidth, align, 1.0f, 0.0f, false); // EVE-CUT: messageLayout
@@ -503,34 +469,28 @@ public class DialogCell extends BaseCell { // EVE-CUT: cut stories and bio inter
         return update(mask, true);
     }
     public boolean update(int mask, boolean animated) {
+        boolean requestLayout = false;
+        boolean rebuildLayout = false;
+        boolean invalidate = false;
+        boolean oldIsForumCell = isForumCell();
         if (customDialog != null) {
             lastMessageDate = customDialog.date;
             lastUnreadState = customDialog.unread_count != 0;
             unreadCount = customDialog.unread_count;
             drawPin = customDialog.pinned;
             dialogMuted = customDialog.muted;
-            hasUnmutedTopics = false;
-            hasUnmutedCommunityDialogs = false;
             avatarDrawable.setInfo(customDialog.id, customDialog.name, null);
-            if (isShareToStoryCell) {
-                avatarImage.setImage(null, "50_50", repostStoryDrawable, null, 0);
-            } else {
-                avatarImage.setImage(null, "50_50", avatarDrawable, null, 0);
-            }
-
-            for (int i = 0; i < thumbImage.length; ++i) {
-                thumbImage[i].setImageBitmap((BitmapDrawable) null);
-            }
+            avatarImage.setImage(null, "50_50", avatarDrawable, null, 0); // EVE-CUT: direct avatar
             drawMonoforumAvatar = false;
             drawCommunityAvatar = false;
             avatarImage.setRoundRadius(dp(26));
-            drawUnmute = false;
         } // EVE-CUT: cut TLRPC update branch
         if (getMeasuredWidth() != 0 || getMeasuredHeight() != 0) { rebuildLayout = true; } // EVE-CUT: rebuild
         invalidate(); // EVE-CUT: invalidate
         if (rebuildLayout) { buildLayout(); } // EVE-CUT: buildLayout
         return false; // EVE-CUT: return
     } // EVE-CUT: end update
+    @Override
     protected void onDraw(Canvas canvas) {
         if (currentDialogId == 0 && customDialog == null) {
             return;
@@ -547,7 +507,7 @@ public class DialogCell extends BaseCell { // EVE-CUT: cut stories and bio inter
         drawCheckStatus(canvas, drawClock, drawCheck1, drawCheck2, false, 1f); // EVE-CUT: checks
         if (dialogMuted) { setDrawableBounds(Theme.dialogs_muteDrawable, nameMuteLeft, nameTop + dp(3)); Theme.dialogs_muteDrawable.draw(canvas); } // EVE-CUT: mute
         if (drawPin) { setDrawableBounds(Theme.dialogs_pinnedDrawable, pinLeft, pinTop); Theme.dialogs_pinnedDrawable.draw(canvas); } // EVE-CUT: pin
-        if (drawCount && countString != null && countLayout != null) { drawCounter(canvas, dialogMuted, countTop, countLeft, countLeft, 1f, false); } // EVE-CUT: count
+        if (drawCount && countLayout != null) { drawCounter(canvas, dialogMuted, countTop, countLeft, countLeft, 1f, false); } // EVE-CUT: count
         if (useSeparator) { if (LocaleController.isRTL) { canvas.drawLine(0, getMeasuredHeight() - 1, getMeasuredWidth() - dp(AndroidUtilities.leftBaseline), getMeasuredHeight() - 1, Theme.dividerPaint); } else { canvas.drawLine(dp(AndroidUtilities.leftBaseline), getMeasuredHeight() - 1, getMeasuredWidth(), getMeasuredHeight() - 1, Theme.dividerPaint); } } // EVE-CUT: divider
     } // EVE-CUT: end onDraw
     private void drawCounter(Canvas canvas, boolean drawCounterMuted, int countTop, int countLeftLocal, int countLeftOld, float globalScale, boolean outline) {

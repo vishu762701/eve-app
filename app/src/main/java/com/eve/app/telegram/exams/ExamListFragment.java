@@ -11,8 +11,8 @@ import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.eve.app.R;
 import org.telegram.messenger.AndroidUtilities;
-import org.telegram.messenger.R;
 import org.telegram.ui.ActionBar.ActionBar;
 import org.telegram.ui.ActionBar.ActionBarMenu;
 import org.telegram.ui.ActionBar.BaseFragment;
@@ -32,8 +32,8 @@ public class ExamListFragment extends BaseFragment {
     public View createView(Context context) {
         initThemeResources(context);
 
-        actionBar.setItemsBackgroundColor(Theme.getColor(Theme.key_avatar_actionBarSelectorBlue, resourcesProvider), false);
-        actionBar.setItemsColor(Theme.getColor(Theme.key_actionBarDefaultIcon, resourcesProvider), false);
+        actionBar.setItemsBackgroundColor(Theme.getColor(Theme.key_avatar_actionBarSelectorBlue), false);
+        actionBar.setItemsColor(Theme.getColor(Theme.key_actionBarDefaultIcon), false);
         actionBar.setBackButtonImage(R.drawable.ic_ab_back);
         actionBar.setAllowOverlayTitle(true);
         actionBar.setTitle("Eve");
@@ -52,7 +52,7 @@ public class ExamListFragment extends BaseFragment {
 
         FrameLayout frameLayout = new FrameLayout(context);
         fragmentView = frameLayout;
-        fragmentView.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider));
+        fragmentView.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
 
         listView = new RecyclerListView(context);
         listView.setVerticalScrollBarEnabled(true);
@@ -73,32 +73,32 @@ public class ExamListFragment extends BaseFragment {
             for (int a = 0; a < 2; a++) {
                 Theme.dialogs_namePaint[a] = new TextPaint(TextPaint.ANTI_ALIAS_FLAG);
                 Theme.dialogs_namePaint[a].setTypeface(AndroidUtilities.bold());
-                Theme.dialogs_namePaint[a].setColor(Theme.getColor(Theme.key_chats_name, resourcesProvider));
+                Theme.dialogs_namePaint[a].setColor(Theme.getColor(Theme.key_chats_name));
                 Theme.dialogs_messagePaint[a] = new TextPaint(TextPaint.ANTI_ALIAS_FLAG);
-                Theme.dialogs_messagePaint[a].setColor(Theme.getColor(Theme.key_chats_message, resourcesProvider));
+                Theme.dialogs_messagePaint[a].setColor(Theme.getColor(Theme.key_chats_message));
             }
             Theme.dialogs_timePaint = new TextPaint(TextPaint.ANTI_ALIAS_FLAG);
             Theme.dialogs_timePaint.setTextSize(AndroidUtilities.dp(12));
-            Theme.dialogs_timePaint.setColor(Theme.getColor(Theme.key_chats_date, resourcesProvider));
+            Theme.dialogs_timePaint.setColor(Theme.getColor(Theme.key_chats_date));
 
             Theme.dialogs_countPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            Theme.dialogs_countPaint.setColor(Theme.getColor(Theme.key_chats_unreadCounter, resourcesProvider));
+            Theme.dialogs_countPaint.setColor(Theme.getColor(Theme.key_chats_unreadCounter));
 
             Theme.dialogs_countGrayPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            Theme.dialogs_countGrayPaint.setColor(Theme.getColor(Theme.key_chats_unreadCounterMuted, resourcesProvider));
+            Theme.dialogs_countGrayPaint.setColor(Theme.getColor(Theme.key_chats_unreadCounterMuted));
 
             Theme.dialogs_countTextPaint = new TextPaint(TextPaint.ANTI_ALIAS_FLAG);
             Theme.dialogs_countTextPaint.setTypeface(AndroidUtilities.bold());
             Theme.dialogs_countTextPaint.setTextSize(AndroidUtilities.dp(12));
-            Theme.dialogs_countTextPaint.setColor(Theme.getColor(Theme.key_chats_unreadCounterText, resourcesProvider));
+            Theme.dialogs_countTextPaint.setColor(Theme.getColor(Theme.key_chats_unreadCounterText));
 
             Theme.dialogs_countTextPaint2 = new TextPaint(TextPaint.ANTI_ALIAS_FLAG);
             Theme.dialogs_countTextPaint2.setTypeface(AndroidUtilities.bold());
             Theme.dialogs_countTextPaint2.setTextSize(AndroidUtilities.dp(13));
-            Theme.dialogs_countTextPaint2.setColor(Theme.getColor(Theme.key_chats_unreadCounterText, resourcesProvider));
+            Theme.dialogs_countTextPaint2.setColor(Theme.getColor(Theme.key_chats_unreadCounterText));
 
             Theme.dialogs_pinnedPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            Theme.dialogs_pinnedPaint.setColor(Theme.getColor(Theme.key_chats_pinnedOverlay, resourcesProvider));
+            Theme.dialogs_pinnedPaint.setColor(Theme.getColor(Theme.key_chats_pinnedOverlay));
 
             Theme.dialogs_pinnedDrawable = resources.getDrawable(R.drawable.list_pin);
             Theme.setDrawableColorByKey(Theme.dialogs_pinnedDrawable, Theme.key_chats_pinnedIcon);

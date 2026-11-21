@@ -6,7 +6,7 @@
       "upstream_path": "TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java",
       "upstream_sha256": "8f0aebe6c4ca79d57730d5f19e8c0b6c36fb0e462c815649f0cd9427dc451c07",
       "mode": "CUT",
-      "eve_sha256": "cd7ac53ba4fdff920e8560adf997a50adc046dbdfb318f0488580aa7acca440f"
+      "eve_sha256": "7793d80ba490571674219579858442752b176a589e565af59f2f4d105a378396"
     },
     {
       "path": "app/src/main/java/org/telegram/messenger/ImageReceiver.java",
@@ -174,7 +174,7 @@
       "upstream_path": null,
       "upstream_sha256": null,
       "mode": "NEW",
-      "eve_sha256": "3e07752522f74e31d10fe508a6e2aff4e0e890f1a496ea0506e6db5d89eb23c3"
+      "eve_sha256": "daa397636df05f263250f79a5cf15febed128ad1cdba5a5c78bd09890f871e7e"
     },
     {
       "path": "app/src/main/java/com/eve/app/telegram/exams/ExamListActivity.kt",
