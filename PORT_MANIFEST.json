@@ -1,0 +1,187 @@
+{
+  "pinned_revision": "21f7d109da6ab3506c9e9577f98c6a38771ab335",
+  "files": [
+    {
+      "path": "app/src/main/java/org/telegram/ui/Cells/DialogCell.java",
+      "upstream_path": "TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java",
+      "upstream_sha256": "8f0aebe6c4ca79d57730d5f19e8c0b6c36fb0e462c815649f0cd9427dc451c07",
+      "mode": "CUT",
+      "eve_sha256": "0bfd408178b597b8d2ddaf2b01d38e8820936aaf4f1c1ce140538e7f746d77a9"
+    },
+    {
+      "path": "app/src/main/java/org/telegram/messenger/ImageReceiver.java",
+      "upstream_path": "TMessagesProj/src/main/java/org/telegram/messenger/ImageReceiver.java",
+      "upstream_sha256": "f667d367f820f8e7474a19b4c0e85d65f9bf0fa486d5bc02a8039981437cc422",
+      "mode": "SHIM",
+      "eve_sha256": "65d0627b61425fc5de8a441606e44f6fb86f768f0c18bc4c5b9e39df5f03a02d"
+    },
+    {
+      "path": "app/src/main/java/org/telegram/messenger/ImageLocation.java",
+      "upstream_path": "TMessagesProj/src/main/java/org/telegram/messenger/ImageLocation.java",
+      "upstream_sha256": "a0c002999c416a8c9b12e614ee937f633fe1e625784c5de08732652980d87633",
+      "mode": "SHIM",
+      "eve_sha256": "2c848e1630f85be17232febd5a097195314123ce0852637c37aee26d906cbe38"
+    },
+    {
+      "path": "app/src/main/java/org/telegram/ui/DialogsActivity.java",
+      "upstream_path": "TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java",
+      "upstream_sha256": "4bd6dd8bf595fb1b5c0a88fd3c83b00d728d546e9977f878771049fa865d224d",
+      "mode": "SHIM",
+      "eve_sha256": "71a4a3be6e4ca2e35e62d9b6807e4e07f78b259e8fea1676244bcbee85ba4797"
+    },
+    {
+      "path": "app/src/main/java/org/telegram/messenger/UserConfig.java",
+      "upstream_path": "TMessagesProj/src/main/java/org/telegram/messenger/UserConfig.java",
+      "upstream_sha256": "d9140b2da4189da29dbe61a6120f25118785ef7b5b77ccbc4b92808340aa8946",
+      "mode": "SHIM",
+      "eve_sha256": "9f49025d82e70b17c80ba6e2174215c3a5a6fb12fce5d26947346077096d729a"
+    },
+    {
+      "path": "app/src/main/java/org/telegram/messenger/SharedConfig.java",
+      "upstream_path": "TMessagesProj/src/main/java/org/telegram/messenger/SharedConfig.java",
+      "upstream_sha256": "4a72f4fef0f2251c86e0addc534e653fe08592e68bc45a6e1627e5116fe49ed3",
+      "mode": "SHIM",
+      "eve_sha256": "f56590bbe7a7e65a1af052ebb6459e948769147c97b86468c19b01b64ffd9191"
+    },
+    {
+      "path": "app/src/main/java/org/telegram/ui/Stories/StoriesUtilities.java",
+      "upstream_path": "TMessagesProj/src/main/java/org/telegram/ui/Stories/StoriesUtilities.java",
+      "upstream_sha256": "33f8499aee14ef12d34739727f47c4377abf36851bbe8c4bd7899aa9a0d78a24",
+      "mode": "SHIM",
+      "eve_sha256": "76cb9a49f3fed24aad5b5c87aadf6a734652492f7e24b72ce1673d14e6984b14"
+    },
+    {
+      "path": "app/src/main/res/drawable-mdpi/list_pin.webp",
+      "upstream_path": "TMessagesProj/src/main/res/drawable-mdpi/list_pin.webp",
+      "upstream_sha256": "ceaa0202f98574af9114fbecdb8e7f2b2c4d419cc445a27fbc1d2566642f94a0",
+      "mode": "VERBATIM",
+      "eve_sha256": "ceaa0202f98574af9114fbecdb8e7f2b2c4d419cc445a27fbc1d2566642f94a0"
+    },
+    {
+      "path": "app/src/main/res/drawable-mdpi/list_mute.webp",
+      "upstream_path": "TMessagesProj/src/main/res/drawable-mdpi/list_mute.webp",
+      "upstream_sha256": "7ef60e7b0c465f0097f9147a7acc85faa7abaaee8001302962436ec227252f86",
+      "mode": "VERBATIM",
+      "eve_sha256": "7ef60e7b0c465f0097f9147a7acc85faa7abaaee8001302962436ec227252f86"
+    },
+    {
+      "path": "app/src/main/res/drawable-mdpi/list_check.webp",
+      "upstream_path": "TMessagesProj/src/main/res/drawable-mdpi/list_check.webp",
+      "upstream_sha256": "80ce13359d31d68f472a5786ce07e8cebbe4ffe6a637fc90995b23a74fce3e72",
+      "mode": "VERBATIM",
+      "eve_sha256": "80ce13359d31d68f472a5786ce07e8cebbe4ffe6a637fc90995b23a74fce3e72"
+    },
+    {
+      "path": "app/src/main/res/drawable-mdpi/list_halfcheck.webp",
+      "upstream_path": "TMessagesProj/src/main/res/drawable-mdpi/list_halfcheck.webp",
+      "upstream_sha256": "cd3ada1ff1535988f360204ca66a864cca2437fa8fc64181490295c8867c1585",
+      "mode": "VERBATIM",
+      "eve_sha256": "cd3ada1ff1535988f360204ca66a864cca2437fa8fc64181490295c8867c1585"
+    },
+    {
+      "path": "app/src/main/res/drawable-hdpi/list_pin.webp",
+      "upstream_path": "TMessagesProj/src/main/res/drawable-hdpi/list_pin.webp",
+      "upstream_sha256": "407a87cf9412932fb27fd4962c4baacb59e66365e81ad230e4aadbb0e6b66d04",
+      "mode": "VERBATIM",
+      "eve_sha256": "407a87cf9412932fb27fd4962c4baacb59e66365e81ad230e4aadbb0e6b66d04"
+    },
+    {
+      "path": "app/src/main/res/drawable-hdpi/list_mute.webp",
+      "upstream_path": "TMessagesProj/src/main/res/drawable-hdpi/list_mute.webp",
+      "upstream_sha256": "7e1e2cd6e50de1350f9b0b32ee5ccc45b095bd1cb0646c0282e2d6bc1538d83f",
+      "mode": "VERBATIM",
+      "eve_sha256": "7e1e2cd6e50de1350f9b0b32ee5ccc45b095bd1cb0646c0282e2d6bc1538d83f"
+    },
+    {
+      "path": "app/src/main/res/drawable-hdpi/list_check.webp",
+      "upstream_path": "TMessagesProj/src/main/res/drawable-hdpi/list_check.webp",
+      "upstream_sha256": "8024ff1694c5229b08a44a33b345d9fc7a5efd9df7d7c0fdcb4b88f4a3cd3b26",
+      "mode": "VERBATIM",
+      "eve_sha256": "8024ff1694c5229b08a44a33b345d9fc7a5efd9df7d7c0fdcb4b88f4a3cd3b26"
+    },
+    {
+      "path": "app/src/main/res/drawable-hdpi/list_halfcheck.webp",
+      "upstream_path": "TMessagesProj/src/main/res/drawable-hdpi/list_halfcheck.webp",
+      "upstream_sha256": "1fabc2d2670ba876ee4153723265d03d42712ff6c12d6696d0a0d103d43e37be",
+      "mode": "VERBATIM",
+      "eve_sha256": "1fabc2d2670ba876ee4153723265d03d42712ff6c12d6696d0a0d103d43e37be"
+    },
+    {
+      "path": "app/src/main/res/drawable-xhdpi/list_pin.webp",
+      "upstream_path": "TMessagesProj/src/main/res/drawable-xhdpi/list_pin.webp",
+      "upstream_sha256": "cfaeaf60cea3ce0e2b0f63798f7c72209e72194966abe3a754de82d0d126b3b6",
+      "mode": "VERBATIM",
+      "eve_sha256": "cfaeaf60cea3ce0e2b0f63798f7c72209e72194966abe3a754de82d0d126b3b6"
+    },
+    {
+      "path": "app/src/main/res/drawable-xhdpi/list_mute.webp",
+      "upstream_path": "TMessagesProj/src/main/res/drawable-xhdpi/list_mute.webp",
+      "upstream_sha256": "017ac2e4d759e54ee6ce301113935584ea7bbc26d92b370cbdcb046e1e40a4c3",
+      "mode": "VERBATIM",
+      "eve_sha256": "017ac2e4d759e54ee6ce301113935584ea7bbc26d92b370cbdcb046e1e40a4c3"
+    },
+    {
+      "path": "app/src/main/res/drawable-xhdpi/list_check.webp",
+      "upstream_path": "TMessagesProj/src/main/res/drawable-xhdpi/list_check.webp",
+      "upstream_sha256": "12c3a6fbac2d50c568d83a73043f03b8256fda7810a650876f4207dad3f97844",
+      "mode": "VERBATIM",
+      "eve_sha256": "12c3a6fbac2d50c568d83a73043f03b8256fda7810a650876f4207dad3f97844"
+    },
+    {
+      "path": "app/src/main/res/drawable-xhdpi/list_halfcheck.webp",
+      "upstream_path": "TMessagesProj/src/main/res/drawable-xhdpi/list_halfcheck.webp",
+      "upstream_sha256": "f8c88afbf3a31615553f553cd5579cc2971f072a565aba76071ba9a039c1b8bf",
+      "mode": "VERBATIM",
+      "eve_sha256": "f8c88afbf3a31615553f553cd5579cc2971f072a565aba76071ba9a039c1b8bf"
+    },
+    {
+      "path": "app/src/main/res/drawable-xxhdpi/list_pin.webp",
+      "upstream_path": "TMessagesProj/src/main/res/drawable-xxhdpi/list_pin.webp",
+      "upstream_sha256": "3f60ea0b78c5ffd3606f10c40413736e162c1f6f7c11dfd97c73787f0e2b0af8",
+      "mode": "VERBATIM",
+      "eve_sha256": "3f60ea0b78c5ffd3606f10c40413736e162c1f6f7c11dfd97c73787f0e2b0af8"
+    },
+    {
+      "path": "app/src/main/res/drawable-xxhdpi/list_mute.webp",
+      "upstream_path": "TMessagesProj/src/main/res/drawable-xxhdpi/list_mute.webp",
+      "upstream_sha256": "b9d08879b5896a816f1fe9a2a6ff117e60c0de5b45cd99c16572a530355c4db1",
+      "mode": "VERBATIM",
+      "eve_sha256": "b9d08879b5896a816f1fe9a2a6ff117e60c0de5b45cd99c16572a530355c4db1"
+    },
+    {
+      "path": "app/src/main/res/drawable-xxhdpi/list_check.webp",
+      "upstream_path": "TMessagesProj/src/main/res/drawable-xxhdpi/list_check.webp",
+      "upstream_sha256": "98f63d0d13fc022a420b55c33ee6f60e41f265ee996daa3f0f67b6f652d88876",
+      "mode": "VERBATIM",
+      "eve_sha256": "98f63d0d13fc022a420b55c33ee6f60e41f265ee996daa3f0f67b6f652d88876"
+    },
+    {
+      "path": "app/src/main/res/drawable-xxhdpi/list_halfcheck.webp",
+      "upstream_path": "TMessagesProj/src/main/res/drawable-xxhdpi/list_halfcheck.webp",
+      "upstream_sha256": "9b850f1b025b11d48b387391243b9721054ac8497d475bd965c7038d1db704e0",
+      "mode": "VERBATIM",
+      "eve_sha256": "9b850f1b025b11d48b387391243b9721054ac8497d475bd965c7038d1db704e0"
+    },
+    {
+      "path": "app/src/main/java/com/eve/app/telegram/exams/ExamListFakeData.java",
+      "upstream_path": null,
+      "upstream_sha256": null,
+      "mode": "NEW",
+      "eve_sha256": "bc5e6feb1c38f9e8a0aa4638b5e42f8b552008eb55f1e9690537506a6d107358"
+    },
+    {
+      "path": "app/src/main/java/com/eve/app/telegram/exams/ExamListFragment.java",
+      "upstream_path": null,
+      "upstream_sha256": null,
+      "mode": "NEW",
+      "eve_sha256": "3e07752522f74e31d10fe508a6e2aff4e0e890f1a496ea0506e6db5d89eb23c3"
+    },
+    {
+      "path": "app/src/main/java/com/eve/app/telegram/exams/ExamListActivity.kt",
+      "upstream_path": null,
+      "upstream_sha256": null,
+      "mode": "NEW",
+      "eve_sha256": "9c442e817b9a87e6fc8900ec4893c36c9bb19d23ce55fc2bb128e2c4f7476bce"
+    }
+  ]
+}
