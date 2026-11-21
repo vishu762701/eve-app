@@ -227,6 +227,7 @@ public class DialogCell extends BaseCell { // EVE-CUT: cut stories and bio inter
             paintIndex = 0;
             thumbSize = 19;
         }
+        currentDialogFolderDialogsCount = 0;
         CharSequence nameString = "";
         String timeString = "";
         String countString = null;
@@ -236,7 +237,6 @@ public class DialogCell extends BaseCell { // EVE-CUT: cut stories and bio inter
         CharSequence messageNameString = null;
         CharSequence printingString = null;
         CharSequence buttonString = null;
-        if (!isForumCell() && (isDialogCell || isTopic)) {
         currentMessagePaint = Theme.dialogs_messagePaint[paintIndex];
         drawNameLock = false; // EVE-CUT: default flags
         drawVerified = false; // EVE-CUT: default flags
@@ -346,9 +346,7 @@ public class DialogCell extends BaseCell { // EVE-CUT: cut stories and bio inter
 
             drawError = false;
             nameString = customDialog.name;
-        } else {
-        } else { // EVE-CUT: cut TLRPC
-        } // EVE-CUT: cut TLRPC
+        } // EVE-CUT: end if customDialog
         int messageWidth;
         int avatarLeft;
         int avatarTop;
@@ -527,7 +525,7 @@ public class DialogCell extends BaseCell { // EVE-CUT: cut stories and bio inter
             drawCommunityAvatar = false;
             avatarImage.setRoundRadius(dp(26));
             drawUnmute = false;
-        } else {
+        } // EVE-CUT: cut TLRPC update branch
         if (getMeasuredWidth() != 0 || getMeasuredHeight() != 0) { rebuildLayout = true; } // EVE-CUT: rebuild
         invalidate(); // EVE-CUT: invalidate
         if (rebuildLayout) { buildLayout(); } // EVE-CUT: buildLayout
