@@ -4,5 +4,15 @@
              production screens or backend authorization are bypassed. -->
         <activity android:name="com.eve.app.ui.RepairVerificationActivity"
             android:exported="false" android:theme="@style/Theme.Eve" />
+        <activity
+            android:name="com.eve.app.telegram.exams.ExamListActivity"
+            android:label="Eve Exams (dev)"
+            android:exported="true"
+            android:theme="@style/Theme.Eve">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
     </application>
 </manifest>
