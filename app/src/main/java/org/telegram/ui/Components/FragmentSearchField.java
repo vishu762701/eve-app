@@ -71,7 +71,6 @@ public class FragmentSearchField extends FrameLayout implements FactorAnimator.T
         editText.setVerticalScrollBarEnabled(false);
         editText.setHorizontalScrollBarEnabled(false);
         editText.setPadding(dp(44), 0, dp(44), 0);
-        editText.setClipToPadding(true);
         editText.setImeOptions(EditorInfo.IME_ACTION_SEARCH | EditorInfo.IME_FLAG_NO_EXTRACT_UI);
         editText.setGravity((LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.CENTER_VERTICAL);
         editText.setHint("Search exams");
@@ -97,7 +96,7 @@ public class FragmentSearchField extends FrameLayout implements FactorAnimator.T
 
         closeIcon = new ImageView(context);
         closeIcon.setScaleType(ImageView.ScaleType.CENTER);
-        closeIcon.setImageResource(R.drawable.ic_close);
+        closeIcon.setImageResource(R.drawable.msg_clear_input);
         closeIcon.setVisibility(GONE);
         closeIcon.setOnClickListener(v -> {
             editText.setText("");

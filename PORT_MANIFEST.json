@@ -89,7 +89,7 @@
       "path": "app/src/main/java/org/telegram/ui/Components/FragmentSearchField.java",
       "upstream_path": "TMessagesProj/src/main/java/org/telegram/ui/Components/FragmentSearchField.java",
       "mode": "CUT",
-      "eve_sha256": "4da3cf6889501e86ffa701943bae6d1a39e6558a181073550d057766def84a8e",
+      "eve_sha256": "20139faae6642f8399451873f1f284ee5a9edea1429be7ba5b2ff3deaecdf4c8",
       "upstream_sha256": "79aa5b78da34df5c9325a3d4b5de5a9afac68d03fdd85aacd9756c160fd6cd90"
     },
     {
