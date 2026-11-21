@@ -1,0 +1,410 @@
+package com.eve.app.ui.bookmarks
+
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
+import android.animation.ValueAnimator
+import android.content.res.ColorStateList
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import androidx.core.content.ContextCompat
+import androidx.recyclerview.widget.DiffUtil
+import androidx.recyclerview.widget.ListAdapter
+import androidx.recyclerview.widget.RecyclerView
+import com.eve.app.R
+import com.eve.app.data.model.BookmarkedQuestion
+import com.eve.app.databinding.ItemBookmarkCardBinding
+import com.eve.app.designsystem.DesignIconStates
+import com.eve.app.util.FontManager
+import org.telegram.ui.Components.CubicBezierInterpolator
+import com.eve.app.designsystem.DesignMotion
+import com.eve.app.designsystem.TelegramThemeSelectors
+
+/**
+ * BookmarkAdapter with UIArc Expandable Card motion.
+ * Genuine native translation of official UIArc Expandable Card specification:
+ * - Registry: https://uiarc.dev/r/expandable-card.json
+ * - Inline height morphing with CubicBezierInterpolator.EASE_OUT_QUINT
+ * - Opening: Delayed text fade-in (120ms entrance delay, Ease.STANDARD)
+ * - Closing: Fast text fade-out (100ms) with closeHold (60ms) before height collapse
+ * - Rapid reversal support without glitching
+ * - Synchronous state restoration on view recycling
+ * - Instant fallback when reduced motion is requested
+ */
+class BookmarkAdapter(
+    private val onOpenQuestion: (BookmarkedQuestion) -> Unit,
+    private val onUnbookmark: (BookmarkedQuestion) -> Unit,
+    private val isHindi: () -> Boolean,
+    private val onCopyQuestion: ((BookmarkedQuestion) -> Unit)? = null,
+    private val onShareQuestion: ((BookmarkedQuestion) -> Unit)? = null,
+    private val onLongClickQuestion: ((BookmarkedQuestion, View) -> Unit)? = null
+) : ListAdapter<BookmarkedQuestion, BookmarkAdapter.BookmarkViewHolder>(DiffCallback) {
+
+    private val expandedExplanations = mutableSetOf<String>()
+
+    var isSelectionMode: Boolean = false
+        set(value) {
+            if (field != value) {
+                field = value
+                if (!value) {
+                    selectedQuestionIds.clear()
+                }
+                notifyDataSetChanged()
+            }
+        }
+
+    val selectedQuestionIds = mutableSetOf<String>()
+    var onSelectionChanged: ((Int) -> Unit)? = null
+
+    fun selectAll() {
+        selectedQuestionIds.clear()
+        selectedQuestionIds.addAll(currentList.map { it.questionId })
+        notifyDataSetChanged()
+        onSelectionChanged?.invoke(selectedQuestionIds.size)
+    }
+
+    fun clearSelection() {
+        selectedQuestionIds.clear()
+        notifyDataSetChanged()
+        onSelectionChanged?.invoke(0)
+    }
+
+    fun getSelectedBookmarks(): List<BookmarkedQuestion> {
+        return currentList.filter { selectedQuestionIds.contains(it.questionId) }
+    }
+
+    object DiffCallback : DiffUtil.ItemCallback<BookmarkedQuestion>() {
+        override fun areItemsTheSame(oldItem: BookmarkedQuestion, newItem: BookmarkedQuestion): Boolean =
+            oldItem.questionId == newItem.questionId
+
+        override fun areContentsTheSame(oldItem: BookmarkedQuestion, newItem: BookmarkedQuestion): Boolean =
+            oldItem == newItem
+    }
+
+    inner class BookmarkViewHolder(val binding: ItemBookmarkCardBinding) :
+        RecyclerView.ViewHolder(binding.root) {
+
+        private var heightAnimator: ValueAnimator? = null
+        private var alphaAnimator: ValueAnimator? = null
+
+        fun cancelAnimations() {
+            heightAnimator?.cancel()
+            heightAnimator = null
+            alphaAnimator?.cancel()
+            alphaAnimator = null
+            // flat row reset
+        }
+
+        fun bind(item: BookmarkedQuestion) {
+            cancelAnimations()
+            val context = binding.root.context
+            val hindi = isHindi()
+
+            // flat row reset
+
+            // Header tags
+            binding.tvExamTag.text = item.examName.ifBlank { "Practice Test" }
+            if (item.questionNumber > 0) {
+                binding.tvQuestionNumber.visibility = View.VISIBLE
+                binding.tvQuestionNumber.text = "Q${item.questionNumber}"
+            } else {
+                binding.tvQuestionNumber.visibility = View.GONE
+            }
+
+            val topicTag = when {
+                item.isPyq && item.pyqYear > 0 -> "PYQ ${item.pyqYear}"
+                item.topic.isNotBlank() -> item.topic
+                else -> ""
+            }
+            if (topicTag.isNotBlank()) {
+                binding.tvTopicTag.visibility = View.VISIBLE
+                binding.tvTopicTag.text = topicTag
+            } else {
+                binding.tvTopicTag.visibility = View.GONE
+            }
+
+            // Question Text
+            val qText = item.displayQuestionText(hindi)
+            binding.tvQuestionText.text = if (item.questionNumber > 0) {
+                "Q${item.questionNumber}. $qText"
+            } else {
+                qText
+            }
+
+            // Options styling
+            val greenColor = ContextCompat.getColor(context, R.color.system_green_text)
+            val defaultColor = ContextCompat.getColor(context, R.color.text_primary)
+
+            fun styleOption(tv: android.widget.TextView, letter: String) {
+                val optText = item.displayOptionText(letter, hindi)
+                if (item.correctAnswer.isNotBlank() && letter.equals(item.correctAnswer, ignoreCase = true)) {
+                    tv.text = "$letter. $optText  ✓"
+                    tv.setTextColor(greenColor)
+                    tv.typeface = FontManager.typeface(tv.context, bold = true)
+                } else {
+                    tv.text = "$letter. $optText"
+                    tv.setTextColor(defaultColor)
+                    tv.typeface = FontManager.typeface(tv.context, bold = false)
+                }
+            }
+
+            styleOption(binding.tvOptionA, "A")
+            styleOption(binding.tvOptionB, "B")
+            styleOption(binding.tvOptionC, "C")
+            styleOption(binding.tvOptionD, "D")
+
+            val palette = com.eve.app.theme.TelegramThemeEngine.resolveCurrentPalette(context)
+            binding.cardBookmark.background = TelegramThemeSelectors.getSelectorDrawable(context, false)
+            binding.tvExamTag.setTextColor(palette.accent)
+            binding.tvQuestionNumber.setTextColor(palette.textSecondary)
+            binding.tvTopicTag.setTextColor(palette.textSecondary)
+            binding.tvQuestionText.setTextColor(palette.textPrimary)
+            binding.btnToggleExplanation.background = com.eve.app.designsystem.TelegramThemeSelectors.getRoundRectSelectorDrawable(
+                8 * context.resources.displayMetrics.density,
+                palette.actionSelector
+            )
+            binding.layoutTapToOpen.background = com.eve.app.designsystem.TelegramThemeSelectors.getRoundRectSelectorDrawable(
+                8 * context.resources.displayMetrics.density,
+                palette.actionSelector
+            )
+
+            // Explanation with Expandable Card motion
+            val explanation = item.displayExplanation(hindi)
+            if (explanation.isNotBlank()) {
+                binding.btnToggleExplanation.visibility = View.VISIBLE
+                val isExpanded = expandedExplanations.contains(item.questionId)
+                binding.tvExplanation.text = explanation
+                binding.tvExplanation.visibility = if (isExpanded) View.VISIBLE else View.GONE
+                binding.tvExplanation.alpha = 1f
+                binding.tvExplanation.layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT
+                binding.btnToggleExplanation.text = if (isExpanded) "Hide Explanation" else "View Explanation"
+
+                com.eve.app.designsystem.DesignPress.bind(binding.btnToggleExplanation) {
+                    toggleExplanation(item)
+                }
+            } else {
+                binding.btnToggleExplanation.visibility = View.GONE
+                binding.tvExplanation.visibility = View.GONE
+            }
+
+            val isSelected = selectedQuestionIds.contains(item.questionId)
+            if (isSelectionMode) {
+                binding.cardCheckBox.visibility = View.VISIBLE
+                binding.cardCheckBox.setChecked(isSelected, false)
+                binding.btnBookmark.visibility = View.GONE
+                binding.btnCardCopy.visibility = View.GONE
+                binding.btnCardShare.visibility = View.GONE
+            } else {
+                binding.cardCheckBox.visibility = View.GONE
+                binding.btnBookmark.visibility = View.VISIBLE
+                binding.btnCardCopy.visibility = View.VISIBLE
+                binding.btnCardShare.visibility = View.VISIBLE
+            }
+
+            DesignIconStates.bookmark(binding.btnBookmark, true)
+            com.eve.app.designsystem.DesignPress.bind(binding.btnBookmark) {
+                DesignIconStates.bookmark(binding.btnBookmark, false)
+                onUnbookmark(item)
+            }
+
+            // Quick actions: Copy and Share
+            com.eve.app.designsystem.DesignPress.bind(binding.btnCardCopy) {
+                onCopyQuestion?.invoke(item)
+            }
+            com.eve.app.designsystem.DesignPress.bind(binding.btnCardShare) {
+                onShareQuestion?.invoke(item)
+            }
+
+            // Contextual menu on long click
+            binding.cardBookmark.setOnLongClickListener { anchorView ->
+                com.eve.app.util.VibrationHelper.vibrateLightHaptic(context)
+                onLongClickQuestion?.invoke(item, anchorView)
+                true
+            }
+
+            // Tap card to open question in test flow or toggle selection
+            val handleTap = {
+                if (isSelectionMode) {
+                    val checked = !selectedQuestionIds.contains(item.questionId)
+                    if (checked) {
+                        selectedQuestionIds.add(item.questionId)
+                    } else {
+                        selectedQuestionIds.remove(item.questionId)
+                    }
+                    binding.cardCheckBox.setChecked(checked, true)
+                    com.eve.app.util.VibrationHelper.vibrateLightHaptic(context)
+                    onSelectionChanged?.invoke(selectedQuestionIds.size)
+                } else {
+                    onOpenQuestion(item)
+                }
+            }
+
+            com.eve.app.designsystem.DesignPress.bind(binding.cardBookmark) { handleTap() }
+            com.eve.app.designsystem.DesignPress.bind(binding.layoutTapToOpen) { handleTap() }
+        }
+
+        private fun toggleExplanation(item: BookmarkedQuestion) {
+            val context = binding.root.context
+            val willExpand = !expandedExplanations.contains(item.questionId)
+
+            if (willExpand) {
+                expandedExplanations.add(item.questionId)
+                expandExplanation(context)
+            } else {
+                expandedExplanations.remove(item.questionId)
+                collapseExplanation(context)
+            }
+        }
+
+        private fun expandExplanation(context: android.content.Context) {
+            binding.btnToggleExplanation.text = "Hide Explanation"
+
+            if (!DesignMotion.enabled(context)) {
+                binding.tvExplanation.visibility = View.VISIBLE
+                binding.tvExplanation.alpha = 1f
+                binding.tvExplanation.layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT
+                return
+            }
+
+            val wasCollapsing = heightAnimator?.isRunning == true
+            val startingHeight = if (wasCollapsing) {
+                binding.tvExplanation.height
+            } else {
+                0
+            }
+            cancelAnimations()
+
+            binding.tvExplanation.visibility = View.VISIBLE
+            binding.tvExplanation.alpha = if (wasCollapsing) binding.tvExplanation.alpha else 0f
+
+            val availableWidth = when {
+                binding.root.width > 0 -> binding.root.width - binding.root.paddingLeft - binding.root.paddingRight
+                binding.root.measuredWidth > 0 -> binding.root.measuredWidth
+                else -> binding.root.resources.displayMetrics.widthPixels
+            }
+            val widthSpec = View.MeasureSpec.makeMeasureSpec(availableWidth, View.MeasureSpec.EXACTLY)
+            val heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+            binding.tvExplanation.measure(widthSpec, heightSpec)
+            val targetHeight = binding.tvExplanation.measuredHeight
+
+            if (targetHeight <= 0) {
+                binding.tvExplanation.layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT
+                binding.tvExplanation.alpha = 1f
+                return
+            }
+
+            binding.tvExplanation.layoutParams.height = startingHeight
+            binding.tvExplanation.requestLayout()
+
+            val hAnim = ValueAnimator.ofInt(startingHeight, targetHeight).apply {
+                duration = 220L
+                interpolator = CubicBezierInterpolator.EASE_OUT_QUINT
+                addUpdateListener {
+                    val h = it.animatedValue as Int
+                    binding.tvExplanation.layoutParams.height = h
+                    binding.tvExplanation.requestLayout()
+                }
+                addListener(object : AnimatorListenerAdapter() {
+                    override fun onAnimationEnd(animation: Animator) {
+                        binding.tvExplanation.layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT
+                        binding.tvExplanation.requestLayout()
+                        heightAnimator = null
+                    }
+                })
+            }
+            heightAnimator = hAnim
+            hAnim.start()
+
+            val aAnim = ValueAnimator.ofFloat(binding.tvExplanation.alpha, 1f).apply {
+                startDelay = if (wasCollapsing) 0L else 120L
+                duration = 180L
+                interpolator = CubicBezierInterpolator.EASE_OUT_QUINT
+                addUpdateListener {
+                    binding.tvExplanation.alpha = it.animatedValue as Float
+                }
+                addListener(object : AnimatorListenerAdapter() {
+                    override fun onAnimationEnd(animation: Animator) {
+                        alphaAnimator = null
+                    }
+                })
+            }
+            alphaAnimator = aAnim
+            aAnim.start()
+        }
+
+        private fun collapseExplanation(context: android.content.Context) {
+            binding.btnToggleExplanation.text = "View Explanation"
+
+            if (!DesignMotion.enabled(context)) {
+                binding.tvExplanation.visibility = View.GONE
+                binding.tvExplanation.alpha = 1f
+                binding.tvExplanation.layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT
+                return
+            }
+
+            val wasExpanding = heightAnimator?.isRunning == true
+            val startingHeight = if (wasExpanding) {
+                binding.tvExplanation.height
+            } else {
+                binding.tvExplanation.measuredHeight.let { if (it > 0) it else binding.tvExplanation.height }
+            }
+            cancelAnimations()
+
+            val aAnim = ValueAnimator.ofFloat(binding.tvExplanation.alpha, 0f).apply {
+                duration = 100L
+                interpolator = CubicBezierInterpolator.EASE_OUT_QUINT
+                addUpdateListener {
+                    binding.tvExplanation.alpha = it.animatedValue as Float
+                }
+                addListener(object : AnimatorListenerAdapter() {
+                    override fun onAnimationEnd(animation: Animator) {
+                        alphaAnimator = null
+                    }
+                })
+            }
+            alphaAnimator = aAnim
+            aAnim.start()
+
+            val hAnim = ValueAnimator.ofInt(startingHeight, 0).apply {
+                startDelay = if (wasExpanding) 0L else 60L
+                duration = 220L
+                interpolator = CubicBezierInterpolator.EASE_OUT_QUINT
+                addUpdateListener {
+                    val h = it.animatedValue as Int
+                    binding.tvExplanation.layoutParams.height = h
+                    binding.tvExplanation.requestLayout()
+                }
+                addListener(object : AnimatorListenerAdapter() {
+                    override fun onAnimationEnd(animation: Animator) {
+                        binding.tvExplanation.visibility = View.GONE
+                        binding.tvExplanation.layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT
+                        binding.tvExplanation.alpha = 1f
+                        binding.tvExplanation.requestLayout()
+                        heightAnimator = null
+                    }
+                })
+            }
+            heightAnimator = hAnim
+            hAnim.start()
+        }
+    }
+
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): BookmarkViewHolder {
+        val binding = ItemBookmarkCardBinding.inflate(
+            LayoutInflater.from(parent.context),
+            parent,
+            false
+        )
+        binding.cardBookmark.background = TelegramThemeSelectors.getSelectorDrawable(parent.context, false)
+        return BookmarkViewHolder(binding)
+    }
+
+    override fun onBindViewHolder(holder: BookmarkViewHolder, position: Int) {
+        holder.bind(getItem(position))
+    }
+
+    override fun onViewRecycled(holder: BookmarkViewHolder) {
+        super.onViewRecycled(holder)
+        holder.cancelAnimations()
+    }
+}

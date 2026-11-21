@@ -1,0 +1,371 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:clipToPadding="false"
+    android:clipChildren="false"
+    style="@style/Widget.Eve.Token.Screen">
+
+    <com.eve.app.designsystem.TelegramActionBar
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/telegram_action_bar_height"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:clipToPadding="false"
+            android:clipChildren="false"
+            style="@style/Widget.Eve.Token.ToolbarRow">
+            <ImageButton
+                android:id="@+id/btnBack"
+                android:layout_width="@dimen/design_touch_min"
+                android:layout_height="match_parent"
+                android:contentDescription="Back"
+                android:src="@drawable/ic_back"
+                app:tint="@color/telegram_type_primary"
+                style="@style/Widget.Eve.Token.IconButton" />
+            <TextView android:ellipsize="end" android:maxLines="1" android:layout_marginStart="@dimen/telegram_action_bar_title_start" android:layout_weight="1"
+            style="@style/TextAppearance.Eve.Telegram.NavigationTitle"
+            android:tag="eve_telegram_type"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:text="Appearance" />
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/btnApply"
+                android:layout_width="wrap_content"
+                android:layout_height="@dimen/design_touch_min"
+                android:text="Apply"
+                style="@style/Widget.Eve.Token.Button" />
+        </LinearLayout>
+    </com.eve.app.designsystem.TelegramActionBar>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true"
+        android:overScrollMode="ifContentScrolls"
+        android:scrollbars="none"
+        android:clipToPadding="false"
+        android:clipChildren="false"
+        style="@style/Widget.Eve.Token.Scroll">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:clipToPadding="false"
+            android:clipChildren="false"
+            android:paddingBottom="64dp"
+            style="@style/Widget.Eve.Token.Column">
+
+            <!-- THEME PREVIEW CARD -->
+            <TextView
+                style="@style/TextAppearance.Eve.Telegram.SettingsSection"
+                android:tag="eve_telegram_type"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingStart="21dp"
+                android:paddingEnd="21dp"
+                android:paddingTop="15dp"
+                android:paddingBottom="7dp"
+                android:text="PREVIEW" />
+
+            <com.eve.app.ui.common.TelegramCardView
+                android:id="@+id/cardPreview"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@color/surface">
+                <LinearLayout
+                    android:id="@+id/layoutPreviewContent"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="@dimen/design_screen_margin"
+                    style="@style/Widget.Eve.Token.Column">
+                    <TextView
+                        android:id="@+id/tvPreviewTitle"
+                        style="@style/TextAppearance.Eve.Token.Heading"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="JEE Advanced 2026 Mock Test" />
+                    <TextView
+                        android:id="@+id/tvPreviewSubtitle"
+                        style="@style/TextAppearance.Eve.Token.Secondary"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="Physics • 30 Questions • 60 Mins" />
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/design_screen_margin"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+                        <androidx.appcompat.widget.AppCompatButton
+                            android:id="@+id/btnPreviewAction"
+                            style="@style/Widget.Eve.Token.Button"
+                            android:layout_width="wrap_content"
+                            android:layout_height="@dimen/design_touch_min"
+                            android:text="Start Practice" />
+                        <TextView
+                            android:id="@+id/tvPreviewTag"
+                            style="@style/TextAppearance.Eve.Token.Secondary"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="@dimen/design_screen_margin"
+                            android:text="Server Evaluated" />
+                    </LinearLayout>
+                </LinearLayout>
+            </com.eve.app.ui.common.TelegramCardView>
+
+            <!-- THEME MODE (DAY / NIGHT / SYSTEM) -->
+            <TextView
+                style="@style/TextAppearance.Eve.Telegram.SettingsSection"
+                android:tag="eve_telegram_type"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingStart="21dp"
+                android:paddingEnd="21dp"
+                android:paddingTop="15dp"
+                android:paddingBottom="7dp"
+                android:text="MODE" />
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@color/surface">
+                <LinearLayout
+                    android:id="@+id/layoutModeSelector"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:padding="4dp">
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/btnModeDay"
+                        style="@style/Widget.Eve.Token.Button.Secondary"
+                        android:layout_width="0dp"
+                        android:layout_height="@dimen/design_touch_min"
+                        android:layout_weight="1"
+                        android:text="Day" />
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/btnModeNight"
+                        style="@style/Widget.Eve.Token.Button.Secondary"
+                        android:layout_width="0dp"
+                        android:layout_height="@dimen/design_touch_min"
+                        android:layout_weight="1"
+                        android:layout_marginHorizontal="4dp"
+                        android:text="Night" />
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/btnModeSystem"
+                        style="@style/Widget.Eve.Token.Button.Secondary"
+                        android:layout_width="0dp"
+                        android:layout_height="@dimen/design_touch_min"
+                        android:layout_weight="1"
+                        android:text="System" />
+                </LinearLayout>
+            </FrameLayout>
+
+            <!-- THEMES PRESETS -->
+            <TextView
+                style="@style/TextAppearance.Eve.Telegram.SettingsSection"
+                android:tag="eve_telegram_type"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingStart="21dp"
+                android:paddingEnd="21dp"
+                android:paddingTop="15dp"
+                android:paddingBottom="7dp"
+                android:text="COLOR THEMES" />
+
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:scrollbars="none"
+                android:clipToPadding="false"
+                android:paddingHorizontal="21dp">
+                <LinearLayout
+                    android:id="@+id/layoutThemesContainer"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal" />
+            </HorizontalScrollView>
+
+            <!-- ACCENT COLOR OPTIONS -->
+            <TextView
+                style="@style/TextAppearance.Eve.Telegram.SettingsSection"
+                android:tag="eve_telegram_type"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingStart="21dp"
+                android:paddingEnd="21dp"
+                android:paddingTop="15dp"
+                android:paddingBottom="7dp"
+                android:text="ACCENT COLOR" />
+
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:scrollbars="none"
+                android:clipToPadding="false"
+                android:paddingHorizontal="21dp">
+                <LinearLayout
+                    android:id="@+id/layoutAccentsContainer"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal" />
+            </HorizontalScrollView>
+
+            <!-- MESSAGE TEXT SIZE -->
+            <TextView
+                style="@style/TextAppearance.Eve.Telegram.SettingsSection"
+                android:tag="eve_telegram_type"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingStart="21dp"
+                android:paddingEnd="21dp"
+                android:paddingTop="15dp"
+                android:paddingBottom="7dp"
+                android:text="MESSAGE TEXT SIZE" />
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@color/surface">
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:padding="8dp"
+                    android:orientation="vertical">
+                    <com.eve.app.designsystem.TelegramSeekBarView
+                        android:id="@+id/seekTextSize"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp" />
+                </LinearLayout>
+            </FrameLayout>
+
+            <!-- CORNER RADIUS -->
+            <TextView
+                style="@style/TextAppearance.Eve.Telegram.SettingsSection"
+                android:tag="eve_telegram_type"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingStart="21dp"
+                android:paddingEnd="21dp"
+                android:paddingTop="15dp"
+                android:paddingBottom="7dp"
+                android:text="CORNER RADIUS" />
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@color/surface">
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:padding="8dp"
+                    android:orientation="vertical">
+                    <com.eve.app.designsystem.TelegramSeekBarView
+                        android:id="@+id/seekCornerRadius"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp" />
+                </LinearLayout>
+            </FrameLayout>
+
+            <!-- AUTO-NIGHT MODE -->
+            <TextView
+                style="@style/TextAppearance.Eve.Telegram.SettingsSection"
+                android:tag="eve_telegram_type"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingStart="21dp"
+                android:paddingEnd="21dp"
+                android:paddingTop="15dp"
+                android:paddingBottom="7dp"
+                android:text="AUTO-NIGHT MODE" />
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@color/surface">
+                <LinearLayout
+                    android:id="@+id/rowAutoNight"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="50dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="16dp"
+                    android:paddingVertical="8dp">
+
+                    <TextView
+                        style="@style/TextAppearance.Eve.Telegram.SettingsLabel"
+                        android:tag="eve_telegram_type"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Auto-Night Mode" />
+
+                    <TextView
+                        android:id="@+id/tvAutoNightValue"
+                        style="@style/TextAppearance.Eve.Telegram.SettingsDetail"
+                        android:tag="eve_telegram_type"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="8dp"
+                        android:text="Disabled" />
+
+                    <ImageView
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:src="@drawable/ic_chevron_right"
+                        app:tint="@color/text_secondary" />
+                </LinearLayout>
+            </FrameLayout>
+
+            <!-- UTILITIES & RESTORE -->
+            <TextView
+                style="@style/TextAppearance.Eve.Telegram.SettingsSection"
+                android:tag="eve_telegram_type"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingStart="21dp"
+                android:paddingEnd="21dp"
+                android:paddingTop="15dp"
+                android:paddingBottom="7dp"
+                android:text="CUSTOMIZATION" />
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@color/surface">
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/btnResetDefault"
+                        style="@style/Widget.Eve.Token.Button.Secondary"
+                        android:layout_width="match_parent"
+                        android:layout_height="@dimen/design_touch_min"
+                        android:layout_margin="8dp"
+                        android:text="Reset to Default (House Theme)" />
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/btnImportTheme"
+                        style="@style/Widget.Eve.Token.Button.Secondary"
+                        android:layout_width="match_parent"
+                        android:layout_height="@dimen/design_touch_min"
+                        android:layout_marginHorizontal="8dp"
+                        android:layout_marginBottom="8dp"
+                        android:text="Import .attheme File" />
+                </LinearLayout>
+            </FrameLayout>
+
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>

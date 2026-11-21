@@ -1,0 +1,84 @@
+package com.eve.app.ui.home
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import java.io.File
+
+class HomeCategorySelectionTest {
+    private val all = "All"
+    private val categories = listOf(all, "Other", "History")
+
+    @Test fun repeatSelectedAllTenTimesNeverClearsSelection() {
+        var selected = all
+        repeat(10) {
+            selected = HomeCategorySelection.select(selected, all, categories)
+            assertEquals(all, selected)
+        }
+    }
+
+    @Test fun otherAndAllSwitchWithoutEmptyIntermediateState() {
+        var selected = all
+        repeat(10) {
+            selected = HomeCategorySelection.select(selected, "Other", categories)
+            assertEquals("Other", selected)
+            selected = HomeCategorySelection.select(selected, all, categories)
+            assertEquals(all, selected)
+        }
+    }
+
+    @Test fun disappearedCategoryFallsBackToAllAndStaysThereOnReappearance() {
+        val removed = listOf(all, "History")
+        val selected = HomeCategorySelection.resolve("Other", removed, all)
+        assertEquals(all, selected)
+        assertEquals(all, HomeCategorySelection.resolve(selected, categories, all))
+    }
+
+    @Test fun unknownCategoryTapDoesNotChangeSelectedFilter() {
+        assertEquals("Other", HomeCategorySelection.select("Other", "Unknown", categories))
+    }
+
+    @Test fun nativeGestureFixtureMustSizeHeightInDpNotRawPixels() {
+        val source = File("src/androidTest/java/com/eve/app/ui/HomeCategoryTouchNativeTest.kt").readText()
+        assertTrue("Native gesture test should scale its height for dense phone screens",
+            source.contains("240f * activity.resources.displayMetrics.density"))
+    }
+
+    @Test fun delegatedTouchesMustStayWithOneOwnerUntilUpOrCancel() {
+        val src = File("src/main/java/com/eve/app/ui/home/HomeCategoryChipGroup.kt").readText()
+        assertTrue("DOWN must select exactly one hit region",
+            src.contains("delegates.firstOrNull { (bounds, _) -> bounds.contains(x, y) }"))
+        assertTrue("MOVE must keep the active owner",
+            src.contains("gestureOwner?.let { forward(it, event) } ?: false"))
+        assertTrue("UP and CANCEL must reset gesture ownership",
+            src.contains("MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL") &&
+                src.contains("gestureOwner = null"))
+        assertTrue("Never fan an event out to all chip delegates",
+            !src.contains("delegates.any"))
+    }
+
+    @Test fun homeFilterDoesNotAddUnsupportedCheckedIconWidth() {
+        val system = File("src/main/java/com/eve/app/designsystem/EveDesignSystem.kt").readText()
+        val chip = system.substringAfter("fun createCategoryChip(")
+            .substringBefore("fun applyHomeCard(")
+        assertTrue("Original Telegram filter tabs have no checked-icon glyph",
+            chip.contains("isCheckedIconVisible = false"))
+        assertTrue("Selected category must remain checked as a filter state",
+            chip.contains("isChecked = isSelected"))
+        assertTrue("Target exam checked icon must use round_check2",
+            File("src/main/java/com/eve/app/ui/home/TargetExamsBottomSheet.kt").readText()
+                .contains("round_check2"))
+    }
+
+    @Test fun viewModelPersistsStateAndRenderChecksSingleChipAtomically() {
+        val viewModel = File("src/main/java/com/eve/app/ui/home/HomeViewModel.kt").readText()
+        val activity = File("src/main/java/com/eve/app/ui/home/MainActivity.kt").readText()
+        val appearance = File("src/main/java/com/eve/app/ui/home/HomeAppearance.kt").readText()
+        assertTrue(viewModel.contains("SavedStateHandle"))
+        assertTrue(viewModel.contains("savedStateHandle[SELECTED_CATEGORY_STATE_KEY] = category"))
+        assertTrue(viewModel.contains("publishExamState(exams)"))
+        assertTrue(appearance.contains("group.check(selectedChip.id)"))
+        assertTrue(activity.contains("currentSelection = { viewModel.selectedCategory.value }"))
+        assertTrue(appearance.contains("values.filter { it != Constants.CATEGORY_ALL }"))
+    }
+}

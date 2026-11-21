@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<lint>
+    <!-- Telegram Android ported UI components directly extend native platform views
+         (android.widget.ImageView, TextView, Button) rather than AndroidX AppCompat equivalents. -->
+    <issue id="AppCompatCustomView" severity="ignore" />
+
+    <!-- Telegram Android ported utilities call AndroidX internal/restricted APIs
+         (e.g. androidx.core.graphics.PathParser.PathDataNode in NotchInfoUtils). -->
+    <issue id="RestrictedApi" severity="ignore" />
+</lint>

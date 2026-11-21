@@ -1,0 +1,175 @@
+package com.eve.app.ui.home
+
+import android.content.res.ColorStateList
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import androidx.core.content.ContextCompat
+import androidx.recyclerview.widget.RecyclerView
+import com.eve.app.R
+import com.eve.app.data.model.Exam
+import com.eve.app.data.model.GeneratedTest
+import com.eve.app.databinding.ItemCategoryHeaderBinding
+import com.eve.app.databinding.ItemExamTestBinding
+import com.eve.app.databinding.ItemSubExamBinding
+import com.eve.app.theme.TelegramThemeEngine
+
+sealed class ExamTestsListItem {
+    data class HeaderItem(val title: String) : ExamTestsListItem()
+    data class SubExamItem(val exam: Exam) : ExamTestsListItem()
+    data class TestItem(
+        val test: GeneratedTest,
+        val title: String,
+        val subtitle: String,
+        val isCompleted: Boolean,
+        val isResume: Boolean = false,
+        val isLocked: Boolean = false,
+        val opensText: String = ""
+    ) : ExamTestsListItem()
+}
+
+class ExamTestsAdapter(
+    private val onSubExamClick: (Exam) -> Unit,
+    private val onTestClick: (GeneratedTest, Boolean) -> Unit,
+    private val onLockedClick: (GeneratedTest, String) -> Unit = { _, _ -> }
+) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+
+    companion object {
+        private const val VIEW_TYPE_HEADER = 0
+        private const val VIEW_TYPE_SUB_EXAM = 1
+        private const val VIEW_TYPE_TEST = 2
+    }
+
+    private val items = mutableListOf<ExamTestsListItem>()
+
+    fun submitList(newItems: List<ExamTestsListItem>) {
+        val diffCallback = object : androidx.recyclerview.widget.DiffUtil.Callback() {
+            override fun getOldListSize(): Int = items.size
+            override fun getNewListSize(): Int = newItems.size
+            override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
+                val old = items[oldItemPosition]
+                val new = newItems[newItemPosition]
+                return when {
+                    old is ExamTestsListItem.HeaderItem && new is ExamTestsListItem.HeaderItem -> old.title == new.title
+                    old is ExamTestsListItem.SubExamItem && new is ExamTestsListItem.SubExamItem -> old.exam.id == new.exam.id
+                    old is ExamTestsListItem.TestItem && new is ExamTestsListItem.TestItem -> old.test.id == new.test.id
+                    else -> false
+                }
+            }
+            override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
+                return items[oldItemPosition] == newItems[newItemPosition]
+            }
+        }
+        val diffResult = androidx.recyclerview.widget.DiffUtil.calculateDiff(diffCallback)
+        items.clear()
+        items.addAll(newItems)
+        diffResult.dispatchUpdatesTo(this)
+    }
+
+    override fun getItemViewType(position: Int): Int {
+        return when (items[position]) {
+            is ExamTestsListItem.HeaderItem -> VIEW_TYPE_HEADER
+            is ExamTestsListItem.SubExamItem -> VIEW_TYPE_SUB_EXAM
+            is ExamTestsListItem.TestItem -> VIEW_TYPE_TEST
+        }
+    }
+
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
+        val inflater = LayoutInflater.from(parent.context)
+        return when (viewType) {
+            VIEW_TYPE_HEADER -> {
+                val binding = ItemCategoryHeaderBinding.inflate(inflater, parent, false)
+                HeaderViewHolder(binding)
+            }
+            VIEW_TYPE_SUB_EXAM -> {
+                val binding = ItemSubExamBinding.inflate(inflater, parent, false)
+                SubExamViewHolder(binding)
+            }
+            else -> {
+                val binding = ItemExamTestBinding.inflate(inflater, parent, false)
+                ExamTestViewHolder(binding)
+            }
+        }
+    }
+
+    override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+        when (val item = items[position]) {
+            is ExamTestsListItem.HeaderItem -> (holder as HeaderViewHolder).bind(item)
+            is ExamTestsListItem.SubExamItem -> (holder as SubExamViewHolder).bind(item)
+            is ExamTestsListItem.TestItem -> (holder as ExamTestViewHolder).bindTest(item)
+        }
+    }
+
+    override fun getItemCount(): Int = items.size
+
+    inner class HeaderViewHolder(private val binding: ItemCategoryHeaderBinding) :
+        RecyclerView.ViewHolder(binding.root) {
+        fun bind(item: ExamTestsListItem.HeaderItem) {
+            val palette = TelegramThemeEngine.resolveCurrentPalette(binding.root.context)
+            binding.tvCategoryHeader.text = item.title
+            binding.tvCategoryHeader.setTextColor(palette.accent)
+        }
+    }
+
+    inner class SubExamViewHolder(private val binding: ItemSubExamBinding) :
+        RecyclerView.ViewHolder(binding.root) {
+        fun bind(item: ExamTestsListItem.SubExamItem) {
+            val palette = TelegramThemeEngine.resolveCurrentPalette(binding.root.context)
+            binding.tvSubExamName.text = item.exam.examName
+            binding.tvSubExamName.setTextColor(palette.textPrimary)
+            binding.cardContainer.background = com.eve.app.designsystem.TelegramThemeSelectors.getSelectorDrawable(binding.root.context, false)
+            binding.cardContainer.contentDescription = "Open ${item.exam.examName} tests"
+            com.eve.app.designsystem.DesignPress.bind(binding.cardContainer) { onSubExamClick(item.exam) }
+        }
+    }
+
+    inner class ExamTestViewHolder(private val binding: ItemExamTestBinding) :
+        RecyclerView.ViewHolder(binding.root) {
+        fun bindTest(item: ExamTestsListItem.TestItem) {
+            val palette = TelegramThemeEngine.resolveCurrentPalette(binding.root.context)
+            binding.tvTitle.text = item.title
+            binding.tvTitle.setTextColor(palette.textPrimary)
+            binding.tvSubtitle.visibility = View.VISIBLE
+            binding.tvSubtitle.setTextColor(palette.textSecondary)
+            binding.tvStatus.visibility = View.VISIBLE
+            binding.cardContainer.background = com.eve.app.designsystem.TelegramThemeSelectors.getSelectorDrawable(binding.root.context, false)
+            com.eve.app.designsystem.DesignPress.bind(binding.cardContainer)
+
+            val context = binding.root.context
+            when {
+                item.isLocked -> {
+                    binding.tvSubtitle.text = item.opensText
+                    binding.tvStatus.text = "Locked"
+                    binding.tvStatus.setTextColor(palette.textSecondary)
+                    binding.cardContainer.setOnClickListener {
+                        onLockedClick(item.test, item.opensText)
+                    }
+                }
+                item.isCompleted -> {
+                    binding.tvSubtitle.text = item.subtitle
+                    binding.tvStatus.text = "Completed"
+                    binding.tvStatus.setTextColor(ContextCompat.getColor(context, R.color.system_green_text))
+                    binding.cardContainer.setOnClickListener {
+                        onTestClick(item.test, item.isCompleted)
+                    }
+                }
+                item.isResume -> {
+                    binding.tvSubtitle.text = item.subtitle
+                    binding.tvStatus.text = "Resume"
+                    binding.tvStatus.setTextColor(palette.accent)
+                    binding.cardContainer.setOnClickListener {
+                        onTestClick(item.test, item.isCompleted)
+                    }
+                }
+                else -> {
+                    binding.tvSubtitle.text = item.subtitle
+                    binding.tvStatus.text = "Start"
+                    binding.tvStatus.setTextColor(palette.accent)
+                    binding.cardContainer.setOnClickListener {
+                        onTestClick(item.test, item.isCompleted)
+                    }
+                }
+            }
+        }
+    }
+}

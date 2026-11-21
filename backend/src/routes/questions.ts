@@ -1,0 +1,359 @@
+// ============================================================================
+// Question Bank Routes
+// ============================================================================
+
+import { parseAndValidateQuestions } from "../ai/generator";
+import { Hono } from "hono";
+import { requireAdmin, requirePermission } from "../middleware/authMiddleware";
+import { AuthUser, Env, QuestionRow } from "../types";
+import { hideAnswers } from "../util/clientProtocol";
+import { getAdminPermissions } from "../auth";
+import { prepareAdminAuditLog } from "../util/auditLog";
+
+export const questionRoutes = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
+
+function mapQuestionRow(row: QuestionRow) {
+  return {
+    id: row.id,
+    examId: row.exam_id,
+    questionText: row.question_text,
+    optionA: row.option_a,
+    optionB: row.option_b,
+    optionC: row.option_c,
+    optionD: row.option_d,
+    correctAnswer: row.correct_answer,
+    explanation: row.explanation || "",
+    topic: row.topic || "",
+    isPyq: Boolean(row.is_pyq),
+    pyqYear: row.pyq_year || 0,
+    pyqPaper: row.pyq_paper || "",
+    questionTextHi: row.question_text_hi || "",
+    optionAHi: row.option_a_hi || "",
+    optionBHi: row.option_b_hi || "",
+    optionCHi: row.option_c_hi || "",
+    optionDHi: row.option_d_hi || "",
+    explanationHi: row.explanation_hi || "",
+  };
+}
+
+// GET /api/questions/stats?ids=a,b,c (max 50 ids, auth required)
+questionRoutes.get("/stats", async (c) => {
+  const idsParam = c.req.query("ids") || "";
+  const ids = idsParam
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  if (ids.length === 0) {
+    return c.json({ success: true, data: {} });
+  }
+
+  const clampedIds = ids.slice(0, 50);
+  const placeholders = clampedIds.map(() => "?").join(",");
+  const db = c.env.DB;
+
+  const { results: rows } = await db
+    .prepare(
+      `SELECT question_id,
+              SUM(attempts) as attempts,
+              SUM(correct) as correct,
+              SUM(wrong) as wrong,
+              SUM(unattempted) as unattempted,
+              SUM(total_time_seconds) as total_time_seconds
+       FROM admin_analytics_questions
+       WHERE question_id IN (${placeholders})
+       GROUP BY question_id`
+    )
+    .bind(...clampedIds)
+    .all<{
+      question_id: string;
+      attempts: number;
+      correct: number;
+      wrong: number;
+      unattempted: number;
+      total_time_seconds: number;
+    }>();
+
+  const data: Record<
+    string,
+    { attempts: number; correct: number; wrong: number; unattempted: number; avgTimeSeconds: number }
+  > = {};
+
+  for (const id of clampedIds) {
+    data[id] = { attempts: 0, correct: 0, wrong: 0, unattempted: 0, avgTimeSeconds: 0 };
+  }
+
+  for (const r of rows || []) {
+    const attempts = r.attempts || 0;
+    const avgTimeSeconds = attempts > 0 ? Math.round((r.total_time_seconds || 0) / attempts) : 0;
+    data[r.question_id] = {
+      attempts,
+      correct: r.correct || 0,
+      wrong: r.wrong || 0,
+      unattempted: r.unattempted || 0,
+      avgTimeSeconds,
+    };
+  }
+
+  return c.json({ success: true, data });
+});
+
+// GET /api/exams/:examId/questions - Query questions with optional filters
+questionRoutes.get("/exam/:examId", async (c) => {
+  const examId = c.req.param("examId");
+  const isPyqParam = c.req.query("isPyq");
+  const topic = c.req.query("topic");
+  const pyqYear = c.req.query("pyqYear");
+  const pyqPaper = c.req.query("pyqPaper");
+
+  const db = c.env.DB;
+  let query = "SELECT * FROM questions WHERE exam_id = ?";
+  const params: any[] = [examId];
+
+  if (isPyqParam !== undefined) {
+    const isPyq = isPyqParam === "true" || isPyqParam === "1" ? 1 : 0;
+    query += " AND is_pyq = ?";
+    params.push(isPyq);
+  }
+
+  if (topic) {
+    query += " AND LOWER(topic) = LOWER(?)";
+    params.push(topic.trim());
+  }
+
+  if (pyqYear) {
+    query += " AND pyq_year = ?";
+    params.push(parseInt(pyqYear, 10));
+  }
+
+  if (pyqPaper) {
+    query += " AND LOWER(pyq_paper) = LOWER(?)";
+    params.push(pyqPaper.trim());
+  }
+
+  const { results } = await db.prepare(query).bind(...params).all<QuestionRow>();
+  // The Worker must enforce manage_questions even for authenticated admins.
+  // Admin membership by itself does not grant access to answer keys.
+  const user = c.get("user");
+  const canReadAnswers = user?.isAdmin === true &&
+    (await getAdminPermissions(db, user.email))?.rights.includes("manage_questions") === true;
+  const shouldHide = !canReadAnswers || hideAnswers(c);
+  const list = (results || []).map((row) => {
+    const q = mapQuestionRow(row);
+    if (shouldHide) {
+      q.correctAnswer = "";
+      q.explanation = "";
+      q.explanationHi = "";
+    }
+    return q;
+  });
+  return c.json({ success: true, data: list });
+});
+
+// POST /api/questions - Add single question (Admin)
+questionRoutes.post("/", requirePermission("manage_questions"), async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const examId = String(body.examId || "").trim();
+  const questionText = String(body.questionText || "").trim();
+  const optionA = String(body.optionA || "").trim();
+  const optionB = String(body.optionB || "").trim();
+  const optionC = String(body.optionC || "").trim();
+  const optionD = String(body.optionD || "").trim();
+  let correctAnswer: string;
+
+  if (!examId || !questionText || !optionA || !optionB || !optionC || !optionD) {
+    return c.json({ success: false, error: "Missing required question fields" }, 400);
+  }
+
+  try { const valid = parseAndValidateQuestions(JSON.stringify([body]))[0]; correctAnswer = valid.correctAnswer; Object.assign(body, valid); } catch { return c.json({ success: false, error: "Question fields, options or answer are invalid" }, 400); }
+  const user = c.get("user");
+  const id = crypto.randomUUID();
+  const db = c.env.DB;
+
+  const insertStmt = db
+    .prepare(
+      `INSERT INTO questions (
+        id, exam_id, question_text, option_a, option_b, option_c, option_d,
+        correct_answer, explanation, topic, is_pyq, pyq_year, pyq_paper,
+        question_text_hi, option_a_hi, option_b_hi, option_c_hi, option_d_hi, explanation_hi
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .bind(
+      id,
+      examId,
+      questionText,
+      optionA,
+      optionB,
+      optionC,
+      optionD,
+      correctAnswer,
+      String(body.explanation || ""),
+      String(body.topic || ""),
+      body.isPyq ? 1 : 0,
+      Number(body.pyqYear) || 0,
+      String(body.pyqPaper || ""),
+      String(body.questionTextHi || ""),
+      String(body.optionAHi || ""),
+      String(body.optionBHi || ""),
+      String(body.optionCHi || ""),
+      String(body.optionDHi || ""),
+      String(body.explanationHi || "")
+    );
+
+  const { stmt: auditStmt } = prepareAdminAuditLog(db, user, {
+    actionType: "QUESTION_CREATED",
+    description: `Added question '${id}' to exam '${examId}'`,
+    targetType: "question",
+    targetId: id,
+    metadata: { examId, topic: String(body.topic || "") },
+  });
+
+  await db.batch([insertStmt, auditStmt]);
+
+  return c.json({ success: true, data: { id } }, 201);
+});
+
+// POST /api/questions/batch - Batch add questions (Admin)
+questionRoutes.post("/batch", requirePermission("manage_questions"), async (c) => {
+  const user = c.get("user");
+  const body = await c.req.json().catch(() => ({}));
+  const questions: any[] = Array.isArray(body.questions) ? body.questions : [];
+
+  if (questions.length === 0 || questions.length > 300) {
+    return c.json({ success: false, error: "Provide between 1 and 300 questions" }, 400);
+  }
+
+  try { const valid = parseAndValidateQuestions(JSON.stringify(questions)); questions.forEach((q, i) => Object.assign(q, valid[i])); } catch { return c.json({ success: false, error: "Batch contains invalid or duplicate questions" }, 400); }
+  if (questions.some((q) => !q.examId)) return c.json({ success: false, error: "Every question requires examId" }, 400);
+  const db = c.env.DB;
+  const records = questions.map((q) => ({
+    ...q, id: q.id || crypto.randomUUID(), explanation: String(q.explanation || ""),
+    topic: String(q.topic || ""), isPyq: q.isPyq ? 1 : 0, pyqYear: Number(q.pyqYear) || 0,
+    pyqPaper: String(q.pyqPaper || ""), questionTextHi: String(q.questionTextHi || ""),
+    optionAHi: String(q.optionAHi || ""), optionBHi: String(q.optionBHi || ""),
+    optionCHi: String(q.optionCHi || ""), optionDHi: String(q.optionDHi || ""),
+    explanationHi: String(q.explanationHi || ""),
+  }));
+  // A single set insert is atomic and avoids one D1 query per imported question.
+  const insertStmt = db.prepare(`INSERT INTO questions (
+    id, exam_id, question_text, option_a, option_b, option_c, option_d,
+    correct_answer, explanation, topic, is_pyq, pyq_year, pyq_paper,
+    question_text_hi, option_a_hi, option_b_hi, option_c_hi, option_d_hi, explanation_hi
+  ) SELECT json_extract(value, '$.id'), json_extract(value, '$.examId'),
+    json_extract(value, '$.questionText'), json_extract(value, '$.optionA'), json_extract(value, '$.optionB'),
+    json_extract(value, '$.optionC'), json_extract(value, '$.optionD'), json_extract(value, '$.correctAnswer'),
+    json_extract(value, '$.explanation'), json_extract(value, '$.topic'), json_extract(value, '$.isPyq'),
+    json_extract(value, '$.pyqYear'), json_extract(value, '$.pyqPaper'), json_extract(value, '$.questionTextHi'),
+    json_extract(value, '$.optionAHi'), json_extract(value, '$.optionBHi'), json_extract(value, '$.optionCHi'),
+    json_extract(value, '$.optionDHi'), json_extract(value, '$.explanationHi') FROM json_each(?)`)
+    .bind(JSON.stringify(records));
+
+  const { stmt: auditStmt } = prepareAdminAuditLog(db, user, {
+    actionType: "QUESTION_BATCH_CREATED",
+    description: `Batch imported ${questions.length} questions`,
+    targetType: "question",
+    targetId: "batch",
+    metadata: { count: questions.length },
+  });
+
+  await db.batch([insertStmt, auditStmt]);
+
+  return c.json({ success: true, count: questions.length }, 201);
+});
+
+// PUT /api/questions/:id - Update single question (Admin)
+questionRoutes.put("/:id", requirePermission("manage_questions"), async (c) => {
+  const user = c.get("user");
+  const id = c.req.param("id");
+  const body = await c.req.json().catch(() => ({}));
+  try { Object.assign(body, parseAndValidateQuestions(JSON.stringify([body]))[0]); } catch { return c.json({ success: false, error: "Question fields, options or answer are invalid" }, 400); }
+  const db = c.env.DB;
+
+  const updateStmt = db
+    .prepare(
+      `UPDATE questions SET
+        exam_id = ?,
+        question_text = ?,
+        option_a = ?,
+        option_b = ?,
+        option_c = ?,
+        option_d = ?,
+        correct_answer = ?,
+        explanation = ?,
+        topic = ?,
+        is_pyq = ?,
+        pyq_year = ?,
+        pyq_paper = ?,
+        question_text_hi = ?,
+        option_a_hi = ?,
+        option_b_hi = ?,
+        option_c_hi = ?,
+        option_d_hi = ?,
+        explanation_hi = ?
+       WHERE id = ?`
+    )
+    .bind(
+      String(body.examId || ""),
+      String(body.questionText || ""),
+      String(body.optionA || ""),
+      String(body.optionB || ""),
+      String(body.optionC || ""),
+      String(body.optionD || ""),
+      body.correctAnswer,
+      String(body.explanation || ""),
+      String(body.topic || ""),
+      body.isPyq ? 1 : 0,
+      Number(body.pyqYear) || 0,
+      String(body.pyqPaper || ""),
+      String(body.questionTextHi || ""),
+      String(body.optionAHi || ""),
+      String(body.optionBHi || ""),
+      String(body.optionCHi || ""),
+      String(body.optionDHi || ""),
+      String(body.explanationHi || ""),
+      id
+    );
+
+  const { stmt: auditStmt } = prepareAdminAuditLog(db, user, {
+    actionType: "QUESTION_EDITED",
+    description: `Updated question '${id}'`,
+    targetType: "question",
+    targetId: id,
+    metadata: { examId: String(body.examId || ""), topic: String(body.topic || "") },
+    condition: { sql: "changes() = 1", bindings: [] },
+  });
+
+  const results = await db.batch([updateStmt, auditStmt]);
+  if (results[0]?.meta?.changes === 0) {
+    return c.json({ success: false, error: "Question not found" }, 404);
+  }
+  if (results[0]?.meta?.changes !== 1 || results[1]?.meta?.changes !== 1) {
+    throw new Error("Question update confirmation unavailable");
+  }
+  return c.json({ success: true });
+});
+
+// DELETE /api/questions/:id - Delete question (Admin)
+questionRoutes.delete("/:id", requirePermission("manage_questions"), async (c) => {
+  const user = c.get("user");
+  const id = c.req.param("id");
+  const db = c.env.DB;
+
+  const deleteStmt = db.prepare("DELETE FROM questions WHERE id = ?").bind(id);
+  const { stmt: auditStmt } = prepareAdminAuditLog(db, user, {
+    actionType: "QUESTION_DELETED",
+    description: `Deleted question '${id}'`,
+    targetType: "question",
+    targetId: id,
+    condition: { sql: "changes() = 1", bindings: [] },
+  });
+
+  const results = await db.batch([deleteStmt, auditStmt]);
+  const changed = results[0]?.meta?.changes;
+  if ((changed !== 0 && changed !== 1) ||
+      (changed === 1 && results[1]?.meta?.changes !== 1)) {
+    throw new Error("Question deletion confirmation unavailable");
+  }
+  // Preserve idempotent absence confirmation; audit only an actual deletion.
+  return c.json({ success: true });
+});

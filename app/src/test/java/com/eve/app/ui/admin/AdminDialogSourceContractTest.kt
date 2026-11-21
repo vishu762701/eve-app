@@ -1,0 +1,160 @@
+package com.eve.app.ui.admin
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import java.io.File
+
+/** Contract verifying Admin UI dialogs use verified Telegram source chrome and proper styling. */
+class AdminDialogSourceContractTest {
+
+    @Test fun adminActivityUsesNativeSourceIsolatedHostForAllOwnedDialogVariants() {
+        val source = File("src/main/java/com/eve/app/ui/admin/AdminActivity.kt").readText()
+        assertTrue(source.contains("import com.eve.app.designsystem.TelegramNativeAlertDialog"))
+        assertEquals("Original confirmation, list, custom-form and progress variants",
+            21, source.split("TelegramNativeAlertDialog.Builder(").size - 1)
+        assertTrue("Do not overlay native dialog with obsolete AppCompat background",
+            !source.contains("TelegramDialogSourceBackground.apply("))
+        assertTrue("Floating link form validation and server authorization remain",
+            source.contains("FloatingLinkRepository.isValidHttpsUrl(finalUrl)") &&
+                source.contains("floatingLinkRepo.updateFloatingLink(finalUrl)"))
+        assertTrue("Feedback and banner operations remain connected",
+            source.contains("feedbackRepo.createFeedbackPost(") &&
+                source.contains("bannerRepo."))
+        assertTrue("Destructive actions remain visibly red",
+            source.contains(".makeRed(DialogInterface.BUTTON_POSITIVE).show()"))
+    }
+
+    @Test fun manageExamsUsesNativeSourceDerivedDialogsWithCancelHandling() {
+        val source = File("src/main/java/com/eve/app/ui/admin/ManageExamsActivity.kt").readText()
+        assertTrue(source.contains("import com.eve.app.designsystem.TelegramNativeAlertDialog"))
+        assertTrue("All exam-management confirmations and notices must use the native host",
+            source.split("TelegramNativeAlertDialog.Builder(").size - 1 >= 5)
+        assertTrue("The native confirmations must show through managed dialog host",
+            source.contains("showManagedDialog(builder.create())") &&
+                source.contains("showUnsavedChangesDialog("))
+        assertTrue(source.contains(".setOnCancelListener {"))
+        assertTrue(source.contains("triggerAiTestGeneration(data)"))
+        assertTrue(source.contains("saveExamSettings {"))
+        val native = File("src/main/java/com/eve/app/designsystem/TelegramNativeAlertDialog.kt").readText()
+        assertTrue(native.contains("dialog.setOnCancelListener(cancelListener)"))
+    }
+
+    @Test fun adminDeleteFlowAppliesDestructiveAndSourceStyling() {
+        val source = File("src/main/java/com/eve/app/ui/admin/AdminDeleteFlow.kt").readText()
+        assertTrue(source.contains("import org.telegram.ui.ActionBar.AlertDialog"))
+        assertTrue(source.contains("AlertDialog.Builder(activity)"))
+        assertTrue(source.contains(".makeRed(DialogInterface.BUTTON_POSITIVE).show()"))
+        assertTrue(source.contains("if (!pending.add(key)) return"))
+        assertTrue(source.contains("repository.deleteExam(id)"))
+        assertTrue(source.contains("repository.deleteGeneratedTest(id)"))
+        assertTrue(source.contains("if (!processing) pending.remove(key)"))
+    }
+
+    @Test fun secondaryAdminActivitiesRouteDialogsThroughSourceAdapters() {
+        val activities = listOf(
+            "src/main/java/com/eve/app/ui/admin/ManageSyllabusActivity.kt",
+            "src/main/java/com/eve/app/ui/admin/ManageUsersActivity.kt",
+            "src/main/java/com/eve/app/ui/admin/AdminAnalyticsActivity.kt"
+        )
+        // The read-only generated-test preview now uses the actual source-derived
+        // native message scroll host instead of the previous Material adapter.
+        val preview = File("src/main/java/com/eve/app/ui/admin/GeneratedTestsActivity.kt").readText()
+        assertTrue(preview.contains("AlertDialog.Builder(this)"))
+        assertTrue(preview.contains(".setMessage(formattedText.toString())"))
+        assertTrue(preview.contains(".setPositiveButton(\"Close\", null)"))
+        assertTrue(preview.contains(".show()"))
+        val editAbout = File("src/main/java/com/eve/app/ui/admin/EditAboutActivity.kt").readText()
+        assertTrue(editAbout.contains("import org.telegram.ui.ActionBar.AlertDialog"))
+        assertEquals("Both unsaved flows share one canonical native dialog host",
+            1, editAbout.split("AlertDialog.Builder(").size - 1)
+        val tabSelection = editAbout.substringAfter("override fun onTabSelected(")
+            .substringBefore("override fun onTabUnselected(")
+        assertTrue("Dirty tab navigation must still reach the native unsaved confirmation",
+            tabSelection.contains("showUnsavedConfirmation(leaving = false) { switchTab(target) }"))
+        val back = editAbout.substringAfter("private fun handleBack()")
+            .substringBefore("private fun writeDraft(")
+        assertTrue("Dirty Back navigation must still reach the native unsaved confirmation",
+            back.contains("showUnsavedConfirmation(leaving = true) { finish() }"))
+        val unsaved = editAbout.substringAfter("private fun showUnsavedConfirmation(")
+            .substringBefore("private fun handleBack()")
+        assertTrue(unsaved.contains("AlertDialog.Builder(this)"))
+        for (action in listOf("PositiveButton(\"Save\"", "NegativeButton(\"Discard\"", "NeutralButton(\"Cancel\"")) {
+            assertTrue("Both flows retain $action on the native host", unsaved.contains(".set$action"))
+        }
+        assertTrue("Retained native actions remain owner/lifecycle bound",
+            unsaved.contains("current(requestEpoch) && currentType == type"))
+        assertTrue("The shared native dialog is actually shown", unsaved.contains("dialog.show()"))
+        for (path in activities) {
+            val content = File(path).readText()
+            assertTrue("$path must import native Telegram host", content.contains("import com.eve.app.designsystem.TelegramNativeAlertDialog"))
+            if (path.endsWith("AdminAnalyticsActivity.kt")) {
+                assertTrue("Analytics must use the canonical native editor", content.contains("createQuestionEditorDialog(this@AdminAnalyticsActivity,"))
+                assertCanonicalQuestionEditorUsesNativeHost()
+            } else {
+                assertTrue("$path must use native Telegram host", content.contains("TelegramNativeAlertDialog.Builder("))
+            }
+            assertTrue("$path must not open the obsolete Material adapter", !content.contains(".showTelegramSourceDialog()"))
+        }
+        val syllabus = File(activities[0]).readText()
+        assertTrue("Choosing a new exam must not dismiss before Reassign",
+            syllabus.contains(".setSingleChoiceItems(examLabels, 0, dismissOnSelection = false)"))
+        assertTrue(syllabus.contains("examRepo.reassignSyllabus(currentExam, target)"))
+        assertTrue(!syllabus.contains("examRepo.updateExamFullSettings("))
+        val users = File(activities[1]).readText()
+        assertTrue(users.contains("adminRepo.toggleUserStatus(selection.userId, disable)"))
+        assertTrue("Manage Users must bind privileged views to the initiating UID",
+            users.contains("authorizedUid = FirebaseAuth.getInstance().currentUser?.uid"))
+        assertTrue("User status mutations must match the original visible row and live authority",
+            users.contains("val selection = UserStatusSelection(") &&
+                users.contains("selection.matches(authorizedUid, currentPage, query, detailsEpoch, adapter.currentList)") &&
+                users.contains("if (actionPending || !isCurrentOwner(actionOwner))") &&
+                users.contains("if (!selectionCurrent() ||"))
+        assertTrue("Canonical owner guard must recheck Firebase before acting",
+            users.contains("gateReady && authorizedUid == uid &&") &&
+                users.contains("FirebaseAuth.getInstance().currentUser?.uid == uid"))
+        val analytics = File(activities[2]).readText()
+        assertTrue(analytics.contains("examRepo.updateQuestion(updated)"))
+    }
+
+    @Test fun publishingPremiumAndModerationDialogsUseNativeHostWithoutChangingAuthority() {
+        val files = listOf(
+            "SendNotificationActivity.kt",
+            "ManagePremiumActivity.kt",
+            "FlaggedQuestionsActivity.kt"
+        )
+        for (name in files) {
+            val src = File("src/main/java/com/eve/app/ui/admin/$name").readText()
+            assertTrue("$name must use Telegram-native UI", src.contains("import com.eve.app.designsystem.TelegramNativeAlertDialog"))
+            assertTrue("$name must no longer open the legacy Material adapter", !src.contains("showTelegramSourceDialog()"))
+        }
+        val notify = File("src/main/java/com/eve/app/ui/admin/SendNotificationActivity.kt").readText()
+        assertEquals(3, notify.split("AlertDialog.Builder(this)").size - 1)
+        assertEquals(2, notify.split(".makeRed(DialogInterface.BUTTON_POSITIVE)").size - 1)
+        assertTrue(notify.contains("deleteSelectedBroadcasts()"))
+        assertTrue(notify.contains("deleteBroadcast(broadcast)"))
+        assertTrue(notify.contains("sendNotification(title, message)"))
+        val premium = File("src/main/java/com/eve/app/ui/admin/ManagePremiumActivity.kt").readText()
+        assertTrue(premium.contains("ApiClient.api.grantPremium("))
+        assertTrue(premium.contains("ApiClient.api.revokePremium("))
+        assertTrue(premium.contains(".setView(dialogView)"))
+        assertTrue(premium.contains(".makeRed(DialogInterface.BUTTON_POSITIVE)"))
+        val flagged = File("src/main/java/com/eve/app/ui/admin/FlaggedQuestionsActivity.kt").readText()
+        assertTrue(flagged.contains("flagRepo.dismissFlags("))
+        assertTrue(flagged.contains("examRepo.updateQuestion(updated)"))
+        assertTrue(flagged.contains("createQuestionEditorDialog(this@FlaggedQuestionsActivity,"))
+        assertTrue("Flag dismissal still uses the native confirmation host", flagged.contains("AlertDialog.Builder(this)"))
+        assertTrue("Combined success needs confirmed report resolution", flagged.contains("confirmed = flagRepo.dismissFlags(item.flagIds)"))
+        assertCanonicalQuestionEditorUsesNativeHost()
+    }
+    private fun assertCanonicalQuestionEditorUsesNativeHost() {
+        val shared = File("src/main/java/com/eve/app/ui/admin/ManageQuestionsActivity.kt")
+            .readText().substringAfter("internal fun createQuestionEditorDialog(")
+            .substringBefore("internal fun createRenameExamDialog(")
+        assertTrue(shared.contains("AlertDialog.Builder(activity)"))
+        assertTrue(shared.contains(".setView(dialogView)"))
+        assertTrue(shared.contains("dialog.setDismissDialogByButtons(false)"))
+        assertTrue(shared.contains(".setNegativeButton(\"Cancel\"") )
+    }
+
+}

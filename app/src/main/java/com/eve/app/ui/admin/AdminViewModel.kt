@@ -1,0 +1,352 @@
+package com.eve.app.ui.admin
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.eve.app.data.model.Exam
+import com.eve.app.data.model.Question
+import com.eve.app.data.remote.AdminMeData
+import com.eve.app.data.remote.DynamicAdminItem
+import com.eve.app.data.repository.AdminRepository
+import com.eve.app.data.repository.ExamRepository
+import com.eve.app.data.repository.UserStatsRepository
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
+import com.eve.app.data.remote.toUserFriendlyMessage
+
+class AdminViewModel(
+    private val repo: ExamRepository = ExamRepository(),
+    private val adminRepo: AdminRepository = AdminRepository()
+) : ViewModel() {
+    private val userStatsRepo = UserStatsRepository()
+
+    private val _exams = MutableStateFlow<List<Exam>>(emptyList())
+    val exams: StateFlow<List<Exam>> = _exams.asStateFlow()
+
+    private val _questions = MutableStateFlow<List<Question>>(emptyList())
+    val questions: StateFlow<List<Question>> = _questions.asStateFlow()
+
+    private val _admins = MutableStateFlow<List<DynamicAdminItem>>(emptyList())
+    val admins: StateFlow<List<DynamicAdminItem>> = _admins.asStateFlow()
+
+    private val _adminMe = MutableStateFlow<AdminMeData?>(null)
+    val adminMe: StateFlow<AdminMeData?> = _adminMe.asStateFlow()
+
+    private val _totalUsers = MutableStateFlow<Long?>(null)
+    val totalUsers: StateFlow<Long?> = _totalUsers.asStateFlow()
+
+    private val _onlineUsers = MutableStateFlow<Long?>(null)
+    val onlineUsers: StateFlow<Long?> = _onlineUsers.asStateFlow()
+
+    private val _busy = MutableStateFlow(false)
+    val busy: StateFlow<Boolean> = _busy.asStateFlow()
+
+    /** Ek baar dikhane wala message (toast) */
+    private val _message = MutableStateFlow<String?>(null)
+    val message: StateFlow<String?> = _message.asStateFlow()
+
+    // Activities explicitly load only their authorized data after AdminAccessGate.
+    // Construction must not issue directory/stats requests for unrelated rights.
+
+    fun loadUserStats() {
+        viewModelScope.launch {
+            try {
+                _totalUsers.value = userStatsRepo.getTotalUserCount()
+                _onlineUsers.value = userStatsRepo.getOnlineUserCount()
+            } catch (e: Exception) {
+                _message.value = e.message ?: "Failed to load user stats"
+            }
+        }
+    }
+
+    fun consumeMessage() {
+        _message.value = null
+    }
+
+    fun loadExams() {
+        viewModelScope.launch {
+            try {
+                _exams.value = repo.getExams()
+            } catch (e: Exception) {
+                _message.value = e.message ?: "Failed to load exams"
+            }
+        }
+    }
+
+    var questionExamId: String = ""
+        private set
+    private var questionRequestGeneration = 0L
+
+    fun loadQuestions(examId: String) {
+        val generation = ++questionRequestGeneration
+        if (questionExamId != examId) _questions.value = emptyList()
+        questionExamId = examId
+        if (examId.isEmpty()) {
+            _questions.value = emptyList()
+            return
+        }
+        viewModelScope.launch {
+            try {
+                val questions = repo.getQuestions(examId)
+                if (generation == questionRequestGeneration) _questions.value = questions
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (e: Exception) {
+                if (generation == questionRequestGeneration) {
+                    _message.value = e.message ?: "Failed to load questions"
+                }
+            }
+        }
+    }
+
+    /** A completed write refreshes its own exam only while that exam is still selected. */
+    fun refreshQuestions(examId: String) {
+        if (questionExamId == examId && examId.isNotEmpty()) loadQuestions(examId)
+    }
+
+    fun addExam(name: String, minutes: Int, category: String, imageUrl: String = "", onDone: () -> Unit) {
+        viewModelScope.launch {
+            _busy.value = true
+            try {
+                repo.addExam(name, minutes, category, imageUrl = imageUrl)
+                _message.value = "Exam added successfully"
+                loadExams()
+                onDone()
+            } catch (e: Exception) {
+                _message.value = e.message ?: "Failed to add exam"
+            }
+            _busy.value = false
+        }
+    }
+
+    fun updateExamImage(examId: String, imageUrl: String, onDone: () -> Unit) {
+        viewModelScope.launch {
+            _busy.value = true
+            try {
+                repo.updateExamImage(examId, imageUrl)
+                _message.value = if (imageUrl.isBlank()) "Image removed" else "Exam image updated"
+                loadExams()
+                onDone()
+            } catch (e: Exception) {
+                _message.value = e.message ?: "Failed to update exam image"
+            }
+            _busy.value = false
+        }
+    }
+
+    /**
+     * UI captures the initiating account and exam; fresh Worker rights are checked
+     * immediately before dispatch, not only when the confirmation was rendered.
+     */
+    fun deleteExam(
+        examId: String,
+        ownerCurrent: () -> Boolean,
+        authorize: suspend () -> Boolean,
+        onFailure: (String) -> Unit = {},
+        onDone: () -> Unit
+    ) {
+        if (examId.isBlank() || _busy.value || !ownerCurrent()) return
+        // Acquire synchronously so repeated confirmation taps cannot enqueue two deletes.
+        _busy.value = true
+        viewModelScope.launch {
+            try {
+                if (!ownerCurrent()) return@launch
+                if (!authorize()) throw SecurityException("Exam deletion permission is unavailable")
+                if (!ownerCurrent()) return@launch
+                repo.deleteExam(examId)
+                if (!ownerCurrent()) return@launch
+                _message.value = "Exam deleted successfully"
+                loadExams()
+                onDone()
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (e: Exception) {
+                if (ownerCurrent()) {
+                    val message = e.toUserFriendlyMessage(false)
+                    _message.value = message
+                    onFailure(message)
+                }
+            } finally {
+                _busy.value = false
+            }
+        }
+    }
+
+    fun renameExam(examId: String, newName: String, onFailure: (String) -> Unit = {}, onDone: () -> Unit) {
+        viewModelScope.launch {
+            _busy.value = true
+            try {
+                repo.renameExam(examId, newName)
+                _message.value = "Exam renamed successfully"
+                loadExams()
+                onDone()
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (e: Exception) {
+                val message = e.message ?: "Failed to rename exam"
+                _message.value = message
+                onFailure(message)
+            } finally {
+                _busy.value = false
+            }
+        }
+    }
+
+    fun addQuestions(questions: List<Question>, onDone: () -> Unit) {
+        if (questions.isEmpty()) {
+            _message.value = "No valid questions found for upload"
+            return
+        }
+        viewModelScope.launch {
+            _busy.value = true
+            try {
+                val n = repo.addQuestions(questions)
+                _message.value = "$n questions uploaded successfully"
+                questions.firstOrNull()?.examId?.let { refreshQuestions(it) }
+                onDone()
+            } catch (e: Exception) {
+                _message.value = e.message ?: "Upload failed (check permissions)"
+            }
+            _busy.value = false
+        }
+    }
+
+    fun addQuestion(q: Question, onFailure: (String) -> Unit = {}, onDone: () -> Unit) {
+        viewModelScope.launch {
+            _busy.value = true
+            try {
+                repo.addQuestion(q)
+                _message.value = "Question uploaded successfully"
+                refreshQuestions(q.examId)
+                onDone()
+            } catch (cancel: kotlinx.coroutines.CancellationException) {
+                throw cancel
+            } catch (e: Exception) {
+                val message = e.message ?: "Upload failed (check permissions)"
+                _message.value = message
+                onFailure(message)
+            } finally {
+                _busy.value = false
+            }
+        }
+    }
+
+    fun updateQuestion(q: Question, onDone: () -> Unit) {
+        viewModelScope.launch {
+            _busy.value = true
+            try {
+                repo.updateQuestion(q)
+                _message.value = "Question updated successfully"
+                refreshQuestions(q.examId)
+                onDone()
+            } catch (e: Exception) {
+                _message.value = e.message ?: "Failed to update question"
+            }
+            _busy.value = false
+        }
+    }
+
+    fun deleteQuestion(q: Question, onFailure: (String) -> Unit = {}, onDone: () -> Unit = {}) {
+        if (_busy.value || q.id.isBlank()) return
+        viewModelScope.launch {
+            _busy.value = true
+            try {
+                repo.deleteQuestion(q.id)
+                _message.value = "Question deleted successfully"
+                refreshQuestions(q.examId)
+                onDone()
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (e: Exception) {
+                val message = e.toUserFriendlyMessage(false)
+                _message.value = message
+                onFailure(message)
+            } finally {
+                _busy.value = false
+            }
+        }
+    }
+
+    fun loadAdminMe(onDone: ((AdminMeData?) -> Unit)? = null) {
+        viewModelScope.launch {
+            try {
+                val data = adminRepo.getAdminMe()
+                _adminMe.value = data
+                onDone?.invoke(data)
+            } catch (e: Exception) {
+                onDone?.invoke(null)
+            }
+        }
+    }
+
+    fun loadAdmins() {
+        viewModelScope.launch {
+            try {
+                _admins.value = adminRepo.getDynamicAdmins()
+            } catch (e: Exception) {
+                _message.value = e.message ?: "Failed to load admins"
+            }
+        }
+    }
+
+    fun addAdmin(email: String, rights: List<String> = emptyList(), customTitle: String? = null, onDone: () -> Unit) {
+        viewModelScope.launch {
+            _busy.value = true
+            try {
+                adminRepo.addAdmin(email, rights, customTitle)
+                _message.value = "Admin added successfully"
+                loadAdmins()
+                onDone()
+            } catch (e: Exception) {
+                _message.value = e.toUserFriendlyMessage()
+            }
+            _busy.value = false
+        }
+    }
+
+    fun updateAdminRights(
+        email: String,
+        rights: List<String>,
+        customTitle: String?,
+        onResult: (Result<Unit>) -> Unit
+    ) {
+        if (_busy.value) return
+        // Acquire synchronously, before the coroutine can be queued twice.
+        _busy.value = true
+        viewModelScope.launch {
+            try {
+                adminRepo.updateAdminRights(email, rights, customTitle)
+                loadAdmins()
+                onResult(Result.success(Unit))
+            } catch (cancel: kotlinx.coroutines.CancellationException) {
+                throw cancel
+            } catch (e: Exception) {
+                _message.value = e.toUserFriendlyMessage()
+                onResult(Result.failure(e))
+            } finally {
+                _busy.value = false
+            }
+        }
+    }
+
+    fun removeAdmin(email: String, onResult: (Result<Unit>) -> Unit) {
+        if (_busy.value) return
+        _busy.value = true
+        viewModelScope.launch {
+            try {
+                adminRepo.removeAdmin(email)
+                loadAdmins()
+                onResult(Result.success(Unit))
+            } catch (cancel: kotlinx.coroutines.CancellationException) {
+                throw cancel
+            } catch (e: Exception) {
+                _message.value = e.toUserFriendlyMessage()
+                onResult(Result.failure(e))
+            } finally {
+                _busy.value = false
+            }
+        }
+    }
+}

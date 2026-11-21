@@ -1,0 +1,242 @@
+<?xml version='1.0' encoding='utf-8'?>
+<androidx.drawerlayout.widget.DrawerLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:id="@+id/drawerLayout" android:layout_width="match_parent" android:layout_height="match_parent" style="@style/Widget.Eve.Token.Screen">
+    <FrameLayout android:id="@+id/homeContentHost" android:layout_width="match_parent" android:layout_height="match_parent" android:clipChildren="false" android:clipToPadding="false">
+    <LinearLayout android:id="@+id/mainContentContainer" android:layout_width="match_parent" android:layout_height="match_parent" android:clipChildren="false" android:clipToPadding="false" android:orientation="vertical" style="@style/Widget.Eve.Token.Column">
+        <FrameLayout android:id="@+id/topBarContainer" android:layout_width="match_parent" android:layout_height="wrap_content" android:clipChildren="false" android:clipToPadding="false" style="@style/Widget.Eve.Token.Column">
+            <LinearLayout android:id="@+id/normalTopBar" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:clipChildren="false" android:clipToPadding="false" style="@style/Widget.Eve.Token.Column">
+                <com.eve.app.designsystem.TelegramActionBar android:id="@+id/homeGlassToolbar" android:layout_width="match_parent" android:layout_height="wrap_content">
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="@dimen/telegram_action_bar_height" android:minHeight="@dimen/telegram_action_bar_height" android:gravity="center_vertical" android:orientation="horizontal" android:clipChildren="false" android:clipToPadding="false" style="@style/Widget.Eve.Token.ToolbarRow">
+                        <ImageButton android:id="@+id/btnMenu" android:layout_width="@dimen/design_touch_min" android:layout_height="@dimen/design_touch_min" android:contentDescription="Profile" android:src="@drawable/msg_openprofile" android:padding="5dp" android:scaleType="fitCenter" app:tint="@color/telegram_type_primary" style="@style/Widget.Eve.Token.IconButton" />
+                        <TextView
+                            android:id="@+id/tvActionBarTitle"
+                            style="@style/TextAppearance.Eve.Telegram.NavigationTitle"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginStart="@dimen/design_row_gap"
+                            android:layout_marginEnd="@dimen/design_row_gap"
+                            android:singleLine="true"
+                            android:ellipsize="end"
+                            android:text="EVE" />
+                        <ImageButton android:id="@+id/btnLockApp" android:layout_width="@dimen/design_touch_min" android:layout_height="@dimen/design_touch_min" android:layout_marginEnd="@dimen/design_row_gap" android:contentDescription="Lock app" android:src="@drawable/ic_lock_header" app:tint="@color/telegram_type_primary" android:visibility="gone" style="@style/Widget.Eve.Token.IconButton" />
+                        <ImageButton android:id="@+id/btnSearch" android:layout_width="@dimen/design_touch_min" android:layout_height="@dimen/design_touch_min" android:layout_marginEnd="@dimen/design_row_gap" android:contentDescription="Search exams" android:src="@drawable/msg_search" app:tint="@color/telegram_type_primary" style="@style/Widget.Eve.Token.IconButton" />
+                        <FrameLayout android:id="@+id/notificationAction" android:layout_width="@dimen/design_touch_min" android:layout_height="@dimen/design_touch_min" android:layout_marginEnd="@dimen/design_row_gap" android:background="@null" android:foreground="@drawable/telegram_action_icon_ripple" android:stateListAnimator="@null" android:clipChildren="true" android:clipToPadding="true" android:clickable="true" android:focusable="true" android:contentDescription="Notifications" style="@style/Widget.Eve.Token.Column">
+                            <ImageView android:id="@+id/ivNotificationIdle" android:layout_width="@dimen/design_icon_size" android:layout_height="@dimen/design_icon_size" android:layout_gravity="center" android:src="@drawable/msg_notifications" app:tint="@color/telegram_type_primary" android:importantForAccessibility="no" />
+                            <com.airbnb.lottie.LottieAnimationView android:id="@+id/btnNotification" android:layout_width="@dimen/design_touch_min" android:layout_height="@dimen/design_touch_min" android:background="@null" android:foreground="@null" android:clickable="false" android:focusable="false" android:importantForAccessibility="no" android:alpha="0" app:lottie_autoPlay="false" app:lottie_loop="false" app:lottie_rawRes="@raw/home_notification_bell" android:layout_gravity="center" android:padding="0dp" style="@style/Widget.Eve.Token.Column" />
+                            <View android:id="@+id/dotUnread" android:layout_width="@dimen/design_card_gap" android:layout_height="@dimen/design_card_gap" android:layout_gravity="top|end" android:layout_marginTop="5dp" android:layout_marginEnd="5dp" android:background="@drawable/shape_notification_dot" android:visibility="gone" />
+                        </FrameLayout>
+                        <ImageButton android:id="@+id/btnOverflow" android:layout_width="@dimen/design_touch_min" android:layout_height="@dimen/design_touch_min" android:contentDescription="@string/home_menu" android:src="@drawable/ic_ab_other" app:tint="@color/telegram_type_primary" style="@style/Widget.Eve.Token.IconButton" />
+                    </LinearLayout>
+                </com.eve.app.designsystem.TelegramActionBar>
+                <LinearLayout android:id="@+id/titleGroup" android:layout_width="match_parent" android:layout_height="0dp" android:visibility="gone" android:orientation="vertical" android:clipChildren="false" android:clipToPadding="false" style="@style/Widget.Eve.Token.Column">
+                    <TextView style="@style/TextAppearance.Eve.Token.Secondary" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="EVE" />
+                    <TextView android:id="@+id/tvWelcome" style="@style/TextAppearance.Eve.Token.Title" android:layout_width="wrap_content" android:layout_height="wrap_content" android:ellipsize="end" android:maxLines="1" android:text="Hi, Student" />
+                </LinearLayout>
+            </LinearLayout>
+            <LinearLayout android:id="@+id/searchTopBar" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="@dimen/design_tab_height" android:gravity="center_vertical" android:orientation="horizontal" android:visibility="gone" android:clipChildren="false" android:clipToPadding="false" style="@style/Widget.Eve.Token.Column">
+                <ImageButton android:id="@+id/btnSearchBack" android:layout_width="@dimen/design_touch_min" android:layout_height="@dimen/design_touch_min" android:contentDescription="Close search" android:src="@drawable/ic_back" app:tint="@color/telegram_type_primary" style="@style/Widget.Eve.Token.IconButton" />
+                <LinearLayout android:id="@+id/layoutSearchFieldContainer" android:layout_width="0dp" android:layout_height="@dimen/design_touch_min" android:layout_marginStart="@dimen/design_card_gap" android:layout_marginEnd="@dimen/design_card_gap" android:layout_weight="1" android:gravity="center_vertical" style="@style/Widget.Eve.Token.Tile" android:clipChildren="false" android:clipToPadding="false">
+                    <EditText android:id="@+id/etSearch" style="@style/Widget.Eve.Token.Input.TelegramSearch" android:tag="eve_telegram_type" android:layout_width="match_parent" android:layout_height="@dimen/design_input_height" android:hint="Search exams..." android:imeOptions="actionSearch" android:inputType="text" android:maxLines="1" />
+                </LinearLayout>
+                <ImageButton android:id="@+id/btnClearSearch" android:layout_width="@dimen/design_touch_min" android:layout_height="@dimen/design_touch_min" android:contentDescription="Clear search" android:src="@drawable/ic_close" app:tint="@color/telegram_type_primary" android:visibility="gone" style="@style/Widget.Eve.Token.IconButton" />
+            </LinearLayout>
+        </FrameLayout>
+        <LinearLayout android:id="@+id/contentSheet" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:orientation="vertical" android:clipToPadding="false" android:clipChildren="false" style="@style/Widget.Eve.Token.Column">
+            <TextView android:id="@+id/tvOfflineBanner" style="@style/TextAppearance.Eve.Token.Secondary.orange" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center" android:text="@string/offline_banner_text" android:visibility="gone" />
+            <FrameLayout android:id="@+id/panelHomeBanner" android:layout_width="match_parent" android:layout_height="@dimen/design_banner_height" android:layout_marginHorizontal="@dimen/design_screen_margin" android:layout_marginTop="@dimen/design_row_gap" android:layout_marginBottom="@dimen/design_row_gap" android:clipChildren="false" android:clipToPadding="false" android:visibility="gone" style="@style/Widget.Eve.Token.Column">
+                <View android:id="@+id/blurHomeBannerMaterial" android:layout_width="match_parent" android:layout_height="match_parent" />
+                <androidx.viewpager2.widget.ViewPager2 android:id="@+id/vpHomeBanners" android:layout_width="match_parent" android:layout_height="match_parent" android:clipChildren="false" android:clipToPadding="false" android:alpha="1" android:overScrollMode="never" />
+                <View android:id="@+id/homeBannerMatte" android:layout_width="match_parent" android:layout_height="match_parent" android:clickable="false" android:focusable="false" />
+                <FrameLayout android:layout_width="match_parent" android:layout_height="match_parent" android:clipChildren="false" android:clipToPadding="false" style="@style/Widget.Eve.Token.Column">
+                    <androidx.appcompat.widget.AppCompatButton android:id="@+id/btnHomeBannerCta" style="@style/Widget.Eve.Token.Button.Secondary" android:layout_width="wrap_content" android:layout_height="@dimen/design_touch_min" android:layout_gravity="bottom|end" android:contentDescription="Open Home banner link" android:ellipsize="end" android:maxLines="1" android:visibility="gone" />
+                </FrameLayout>
+            </FrameLayout>
+            <com.eve.app.designsystem.TelegramButton android:id="@+id/btnAdmin" style="@style/Widget.Eve.Token.Button.Secondary" android:layout_width="match_parent" android:layout_height="@dimen/design_touch_min" android:layout_marginHorizontal="@dimen/design_screen_margin" android:layout_marginTop="@dimen/design_screen_margin" android:text="Admin Dashboard" android:visibility="gone" />
+            <FrameLayout
+                android:id="@+id/cardPoll"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="@dimen/design_screen_margin"
+                android:layout_marginTop="@dimen/design_row_gap"
+                android:layout_marginBottom="@dimen/design_card_gap"
+                android:visibility="gone"
+                android:background="@color/surface"
+                android:padding="@dimen/design_card_padding">
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:clipChildren="false"
+                    android:clipToPadding="false"
+                    style="@style/Widget.Eve.Token.Column">
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:clipChildren="false"
+                        android:clipToPadding="false"
+                        style="@style/Widget.Eve.Token.Column">
+                        <TextView
+                            android:id="@+id/tvHomePollHeader"
+                            style="@style/TextAppearance.Eve.Token.Secondary.blue"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="🗳️ Community Poll" />
+                        <TextView
+                            android:id="@+id/tvHomePollStatus"
+                            style="@style/TextAppearance.Eve.Token.Secondary"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Active" />
+                    </LinearLayout>
+                    <TextView
+                        android:id="@+id/tvHomePollQuestion"
+                        style="@style/TextAppearance.Eve.Token.Heading"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/design_card_gap" />
+                    <RadioGroup
+                        android:id="@+id/rgHomePollOptions"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/design_row_gap" />
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/btnSubmitHomeVote"
+                        style="@style/Widget.Eve.Token.Button.Secondary"
+                        android:layout_width="match_parent"
+                        android:layout_height="@dimen/design_touch_min"
+                        android:layout_marginTop="@dimen/design_row_gap"
+                        android:text="Vote" />
+                    <LinearLayout
+                        android:id="@+id/layoutHomePollResults"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/design_row_gap"
+                        android:orientation="vertical"
+                        android:visibility="gone"
+                        android:clipChildren="false"
+                        android:clipToPadding="false"
+                        style="@style/Widget.Eve.Token.Column" />
+                    <TextView
+                        android:id="@+id/tvHomePollTotalVotes"
+                        style="@style/TextAppearance.Eve.Token.Secondary"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/design_card_gap" />
+                </LinearLayout>
+            </FrameLayout>
+            <HorizontalScrollView android:layout_width="match_parent" android:layout_height="wrap_content" android:clipChildren="false" android:clipToPadding="false" android:scrollbars="none">
+                <com.eve.app.ui.home.HomeCategoryChipGroup android:id="@+id/chipGroupCategory" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="@dimen/design_section_gap" android:layout_marginEnd="@dimen/design_section_gap" app:chipSpacingHorizontal="@dimen/design_card_gap" app:singleLine="true" app:singleSelection="true" app:selectionRequired="true" />
+            </HorizontalScrollView>
+            <HorizontalScrollView android:id="@+id/searchFilterScroll" android:layout_width="match_parent" android:layout_height="wrap_content" android:visibility="gone" android:scrollbars="none" android:clipChildren="false" android:clipToPadding="false">
+                <com.eve.app.designsystem.TelegramChipGroup android:id="@+id/searchFilterGroup" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="@dimen/design_section_gap" android:layout_marginEnd="@dimen/design_section_gap" android:paddingVertical="4dp" app:chipSpacingHorizontal="@dimen/design_card_gap" app:singleLine="true" app:singleSelection="true" />
+            </HorizontalScrollView>
+            <LinearLayout android:id="@+id/searchSuggestionsList" android:layout_width="match_parent"
+                android:layout_height="wrap_content" android:orientation="vertical"
+                android:paddingTop="8dp" android:paddingBottom="8dp"
+                android:visibility="gone" android:importantForAccessibility="yes" />
+            <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:clipChildren="false" android:clipToPadding="false" style="@style/Widget.Eve.Token.Column">
+                <com.eve.app.designsystem.TelegramPullRefreshLayout android:id="@+id/pullRefreshLayout" android:layout_width="match_parent" android:layout_height="match_parent">
+                    <androidx.recyclerview.widget.RecyclerView android:id="@+id/rvExams" android:layout_width="match_parent" android:layout_height="match_parent" android:clipChildren="false" android:clipToPadding="false" style="@style/Widget.Eve.Token.Scroll" />
+                </com.eve.app.designsystem.TelegramPullRefreshLayout>
+                <com.eve.app.designsystem.TelegramFlickerSkeletonView android:id="@+id/loadingHome" android:layout_width="match_parent" android:layout_height="match_parent" android:visibility="visible" app:flickerRowType="home_exam" style="@style/Widget.Eve.Token.Scroll" />
+                <LinearLayout android:id="@+id/progressGroup" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center" android:gravity="center" android:orientation="vertical" android:visibility="gone" android:clipChildren="false" android:clipToPadding="false" style="@style/Widget.Eve.Token.Column">
+                    <com.eve.app.designsystem.TelegramRadialProgressView android:layout_width="@dimen/design_ring_size" android:layout_height="@dimen/design_ring_size" />
+                    <TextView style="@style/TextAppearance.Eve.Token.Secondary" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/design_screen_margin" android:text="Loading exams…" />
+                </LinearLayout>
+                <LinearLayout android:id="@+id/messageGroup" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center" android:gravity="center" android:orientation="vertical" android:visibility="gone" android:clipChildren="false" android:clipToPadding="false" style="@style/Widget.Eve.Token.Column">
+                    <com.airbnb.lottie.LottieAnimationView android:id="@+id/ivMessageIcon" android:layout_width="160dp" android:layout_height="160dp" app:lottie_autoPlay="false" app:lottie_loop="false" app:lottie_rawRes="@raw/error_404" style="@style/Widget.Eve.Token.Lottie" />
+                    <TextView android:id="@+id/tvMessage" style="@style/TextAppearance.Eve.Token.Heading" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/design_section_gap" android:gravity="center" />
+                    <TextView android:id="@+id/tvMessageSub" style="@style/TextAppearance.Eve.Token.Body" android:layout_width="260dp" android:layout_height="wrap_content" android:layout_marginTop="@dimen/design_row_gap" android:gravity="center" />
+                    <androidx.appcompat.widget.AppCompatButton android:id="@+id/btnRetry" style="@style/Widget.Eve.Token.Button.Secondary" android:layout_width="wrap_content" android:layout_height="@dimen/design_touch_min" android:layout_marginTop="18dp" android:text="Try again" android:visibility="gone" />
+                </LinearLayout>
+            </FrameLayout>
+        </LinearLayout>
+    </LinearLayout>
+        <FrameLayout android:id="@+id/cardFloatingAirplane" android:contentDescription="Open community link" android:importantForAccessibility="yes" android:layout_width="wrap_content" android:layout_height="wrap_content" android:minWidth="@dimen/design_touch_min" android:minHeight="@dimen/design_touch_min" android:layout_gravity="bottom|end" android:layout_marginEnd="20dp" android:layout_marginBottom="14dp" android:clickable="true" android:focusable="true" android:visibility="gone" app:cardElevation="@dimen/design_zero" app:cardMaxElevation="@dimen/design_zero" app:strokeWidth="@dimen/design_zero" app:strokeColor="@android:color/transparent" app:cardBackgroundColor="@color/transparent" app:rippleColor="@android:color/transparent" android:background="@null" android:foreground="@null" android:outlineProvider="none">
+            <com.airbnb.lottie.LottieAnimationView android:id="@+id/lottieFloatingAirplane" android:importantForAccessibility="no" android:layout_width="@dimen/floating_link_icon_size" android:layout_height="@dimen/floating_link_icon_size" android:layout_gravity="center" android:clickable="false" android:focusable="false" android:contentDescription="Open community link" app:lottie_autoPlay="false" app:lottie_loop="true" app:lottie_rawRes="@raw/man_flying_on_paper_airplane" style="@style/Widget.Eve.Token.Lottie" />
+        </FrameLayout>
+    <FrameLayout android:id="@+id/availabilityCheckingOverlay" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@color/bg_app" android:clickable="true" android:focusable="true" android:visibility="gone" android:elevation="32dp" style="@style/Widget.Eve.Token.Column">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_gravity="center" android:orientation="vertical" android:padding="24dp">
+            <com.eve.app.designsystem.TelegramRadialProgressView android:layout_width="@dimen/design_ring_size" android:layout_height="@dimen/design_ring_size" />
+            <TextView style="@style/TextAppearance.Eve.Token.Secondary" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:text="Checking app availability" />
+        </LinearLayout>
+    </FrameLayout>
+    <ScrollView android:id="@+id/maintenanceOverlay" android:layout_width="match_parent" android:layout_height="match_parent" android:clickable="true" android:focusable="true" android:visibility="gone" android:background="@color/bg_app" android:fillViewport="true" android:elevation="32dp" android:clipChildren="false" android:clipToPadding="false" style="@style/Widget.Eve.Token.Column">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:padding="24dp" android:gravity="center" android:orientation="vertical" android:clipChildren="false" android:clipToPadding="false" style="@style/Widget.Eve.Token.Column">
+            <ImageView android:layout_width="@dimen/design_icon_size" android:layout_height="@dimen/design_icon_size" android:importantForAccessibility="no" android:src="@drawable/msg_permissions" app:tint="@color/system_blue" />
+            <TextView android:id="@+id/tvMaintenanceTitle" android:accessibilityHeading="true" style="@style/TextAppearance.Eve.Token.Heading" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/design_shadow_room" android:text="Scheduled Maintenance" />
+            <TextView android:id="@+id/tvMaintenanceMessage" style="@style/TextAppearance.Eve.Token.Body" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/design_card_padding" android:gravity="center" android:text="Eve Mock Test is currently undergoing scheduled maintenance. Please check back shortly." />
+            <androidx.appcompat.widget.AppCompatButton android:id="@+id/btnCheckMaintenanceAgain" style="@style/Widget.Eve.Token.Button.Secondary" android:layout_width="wrap_content" android:layout_height="wrap_content" android:minHeight="@dimen/design_touch_min" android:layout_marginTop="@dimen/design_icon_size" android:text="Check Again" />
+        </LinearLayout>
+    </ScrollView>
+    <FrameLayout android:id="@+id/forceUpdateOverlay" android:layout_width="match_parent" android:layout_height="match_parent" android:clickable="true" android:focusable="true" android:visibility="gone" android:clipChildren="false" android:clipToPadding="false" style="@style/Widget.Eve.Token.Column">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_gravity="center" android:gravity="center" android:orientation="vertical" android:clipChildren="false" android:clipToPadding="false" style="@style/Widget.Eve.Token.Column">
+            <ImageView android:layout_width="@dimen/design_icon_size" android:layout_height="@dimen/design_icon_size" android:src="@drawable/ic_refresh" app:tint="@color/system_blue" />
+            <TextView style="@style/TextAppearance.Eve.Token.Heading" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/design_shadow_room" android:text="Update Required" />
+            <TextView android:id="@+id/tvForceUpdateMessage" style="@style/TextAppearance.Eve.Token.Body" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/design_card_padding" android:gravity="center" android:text="A newer version of Eve Mock Test is required to continue. Please update to the latest version for improved stability, questions, and security." />
+            <androidx.appcompat.widget.AppCompatButton android:id="@+id/btnForceUpdateNow" style="@style/Widget.Eve.Token.Button" android:layout_width="match_parent" android:layout_height="@dimen/design_touch_min" android:layout_marginTop="@dimen/design_icon_size" android:text="Update App Now" />
+        </LinearLayout>
+    </FrameLayout>
+    </FrameLayout>
+    <FrameLayout android:id="@+id/navDrawerPanel" android:background="@drawable/design_home_drawer_panel" android:layout_width="290dp" android:layout_height="match_parent" android:layout_gravity="start" android:clickable="true" android:focusable="true" android:clipChildren="false" android:clipToPadding="false" style="@style/Widget.Eve.Token.Modal">
+        <ImageView android:id="@+id/ivDrawerGlassBlurBackground" android:layout_width="match_parent" android:layout_height="match_parent" android:scaleType="centerCrop" android:importantForAccessibility="no" />
+        <View android:id="@+id/viewDrawerGlassTintOverlay" android:layout_width="match_parent" android:layout_height="match_parent" />
+        <LinearLayout android:id="@+id/navDrawerContent" android:layout_width="match_parent" android:layout_height="match_parent" android:fitsSystemWindows="true" android:orientation="vertical" android:clipChildren="false" android:clipToPadding="false" style="@style/Widget.Eve.Token.Column">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:paddingHorizontal="20dp" android:paddingTop="20dp" android:paddingBottom="16dp" android:clipChildren="false" android:clipToPadding="false" style="@style/Widget.Eve.Token.Column">
+                <RelativeLayout android:layout_width="match_parent" android:layout_height="wrap_content">
+                    <com.eve.app.designsystem.TelegramAvatarImageView android:id="@+id/ivDrawerAvatar" android:layout_width="60dp" android:layout_height="60dp" android:clickable="true" android:focusable="true" android:contentDescription="Profile photo" android:scaleType="centerCrop" android:src="@drawable/ic_user_profile" android:stateListAnimator="@animator/design_press_scale" app:shapeAppearanceOverlay="@style/ShapeCircle" />
+                    <ImageButton android:id="@+id/btnDrawerQr" android:layout_width="40dp" android:layout_height="40dp" android:layout_alignParentEnd="true" android:layout_alignParentTop="true" android:background="?android:attr/selectableItemBackgroundBorderless" android:contentDescription="Personal QR code" android:src="@drawable/telegram_profile_qr" app:tint="@color/telegram_type_primary" />
+                </RelativeLayout>
+                <TextView android:id="@+id/tvDrawerUserName" style="@style/TextAppearance.Eve.Token.Heading" android:layout_width="match_parent" android:ellipsize="end" android:maxLines="1" android:layout_height="wrap_content" android:layout_marginTop="@dimen/design_pill_padding" android:text="Student" />
+                <TextView android:id="@+id/tvDrawerUserEmail" style="@style/TextAppearance.Eve.Token.Secondary" android:layout_width="match_parent" android:ellipsize="end" android:maxLines="1" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:text="student@eve.app" />
+                <TextView android:id="@+id/tvDrawerPremiumStatus" style="@style/TextAppearance.Eve.Token.Secondary.green" android:layout_width="match_parent" android:ellipsize="end" android:maxLines="1" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:visibility="gone" />
+            </LinearLayout>
+            <ScrollView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:fillViewport="false" android:scrollbars="none">
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:clipChildren="false" android:clipToPadding="false" android:orientation="vertical">
+                <LinearLayout android:id="@+id/layoutDrawerProfile" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp" android:background="?android:attr/selectableItemBackground" android:paddingHorizontal="16dp" android:stateListAnimator="@null" android:clickable="true" android:focusable="true" android:gravity="center_vertical" android:orientation="horizontal">
+                    <ImageView android:layout_width="24dp" android:layout_height="24dp" android:contentDescription="Profile" android:src="@drawable/msg_openprofile" app:tint="@color/telegram_drawer_icon" />
+                    <TextView style="@style/TextAppearance.Eve.Telegram.DrawerAction" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:layout_marginStart="24dp" android:text="Profile" />
+                </LinearLayout>
+                <LinearLayout android:id="@+id/layoutDrawerPremium" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp" android:background="?android:attr/selectableItemBackground" android:paddingHorizontal="16dp" android:stateListAnimator="@null" android:clickable="true" android:focusable="true" android:gravity="center_vertical" android:orientation="horizontal">
+                    <FrameLayout android:layout_width="24dp" android:layout_height="24dp" android:clipChildren="false" android:clipToPadding="false">
+                        <com.airbnb.lottie.LottieAnimationView android:id="@+id/lottieDrawerPremiumStarFallback" android:layout_width="24dp" android:layout_height="24dp" android:contentDescription="Premium" android:visibility="gone" app:lottie_autoPlay="false" app:lottie_loop="false" app:lottie_rawRes="@raw/premium_star" android:layout_gravity="center" style="@style/Widget.Eve.Token.Lottie" />
+                    </FrameLayout>
+                    <TextView style="@style/TextAppearance.Eve.Telegram.DrawerAction" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:layout_marginStart="24dp" android:text="Premium" />
+                </LinearLayout>
+                <LinearLayout android:id="@+id/layoutDrawerPerformance" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp" android:background="?android:attr/selectableItemBackground" android:paddingHorizontal="16dp" android:stateListAnimator="@null" android:clickable="true" android:focusable="true" android:gravity="center_vertical" android:orientation="horizontal">
+                    <ImageView android:layout_width="24dp" android:layout_height="24dp" android:contentDescription="Performance" android:src="@drawable/msg_stats" app:tint="@color/telegram_drawer_icon" />
+                    <TextView style="@style/TextAppearance.Eve.Telegram.DrawerAction" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:layout_marginStart="24dp" android:text="Performance" />
+                </LinearLayout>
+                <LinearLayout android:id="@+id/layoutDrawerLeaderboard" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp" android:background="?android:attr/selectableItemBackground" android:paddingHorizontal="16dp" android:stateListAnimator="@null" android:clickable="true" android:focusable="true" android:gravity="center_vertical" android:orientation="horizontal">
+                    <ImageView android:layout_width="24dp" android:layout_height="24dp" android:contentDescription="Overall Leaderboard" android:src="@drawable/filled_earn_stars" app:tint="@color/telegram_drawer_icon" />
+                    <TextView style="@style/TextAppearance.Eve.Telegram.DrawerAction" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:layout_marginStart="24dp" android:text="Overall Leaderboard" />
+                </LinearLayout>
+                <LinearLayout android:id="@+id/layoutDrawerSyllabus" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp" android:background="?android:attr/selectableItemBackground" android:paddingHorizontal="16dp" android:stateListAnimator="@null" android:clickable="true" android:focusable="true" android:gravity="center_vertical" android:orientation="horizontal">
+                    <ImageView android:layout_width="24dp" android:layout_height="24dp" android:contentDescription="Syllabus" android:src="@drawable/msg_channel" app:tint="@color/telegram_drawer_icon" />
+                    <TextView style="@style/TextAppearance.Eve.Telegram.DrawerAction" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:layout_marginStart="24dp" android:text="Syllabus" />
+                </LinearLayout>
+                <LinearLayout android:id="@+id/layoutDrawerTopic" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp" android:background="?android:attr/selectableItemBackground" android:paddingHorizontal="16dp" android:stateListAnimator="@null" android:clickable="true" android:focusable="true" android:gravity="center_vertical" android:orientation="horizontal">
+                    <ImageView android:layout_width="24dp" android:layout_height="24dp" android:contentDescription="Topic-wise Test" android:src="@drawable/telegram_popup_topics" app:tint="@color/telegram_drawer_icon" />
+                    <TextView style="@style/TextAppearance.Eve.Telegram.DrawerAction" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:layout_marginStart="24dp" android:text="Topic-wise Test" />
+                </LinearLayout>
+                <LinearLayout android:id="@+id/layoutDrawerPyq" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp" android:background="?android:attr/selectableItemBackground" android:paddingHorizontal="16dp" android:stateListAnimator="@null" android:clickable="true" android:focusable="true" android:gravity="center_vertical" android:orientation="horizontal">
+                    <ImageView android:layout_width="24dp" android:layout_height="24dp" android:contentDescription="PYQ" android:src="@drawable/telegram_popup_paper" app:tint="@color/telegram_drawer_icon" />
+                    <TextView style="@style/TextAppearance.Eve.Telegram.DrawerAction" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:layout_marginStart="24dp" android:text="PYQ" />
+                </LinearLayout>
+                <LinearLayout android:id="@+id/layoutDrawerMistakes" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp" android:background="?android:attr/selectableItemBackground" android:paddingHorizontal="16dp" android:stateListAnimator="@null" android:clickable="true" android:focusable="true" android:gravity="center_vertical" android:orientation="horizontal">
+                    <ImageView android:layout_width="24dp" android:layout_height="24dp" android:contentDescription="Mistake Notebook" android:src="@drawable/telegram_popup_notes" app:tint="@color/telegram_drawer_icon" />
+                    <TextView style="@style/TextAppearance.Eve.Telegram.DrawerAction" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:layout_marginStart="24dp" android:text="Mistake Notebook" />
+                </LinearLayout>
+                <LinearLayout android:id="@+id/layoutDrawerSettings" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp" android:background="?android:attr/selectableItemBackground" android:paddingHorizontal="16dp" android:stateListAnimator="@null" android:clickable="true" android:focusable="true" android:gravity="center_vertical" android:orientation="horizontal">
+                    <ImageView android:layout_width="24dp" android:layout_height="24dp" android:contentDescription="Settings" android:src="@drawable/msg_settings" app:tint="@color/telegram_drawer_icon" />
+                    <TextView style="@style/TextAppearance.Eve.Telegram.DrawerAction" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:layout_marginStart="24dp" android:text="Settings" />
+                </LinearLayout>
+                </LinearLayout>
+            </ScrollView>
+        </LinearLayout>
+    </FrameLayout>
+
+</androidx.drawerlayout.widget.DrawerLayout>

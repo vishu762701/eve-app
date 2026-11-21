@@ -1,0 +1,1072 @@
+# Third Party Notices
+
+## Telegram QR scan button source geometry — 2026-11-02
+
+`app/src/main/java/com/eve/app/telegram/qr/QrScanMorph.java`
+is an ADAPTED isolated Java implementation from official source
+`DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`,
+`TMessagesProj/src/main/java/org/telegram/ui/QrShare/QrScanOverlay.java`
+(lines 99-112,429-479,561-568,601-623). Telegram contributors
+retain copyright; root GPLv2/per-file grants and combined EVE APK
+redistribution compatibility remain unresolved. This source
+adaptation does not authorize production redistribution.
+
+
+## Telegram QR sheet RenderNode blur and luminance lift — 2026-11-02
+
+`app/src/main/java/com/eve/app/telegram/qr/QrPickerSheetLift.java`
+ADAPTS original Java `QrShareView.java:4730-4767,4793-4828` from
+`DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`.
+Telegram contributors retain copyright. Applicable root GPLv2,
+per-file grants and combined-app corresponding source/distribution
+review remain OPEN; no release approval implied.
+
+
+## Telegram QR picker closing/cascade adaptation — 2026-11-02
+
+`app/src/main/java/com/eve/app/telegram/qr/QrPickerCloseCascade.java`
+adapts original Java from `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`,
+`QrShareActivity.java:609-632`. `QrPickerSheetSurface.kt` closes
+using `QrShareView.java:5317-5352` with the previously adapted Java
+motion host. Telegram contributors retain copyright. Root GPLv2,
+per-file grants and combined-app source/distribution review remain
+OPEN; neither a passing build nor this adaptation grants release clearance.
+
+
+## Telegram QR picker sheet island motion — 2026-11-02
+
+`app/src/main/java/com/eve/app/telegram/qr/QrPickerSheetMorph.java`
+is an ADAPTED Java extraction from official
+`DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`,
+`TMessagesProj/src/main/java/org/telegram/ui/QrShare/QrShareView.java`
+(lines 5317-5433). EVE integrates the result through the
+`QrPickerSheetSurface.kt` modal host. Telegram contributors retain
+rights; root GPLv2, per-file grants and combined-app distribution
+review remain unresolved. No production clearance is implied.
+
+
+## Telegram QR picker opening Java motion — 2026-11-02
+
+The related original `QrShareActivity.java:663-676` overlay-to-scaled-grid
+mask coordinate transform is also adapted in `QrEmojiGrid.java`.
+Existing Telegram GPL/source-distribution obligations remain OPEN.
+
+`app/src/main/java/com/eve/app/telegram/qr/QrPickerOpenMotion.java`
+adapts grid-opening equations from official
+`DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`,
+`TMessagesProj/src/main/java/org/telegram/ui/QrShare/QrShareActivity.java`
+(lines 542-569) and `QrShareView.java:1904-1918`.
+Copyright Telegram contributors. The official root GPLv2
+and unresolved per-file/combined-app release obligations apply;
+this is not production distribution clearance.
+
+
+
+## Telegram Java QR light-band scene — 2026-11-02
+
+`app/src/main/java/com/eve/app/telegram/qr/QrSceneShine.java`
+adapts original Java auto-sweep, curved shine field, and coarse 12dp raster
+from official `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`,
+`TMessagesProj/src/main/java/org/telegram/ui/QrShare/QrShareView.java`
+(lines 2488-2559,2561-2562,2805-2838,3111-3160).
+Copyright Telegram contributors. Root GPLv2 / per-file and combined
+redistribution review remain unresolved; no production release approval.
+
+
+## Telegram Java QR pattern item transition adaptation — 2026-11-02
+
+`app/src/main/java/com/eve/app/telegram/qr/QrPatternSwap.java`
+adapts original Java slot and lattice transition logic from official
+`DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`,
+`TMessagesProj/src/main/java/org/telegram/ui/QrShare/QrShareView.java`
+(lines 198-211,1218-1260,2837-2872,3187-3212,3369-3411).
+Telegram contributors' copyright and root GPLv2 apply; source grants
+and combined release compatibility remain unresolved. The EVE Kotlin host
+retains native animation frames for each transition without importing
+Telegram account/document/network services. No production clearance
+or original-screen parity is implied.
+
+
+## Telegram QR Java pattern and gesture physics — 2026-11-02
+
+`app/src/main/java/com/eve/app/telegram/qr/QrPatternField.java` is
+an ADAPTED Java extraction of original field/gesture algorithms from official
+`DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`,
+`TMessagesProj/src/main/java/org/telegram/ui/QrShare/QrShareView.java`
+(lines 208-229,2565-2787,3210-3218,3369-3407,6637-6768).
+Telegram contributors retain rights. Root GPL version 2 and per-file/
+combined-distribution review are unresolved. No production release
+approval is implied. See `docs/QR_SCENE_NATIVE_SOURCE_MAP.md`.
+
+
+This repository contains third-party components and assets. Keep license obligations even when older files are retired.
+
+**Development-stage official-reference policy:** Exact official code/art/assets require verified upstream source, identity and appropriate use permissions; public design guidance is not blanket copying permission. Never silently substitute independently authored or other assets unless the owner expressly authorizes them. If the exact source/rights are unavailable, report that item as BLOCKED, continue only other authorized work, and keep third-party attribution and production release obligations.
+
+## Telegram QR animated picker renderer — 2026-11-01
+
+`QrEmojiCell.java`, `EmojiPickOverlay.java` and `QrEmojiGrid.java` adapt the original
+Java QR cell, complete selection overlay and grid masking from official
+`DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`.
+Telegram contributors retain applicable copyright/GPL rights. The upstream files
+have no per-file later-version header; the root GPLv2 text and existing per-file
+license/combined-distribution review remain applicable and unresolved. No rights
+clearance is inferred from their public availability.
+
+EVE adapters supply catalogue Drawables and lifecycle ownership; no Telegram
+accounts, document IDs, premiums, backend or credentials are imported. Adaptations,
+Git object hashes and file digests are recorded in `docs/qr-native-upstream-manifest.json`
+and [the source map](docs/QR_EMOJI_PICKER_SOURCE_MAP.md). Complete corresponding
+source and all existing production release safeguards remain required. Full QR
+screen fidelity and production redistribution are not accepted by this import.
+
+## tlottie test fixture adaptation — 2026-11-01
+
+The pinned MIT-licensed `dkaraush/tlottie@31f1b542f88e7b4be9a01e749920d857535fc715`
+`src/tests/dos.rs` now has an **ADAPTED test-only fixture**: the hostile dense model
+is constructed after bounded parsing, with separate parser rejection assertions.
+Production renderer/parser/limits and all existing renderer assertions are unchanged.
+The source manifest records both upstream and adapted digests. Original MIT notices
+remain. See [repair and verification evidence](docs/NATIVE_RENDERER_TEST_REPAIR.md).
+Earlier byte-identical vendor statements describe the original import; this test
+file is the explicit exception. No GPL release clearance is implied.
+
+## Telegram QR Java QrCodeLayer integration — 2026-11-01
+
+- Official source: [DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335](https://github.com/DrKLO/Telegram/commit/21f7d109da6ab3506c9e9577f98c6a38771ab335), `TMessagesProj/src/main/java/org/telegram/ui/QrShare/QrCodeLayer.java` (Git blob `b9b5fcb69f538dfbc7dd87f628fe261ce1e69923`). The EVE port lives at `app/src/main/java/com/eve/app/telegram/qr/QrCodeLayer.java`.
+- **ADAPTED original Java source:** original QR mask atlas, halftone, GPU/Canvas particle routines are retained; the package, display units, access for EVE host and device-performance classifier are adapted. `TelegramQrSceneView.kt` provides the EVE-only username link and E logo. This is **not** original Telegram QR screen parity.
+- Telegram Android copyright and GPL terms still apply to derived source. Exact per-file grant and combined GPLv3 APK distribution obligations require release-compliance review. No release approval is implied. See `docs/QR_NATIVE_CODE_LAYER_CHECKPOINT.md` and `docs/telegram-release-compliance-gate.md`. Telegram login, credentials and server infrastructure were not imported.
+
+## Telegram QR native renderer and dashboard tabs — 2026-11-01
+
+Internal development integration, **not source-exact screen acceptance or production distribution clearance**.
+
+- Official Telegram revision: [`21f7d109da6ab3506c9e9577f98c6a38771ab335`](https://github.com/DrKLO/Telegram/commit/21f7d109da6ab3506c9e9577f98c6a38771ab335). `TMessagesProj/jni/lottie.cpp` and `Components/RLottieNative.java` are copied unchanged. QR drawing/glass helpers and pager dependencies have documented package/host adaptations. Original headers are retained. `TelegramQRCodeWriter.java` retains its Apache-2.0 notice; other Telegram components remain subject to their per-file grants and the existing release compliance gate.
+- Telegram's official gitlink selects [`dkaraush/tlottie@31f1b542f88e7b4be9a01e749920d857535fc715`](https://github.com/dkaraush/tlottie/tree/31f1b542f88e7b4be9a01e749920d857535fc715). The CPU renderer source, C API header, Cargo manifest/lock and MIT license are vendored unchanged in `app/src/main/cpp/vendor/tlottie/`. Copyright (c) 2026-present dkaraush. The full MIT permission and warranty notice is retained there.
+- Build adapters: Rust 1.99.1, NDK 27.2.12479018 and CMake 3.22.1. EVE loads the bundled library; no Telegram accounts, protocol client, signing material or login is imported.
+- [Per-file SHA-256 source manifest](docs/qr-native-upstream-manifest.json) records source identity and adaptations. [Implementation checkpoint](docs/QR_NATIVE_ADMIN_CHECKPOINT.md) records missing parity, upstream test failures and remaining work. No acceptance status or release approval is changed by this batch.
+
+## Telegram for Android
+
+### Mission 06 additionally authenticated official revision (2026-10-28)
+
+- **Uploaded ZIP:** `Telegram-master (1).zip` SHA-256 `4b65e10b8fc63b4cbcb7377026a5da470782547fc0c0575bf0b71da676028c10` is **not** byte-for-byte any historical accepted archive. It has no `EVE_MANIFEST.sha256`; never relabel or re-hash it as the historical approved source.
+- **Independent official content identity:** GitHub `DrKLO/Telegram` immutable commit [`21f7d109da6ab3506c9e9577f98c6a38771ab335`](https://github.com/DrKLO/Telegram/commit/21f7d109da6ab3506c9e9577f98c6a38771ab335) has canonical root tree `cc3c6ccf48e4167fdec764dfd04e765043f55093`. The locally reconstructed Git root tree from **all 14,086 ZIP file blobs**, mode metadata, recursive directory trees and **19 verified upstream Gitlink references** matched this value exactly. This establishes source-content fidelity to this **different, newer official revision**, not the historical archive container.
+- **Verified exact source candidates, not imported in this mission:** `ActionBar/ActionBarPopupWindow.java`, `ActionBar/DrawerLayoutContainer.java`, `ActionBar/AlertDialog.java`, `Components/FilterTabsView.java`. They bear upstream GPL v2-or-later notices; dependency-complete Android integration, visual acceptance and combined-binary license compliance were **not** verified. No Telegram account infrastructure, proprietary keys, signing keystore, network client or source-renderer copy was added by this check.
+- **Historical Telegram implementation ledger:** [Telegram port ledger](docs/TELEGRAM_PORT_LEDGER.md) records prior import history only; it does not certify current screen parity. Current provenance and screen acceptance are governed by `docs/port-manifest.json`, `docs/telegram-profile-fidelity.json`, and `ENGINEERING_STANDARD.md`. Existing historical owner-accepted ZIP checksums, notices, original import history and fail-closed release conditions below remain unchanged.
+
+### Official Telegram 13.1.1 Home 3-dot popup source-faithful UI adaptation (Option A)
+
+Under explicit owner authorization on 2026-10-28 (Option A — Strict Source-Faithful UI Adaptation), the Home top-right overflow popup is implemented following the genuine Telegram Android 13.1.1 call chain (`DialogsActivity.showItemOptions()` → `ItemOptions.makeOptions(this, optionsItem)` → `ActionBarPopupWindowLayout` → `ActionBarMenuSubItem` from `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`):
+- **Background & Perimeter Shadow:** Verbatim upstream nine-patch `R.drawable.popup_fixed_alert4` (`popup_fixed_alert4.9.png`) with palette tinting via `PorterDuff.Mode.MULTIPLY` and unclipped shadow bounds (`clipToOutline="false"` on container).
+- **Positioning & Geometry:** Upstream `DialogsActivity.java:13839` `io.setTranslationY(-dp(64))` and `ItemOptions.java:1400` right-aligned content bounds (`X = x + width - layoutBounds.right`). The popup is vertically offset by `-anchorView.height - padding` so that the menu content begins at the top of the action bar, overlapping the 3-dot trigger instead of hanging below the toolbar, with the 9-patch right shadow extending safely beyond the anchor bounds.
+- **Window Dimming:** Upstream `DialogsActivity.java:13678` `io.setDimAlpha(0x08)` and `ItemOptions.java:1310-1350,1768-1806,1965-2200` implemented via authentic `TelegramPopupDimOverlay`. The host-level `DimView` overlay animates `dimProgress` (0 to 1) over 150ms with `dimAlpha = 0x08` (~3% dim) and renders the 3-dot anchor view un-dimmed on top of the dim layer, with synchronized pre-draw invalidation and 150ms animated dismissal cleanup. Window-level `FLAG_DIM_BEHIND` is not used.
+- **Motion Dynamics:** Upstream `ItemOptions.java:1394` sets `actionBarPopupWindow.setAnimationStyle(R.style.PopupContextAnimation)`, using verbatim upstream `popup_context_in.xml` (150ms alpha 0.0 → 1.0, 200ms scale 95% → 100% with `@android:anim/overshoot_interpolator` pivoted at top-right 100%, 100%). Dismissal follows upstream `ActionBarPopupWindow.java:1065-1068` (-5dp translation Y and alpha 1.0 → 0.0 over 150ms via `DecelerateInterpolator`). Theme switch circular reveal handoff and host teardown dismiss immediately with `animationStyle = 0` to preserve clean frame capture.
+- **Row Metrics & Radial Selection:** Upstream `ActionBarMenuSubItem` dimensions (`minHeight = 48dp`, `padding = 18dp, 0dp, 18dp, 0dp`, `minWidth = 196dp`), radial selection corners (12dp top/bottom via `ItemOptions.java:1218,1225` and `ActionBarMenuSubItem.java:52`, 0dp middle), and single-line end-ellipsized typography.
+- **Blur Isolation:** Authentic Telegram 13.1.1 3-dot overflow does not use window or backdrop blur; `glassEnabled` is explicitly set to `false` and foreign blur overlays/hooks are removed.
+- **Action Preservation:** All 7 EVE menu destinations (Theme Mode, History, Bookmarks, Mistake Notebook, Topic-wise Test, PYQ, Logout) and the circular theme reveal handoff remain fully preserved.
+
+- **Upstream:** https://github.com/DrKLO/Telegram
+- **Source delivery and accepted SHA-256:** Telegram reference source is NOT stored in this repository. The owner attaches `Telegram-master-core.zip` (default; SHA-256 `3ecbbeab06e0cafebd462721f048b637a454522167db94d26c52ccad10ea1db0`), `Telegram-master-extra.zip` (SHA-256 `ef00b8495bbd7775e5e9a9c2acecbf87b9ebac472a30651964fd38b833245517`), or the original complete `Telegram-master.zip` (SHA-256 `0785365538ce05cf5bdf44a15d8fd5f5219f8193db0a2d124af9665fc63fd7b3`). Verify against the attached archive's own `EVE_MANIFEST.sha256`, extract outside git, and mark absent files NOT FOUND (request the matching `extra` or `rest-1..5` archive). Only a requested source-exact transplant/comparison depends on these archives. Missing archives never block unrelated Eve work or a separately authored design. Historical split/repacked archives and manifests are provenance references, not EVE build inputs.
+- **Archive exclusions (confirmed absent by reference-verification run 40091599695; this checks the repacked archives, not every historical upstream revision):** `TMessagesProj/config/release.keystore`, `TMessagesProj/google-services.json`, `TMessagesProj_App/google-services.json`, `TMessagesProj_AppHockeyApp/google-services.json`, `TMessagesProj_AppHuawei/google-services.json`, `TMessagesProj_AppStandalone/google-services.json`, `TMessagesProj/src/main/java/org/telegram/messenger/BuildVars.java`. These signing/configuration sources must never be used as Eve credentials.
+- **Historical upstream provenance:** original Telegram Git reference `0aae959806c57be8ad457980f2a5c6277ff18635` remains a citation for previously imported icons, not an active submodule or an assertion that root archives contain that exact commit.
+
+### Historical repacked Telegram archive SHA-256 (2026-10-24)
+
+Recorded from [GitHub Actions Telegram reference verifier (run 40091599695)](https://github.com/vishu762701/eve-mock-test-app/actions/runs/40091599695), commit a4be53c718a87357a4cf09935776624e237a85b2. These hashes describe the **former split/repacked root archives**, not the earlier unsplit original archive.
+
+| Archive | SHA-256 |
+|---|---|
+| Telegram-master.zip | fabf0b7370abf2ee5661063ea1c274cb3e537048f008a6871ff3169cbe89cb1e |
+| Telegram-master-rest-1.zip | fb4fdcde402b904e33635a96c7090b523f0c32d2e02ec6db47769889f9b6633c |
+| Telegram-master-rest-2.zip | af56e94af6a97287faf329d9422220f19bfe3d281cfcbc13efb4355a365f17b1 |
+| Telegram-master-rest-3.zip | 2e2f30a7e86530bf5e3c4256398ccdced45b3609ab675cfb380f83126c7db78a |
+| Telegram-master-rest-4.zip | 44aae5a3d18d4d72091f69abcfafbf2e633b07150c6d07be701f3d2c9c5dcb91 |
+| Telegram-master-rest-5.zip | c1ce238a7ab23b9a878d588b3e0f97cf43e3756992911897abf71785d5884308 |
+| Earlier original complete Telegram-master.zip (different archive) | 0785365538ce05cf5bdf44a15d8fd5f5219f8193db0a2d124af9665fc63fd7b3 |
+
+The UI/core manifest verified 7,575 file checks, the full manifest verified 13,976 file checks, and the icon registry verified 32 imported icon IDs with 254 source/app hash comparisons; all reported zero mismatches. The seven intentionally excluded files named above were confirmed absent in extracted source. Root LICENSE contained GNU GPL version 2 (June 1991); per-file "or later" grants depend on applicable notices and need separate licensing assessment.
+
+- **Asset verification:** `docs/telegram-source-verification.tsv` records SHA-256 comparisons against that commit; candidate-only rows are not import claims.
+- **License evidence:** The extracted Telegram root `LICENSE` contains GNU GPL version 2 (June 1991). Any "or later" permission must be established for each imported asset or derived source file; this archive-level evidence alone does not establish GPLv3 compatibility. See `docs/telegram-gpl-audit-2026-10-24.md`.
+- **Retained derived behavior:** `app/src/main/java/com/eve/app/util/ThemeManager.kt` (circular Day/Night reveal and transition layering) and `app/src/main/java/com/eve/app/util/TelegramThemeEasing.kt`.
+- **Upstream snapshot:** `dc780e81ed1261c369c27870e8e0999a1eb0b600`; relevant origin: Telegram `LaunchActivity` / `DialogsActivity` transition handling.
+- **Credits:** Telegram FZ-LLC / DrKLO and Nikolai Kudashov. The derived theme code is subject to applicable GPL conditions; distributor obligations must be reviewed before publishing a binary.
+
+Old Telegram premium GL renderer classes, models, textures and shaders were deleted during the approved UI design reset. They are **not** current bundled runtime assets. Retain these historical attributions for provenance rather than implying those files still ship.
+
+### Telegram ButtonBounce motion attribution
+
+`app/src/main/java/com/eve/app/designsystem/ButtonBounce.kt` declares a Kotlin port
+of upstream `TMessagesProj/src/main/java/org/telegram/ui/Components/ButtonBounce.java`.
+The extracted Telegram root license is GPL v2; the applicable version grant
+
+### Telegram Admin UI Kit & Bundled Lottie Icons (Mission 03)
+
+Derived from Telegram Android v13.1.1 (`DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`), licensed under GNU GPL v2 or later.
+Copyright (C) Nikolai Kudashov, 2013-2018; Telegram FZ-LLC.
+
+**Ported UI Kit Components (`com.eve.app.ui.admin.tg`):**
+- `HeaderCell.kt`: derived from `TMessagesProj/src/main/java/org/telegram/ui/Cells/HeaderCell.java:80-120`
+- `TextCell.kt`: derived from `TMessagesProj/src/main/java/org/telegram/ui/Cells/TextCell.java:90-150`
+- `TextCheckCell.kt`: derived from `TMessagesProj/src/main/java/org/telegram/ui/Cells/TextCheckCell.java:70-120`
+- `TextDetailCell.kt`: derived from `TMessagesProj/src/main/java/org/telegram/ui/Cells/TextDetailCell.java:60-110`
+- `TextInfoPrivacyCell.kt`: derived from `TMessagesProj/src/main/java/org/telegram/ui/Cells/TextInfoPrivacyCell.java:60-80`
+- `ShadowSectionCell.kt`: derived from `TMessagesProj/src/main/java/org/telegram/ui/Cells/ShadowSectionCell.java:20-50`
+- `TelegramActionBar.kt`: derived from `TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java:150-250` and `ActionBarMenuItem.java:1316-1390`
+- `TelegramSegmentedTabs.kt`: derived from `TMessagesProj/src/main/java/org/telegram/ui/Components/FilterTabsView.java:80-160`
+- `AnimatedEmojiSpan.kt`: derived from `TMessagesProj/src/main/java/org/telegram/ui/Components/AnimatedEmojiSpan.java:230-330`
+- `EmojiStudioActivity.kt`: derived from Telegram `SelectAnimatedEmojiDialog.java` and `EmojiView.java`
+
+**Bundled Admin Lottie Icons (`app/src/main/res/raw/`):**
+- `tg_ic_admin.json`, `tg_ic_ban.json`, `tg_ic_unban.json`, `tg_ic_delete.json`, `tg_ic_pin.json`, `tg_ic_unpin.json`, `tg_ic_mute.json`, `tg_ic_unmute.json`, `tg_statistic_preload.json`, `tg_filters.json`, `tg_filter_new.json`, `tg_folder_in.json`, `tg_folder_out.json`, `tg_fire_on.json`, `tg_fire_off.json`, `tg_report_police.json`, `tg_chats_archive.json`, `tg_swipe_delete.json`, `tg_saved_messages.json`, `tg_qr_code_logo.json`, `tg_tab_poll.json`.
+- All copied verbatim from `TMessagesProj/src/main/res/raw/` in official revision `21f7d109da6ab3506c9e9577f98c6a38771ab335`.
+for this specific derived component still requires per-file review. EVE plans
+GPL-3.0-or-later distribution, subject to license compatibility clearance. Preserve upstream
+attribution and provide this modified Kotlin source with corresponding-source
+deliverables. This attribution records provenance; it does **not** establish
+byte-for-byte source parity, complete dependency compatibility, or production
+release clearance. See `docs/telegram-release-compliance-gate.md`.
+
+### Owner-approved Telegram original icon imports — 2026-10-25
+
+- **Provenance:** owner-supplied `Telegram-master-core.zip`, verified SHA-256 `3ecbbeab06e0cafebd462721f048b637a454522167db94d26c52ccad10ea1db0`, internal `EVE_MANIFEST.sha256` valid for 6,942 files; Telegram `TMessagesProj/src/main/res/drawable-{mdpi,hdpi,xhdpi,xxhdpi}/` original bytes, upstream reference `0aae959806c57be8ad457980f2a5c6277ff18635`.
+- **Unmodified assets and EVE aliases:** `msg_channel` → `ic_broadcast`; `msg_go_down` → `ic_chevron_down`; `msg_pin` → `ic_pin`; `msg_bot` → `ic_robot`; `msg_brightness_high` → `ic_theme_sun`; `msg_mini_upload` → `ic_upload`; `ic_rating_star_filled` → `ic_star_filled`; `ic_rating_star` → `ic_star_outline`; `msg_remove` → `ic_minus` (all `.webp`). Original per-density file SHA-256 values are pinned in `docs/telegram-icon-source-registry.tsv` and `docs/telegram-icon-confidence-2026-10-25.md`.
+- **Attribution/licensing:** Telegram Android contributors and owners as applicable; root Telegram source archive bundles GPL version 2 text. The applicability of "or later" to individual icon files and combined-work compatibility is unresolved. Do not change the existing fail-closed production distribution guard; preserve notices and corresponding source obligations. No Telegram logos, launcher branding, Lottie, or other assets were imported.
+
+## Inter (Official iOS 26 Typography Approximation)
+
+- Source: https://rsms.me/inter/ and https://github.com/rsms/inter
+- Copyright (c) 2016-2026 The Inter Project Authors (Rasmus Andersson).
+- License: SIL Open Font License 1.1; full notice distributed in
+  `app/src/main/assets/licenses/Inter-OFL.txt`.
+- Bundled, unmodified font binaries: Inter Regular 400, Medium 500, SemiBold 600, Bold 700.
+
+> This Font Software is licensed under the SIL Open Font License, Version 1.1.
+
+## BlurView 2.0.6
+
+- Existing dependency reused; no dependency version added or changed.
+- Source: https://github.com/Dimezis/BlurView/tree/version-2.0.6
+- License: Apache License 2.0; full notice included in APK assets at
+  `app/src/main/assets/licenses/BlurView-LICENSE.txt`.
+- `RenderEffectBlur` is used only on API 31+ with a hardware canvas. Other cases
+  use the owner's 94% glass tint. The shared chrome keeps foreground children sharp.
+
+## Tabler Icons v3.49.0
+
+Outline SVG paths converted to Android VectorDrawable on their original 24-unit
+grid, with the owner's 2.75 stroke and round caps/joins. MIT License, Copyright
+(c) 2020–2026 Paweł Kuna. Full license: `app/src/main/assets/licenses/Tabler-LICENSE.txt`.
+Source: https://github.com/tabler/tabler-icons/tree/v3.49.0/icons/outline
+
+## Google Noto Animated Emoji
+
+- Source: https://fonts.google.com/noto/specimen/Noto+Color+Emoji and https://github.com/googlefonts/noto-emoji
+- Copyright (c) Google LLC.
+- License: Creative Commons Attribution 4.0 International (CC BY 4.0). Full license: https://creativecommons.org/licenses/by/4.0/
+- Format: Lottie JSON animations retrieved from official Google Fonts static CDN (`https://fonts.gstatic.com/s/e/notoemoji/latest/{codepoint}/lottie.json`).
+- Verified open license; attribution recorded in compliance with CC BY 4.0 obligations.
+
+## Official Telegram ActionBar and search icon art (Mission 01 source import)
+
+- **Origin:** user-supplied official Telegram Android source archive (`Telegram-master (1).zip`, SHA-256 `0785365538ce05cf5bdf44a15d8fd5f5219f8193db0a2d124af9665fc63fd7b3`), `TMessagesProj/src/main/res/drawable-{mdpi,hdpi,xhdpi,xxhdpi}/`.
+- **Files copied verbatim:** `ic_ab_back.webp` -> EVE `ic_back.webp`; `ic_ab_other.webp` -> EVE `ic_more_vert.webp`; `msg_search.webp` -> EVE `ic_search.webp`, four original density variants each. Existing EVE drawable resource IDs remain unchanged; prior independently drawn vectors with these same resource IDs were removed after replacement.
+- **Copyright and grant:** Telegram Android source contributors, including Telegram FZ-LLC / Nikolai Kudashov as applicable; the reference archive's root `LICENSE` contains GPL version 2. An "or later" grant for each of these specific files has not been independently established. EVE's GPL-3 licensing intent does not override third-party terms; the GPL-3 text is in root `LICENSE` and the upstream GPL-2 text is in `app/src/main/assets/licenses/Telegram-GPL2.txt`. Relevant source is publicly available in this repository and the upstream repository.
+- **Appearance:** upstream white alpha-mask WebP shapes with the existing Day/Night EVE tint and native touch/accessibility behavior. These particular assets are **static**; no intrinsic Telegram icon motion was found or invented. Not the Telegram brand/logo.
+- **Distribution:** publishing an APK with these GPL-covered images requires the complete corresponding source, preservation of notices and a compatible licensing assessment of all included non-free SDKs and other dependencies. Public source publication alone is not a guarantee of compliance. Do not represent release compliance as audited until third-party binary terms and installation-source obligations are checked.
+
+
+## Seven additional original Telegram static action icons
+
+The source archive's original `msg_camera.webp`, `msg_copy.webp`, `msg_download.webp`, `msg_info.webp`, `msg_link.webp`, `msg_leave.webp`, and `msg_send.webp` have been imported verbatim in four density variants (mdpi, hdpi, xhdpi, xxhdpi), renamed to EVE `ic_camera`, `ic_copy`, `ic_download`, `ic_info`, `ic_link`, `ic_logout`, and `ic_send`. Existing EVE callers, tints, labels and actions remain intact. These are original Telegram assets from a GPL-v2-licensed source archive (per-file "or later" grants unverified), NOT independently drawn vectors or Telegram logo. The earlier complete GPL texts and source-publication obligations continue to apply. None has a proven intrinsic motion: do not invent transitions. The registry-driven `TelegramIconSourceRegistryTest` checks the binaries against pinned upstream SHA-256 values. Release compatibility with separately licensed SDK binaries remains an audit requirement.
+
+### Further original Telegram action icons: Close, Share, Edit
+
+The unchanged Telegram `msg_close.webp`, `msg_share.webp` and `msg_edit.webp` (all four densities) are now shipped as `ic_close`, `ic_share`, `ic_edit` with the original EVE action resource IDs and all existing UI callbacks/tints. All are static masks, not animated sources. Telegram FZ-LLC / contributors retain original copyright; the archive contains GPL version 2, while per-file "or later" grants remain unverified. Root GPL-3 licensing intent and bundled upstream GPL text do not remove corresponding-source or third-party notice obligations. Binary asset SHA-256 is pinned in `TelegramIconSourceRegistryTest`.
+
+### Original Settings and Saved/bookmark action artwork
+
+Two further original Telegram static RGBA icons from the owner-supplied official source ZIP were imported byte-for-byte in four standard Android densities: `msg_settings.webp` as EVE `ic_settings`, and `msg_saved.webp` as EVE `ic_bookmark`. Original Telegram copyrights remain; the archive's GPL-v2 license and EVE's intended GPL-3 distribution require per-file compatibility clearance. Existing view IDs, Day/Night color tints, drawer/menu destinations, touch interactions and saved-question state logic are unchanged. `TelegramIconSourceRegistryTest` checks all source bytes. No static icon motion has been invented.
+
+- Original Telegram `msg_delete.webp` is imported unchanged for `ic_delete.webp` at source-provided mdpi/hdpi/xhdpi; upstream does not provide a matching xxhdpi file, so Android scales the closest source density. This is a static delete glyph; no Telegram animation is implied. GPL/source-distribution obligations above apply.
+
+## Mission 02: Telegram Complete Visual System, Themes, Icons, and Navigation Pill
+
+- **Source:** Reference archive from user-authorized Telegram Android source package.
+- **Icons imported across 4 densities (mdpi, hdpi, xhdpi, xxhdpi):**
+  - `msg_report.webp` -> `ic_report_flag_premium.webp` (Report question action)
+  - `msg_archive.webp` -> `ic_history.webp` (History action)
+  - `msg_openprofile.webp` -> `ic_person.webp` and `ic_user_profile.webp` (Profile actions)
+  - `msg_add.webp` -> `ic_add.webp`
+  - `msg_language.webp` -> `ic_language.webp`
+  - `msg_qrcode.webp` -> `ic_qr_code.webp`
+  - `msg_secret.webp` -> `ic_key.webp`
+  - `msg_groups.webp` -> `ic_users.webp`
+  - `msg_calendar.webp` -> `ic_calendar.webp`
+  - `msg_stats.webp` -> `ic_analytics.webp`
+  - `msg_home.webp`, `msg_theme.webp`, `msg_palette.webp`
+- **Theme and Navigation Components:**
+  - `TelegramThemeEngine`: `.attheme` parsing, `changeColorAccent` HSV shift, fallback chain, House Day/9 and Night/0 defaults.
+  - Historical Mission 02 bundled themes (`day.attheme`, `night.attheme`, `arctic.attheme`, `darkblue.attheme`, `bluebubbles.attheme`) in `app/src/main/assets/themes/`.
+  - Settings > Appearance (`AppearanceActivity` and `activity_appearance.xml`) theme picker and preview.
+  - Floating bottom navigation pill (`MainTabsLayout`, `GlassTabView`, `EveBottomPillBar`, `EveNavigationHost`) with Telegram's 320ms decelerate capsule animation, 56dp height, 8dp margin, 344dp max width, and `BlurredBackgroundProviderImpl.mainTabs()` glass drawable with AGSL shader fallback.
+  - Tab Settings animation (`tab_settings.json`) in `app/src/main/res/raw/`.
+- **Copyright & License:** Telegram FZ-LLC / Nikolai Kudashov and contributors; the reference archive's root `LICENSE` contains GNU GPL version 2. Per-file "or later" grants and GPLv3 compatibility remain under review. EVE-authored code uses GPL-3.0-or-later (root `LICENSE`), which does not relicense upstream assets.
+
+
+### Telegram RadialProgressView adaptation
+The EVE loading spinner in `app/src/main/java/com/eve/app/designsystem/TelegramRadialProgressView.kt`
+adapts the animation and stroke/arc calculations in Telegram Android
+`TMessagesProj/src/main/java/org/telegram/ui/Components/RadialProgressView.java`
+(Copyright Nikolai Kudashov, 2013–2018; GNU GPL version 2 or later,
+explicitly stated in the Java file header at upstream commit
+`0aae959806c57be8ad457980f2a5c6277ff18635`).
+EVE-specific modifications: AndroidUtilities dp calls replaced with local density
+calculation, Telegram Theme progressCircle replaced with the EVE resolved accent
+color, Java source translated to Kotlin, XML-friendly constructor, and an EVE
+`TelegramRadialProgressIcon.kt` Drawable bridge. This is not verbatim source
+reuse and exact behavioural parity has not been independently established.
+No Telegram service marks or strings are imported. This file-specific license
+header does not establish compatibility for all other Telegram assets or the
+combined release binary; the production GPL release gate remains mandatory.
+
+### Mock-test Telegram radio indicator adaptation
+
+`app/src/main/java/com/eve/app/ui/common/TelegramRadioIndicator.kt` derives the
+no-icon drawing and checked-progress transition from official Telegram
+`Components/RadioButton.java` at revision
+`0aae959806c57be8ad457980f2a5c6277ff18635` (SHA-256
+`2422b0fecc33129021ec0654f66f0ec3dd5be78c1191890a5ff25b0758abb61b`).
+`Cells/RadioButtonCell.java` (SHA-256
+`7745a9d5ac7a9e6f52e5089ab8b1c221f16db06c5edac5225eb6f772a610c0c2`)
+provides the 20dp size and binding/accessibility reference. Both original headers
+credit Nikolai Kudashov, 2013–2018, and explicitly grant GPL version 2 or later.
+The upstream bytes match the owner's original reference file hashes; the original
+ZIP was not available and its whole-archive hash was not verified in this mission.
+See `docs/telegram-radio-indicator.md` for compatibility deviations. Preserve the
+bundled GPL text and corresponding modified source; all existing production
+release clearance/signing guards and other component obligations still apply.
+
+### Original-source Light/Night role migration
+
+Owner-supplied color source pack SHA-256
+`4b37c4c6749c5347cafdc16c6a1cbb6371599e09222e40be983135400f4fe469`
+was checked against its generated (not Telegram-signed) per-file manifest: 57
+original source files, sizes, CRC32 and SHA-256 values. The original complete
+archive hash is attested by the pack author, not independently verified here.
+See `docs/color-migration/source-role-contract.json` and the adjacent mapping.
+ThemeColors/Theme definitions, original Night asset and main-tabs coating math
+inform the EVE adaptation. The Light asset is an explicitly generated default-role
+projection; Night bytes retain their verified source hash. Existing Telegram
+copyright/license text, corresponding-source obligations and fail-closed production
+release clearance remain unchanged. Platform blur, AA adjustments and unmatched
+filled segmented controls are explicitly documented EVE deviations.
+
+### Telegram Bulletin source-traced EVE adaptation
+
+`AppBulletin` and `layout_telegram_bulletin.xml` are an EVE-authored behavioral
+adaptation of Bulletin.java, BulletinFactory.java and theme-role facts supplied
+by the owner for Mission 04. No upstream Bulletin source file was copied or
+independently verified in this session; the owner-provided archive hashes are
+provenance claims, not a validation performed here. The EVE implementation uses
+its own host and AndroidX spring transitions, with accessibility
+and lifecycle deviations described in `docs/BULLETIN_MISSION_04.md`. Existing
+Telegram license, corresponding-source and release gates remain in force.
+
+### AndroidX DynamicAnimation 1.0.0
+
+The bulletin springs use `androidx.dynamicanimation:dynamicanimation:1.0.0`
+from the Android Open Source Project. Its published Maven POM identifies the
+Apache License, Version 2.0; the license text is included in
+`app/src/main/assets/licenses/BlurView-LICENSE.txt`. Source:
+https://android.googlesource.com/platform/frameworks/support/.
+
+### Source-exact Telegram assets for EVE Home overflow (post-Mission 05 icon parity)
+
+The owner-supplied complete Telegram Android archive was checked against SHA-256
+`0785365538ce05cf5bdf44a15d8fd5f5219f8193db0a2d124af9665fc63fd7b3`.
+EVE's Home 3-dot popup now references the unchanged upstream binary assets
+`TMessagesProj/src/main/res/drawable-{mdpi,hdpi,xhdpi,xxhdpi}/large_notes.webp`
+(Notebook), `msg_topics.webp` (Topic-wise) and `msg_filehq.webp` (PYQ),
+and unchanged `TMessagesProj/src/main/res/drawable/menu_night_mode_24.xml`
+(Dark Mode). The EVE resource names are `telegram_popup_notes`,
+`telegram_popup_topics`, `telegram_popup_paper` and
+`telegram_menu_night_mode_24`. Each new resource's SHA-256 is tested against
+original ZIP bytes in `UiBehaviorRegressionTest`; no WebP was re-encoded and
+the vector was copied verbatim. History, Bookmarks, Light Mode and Logout
+already used imported original Telegram assets.
+
+These are genuine Telegram artwork assets, not a claim Telegram itself has
+EVE's exam-specific menu functions. Each selected item is a source-exact asset,
+while its EVE placement and Android PopupWindow/glass renderer remain adaptations.
+Retain upstream Telegram GPL license notices and existing distribution/release
+compliance gates, including obligations for copied source/assets; do not assume
+a successful development build alone establishes redistribution clearance.
+
+
+### Mission 06 — isolated Telegram popup radial selector mask (approved revision)
+
+- Owner approved original source revision: `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`. The ZIP containing those **same source file bytes** is SHA-256 `4b65e10b8fc63b4cbcb7377026a5da470782547fc0c0575bf0b71da676028c10`. The historical ZIP hash requirement was superseded for Mission 06 only; no archived ZIP equality is claimed.
+- Original `TMessagesProj/src/main/java/org/telegram/ui/ActionBar/Theme.java:5296-5357,5387-5395` is Git blob `b56ee0d84558b738144f16961eeaec8b767bb993` (ZIP SHA-256 `b2cc15c52f4b82ca79cee15c3e3d62f93c4b4e91e578e6da850fd279a1591e90`).
+- Original `ActionBarPopupWindow.java:604-609` is blob `6a9dc814bbfdd56f36ac4e5f8ab70fe179b231ea` (SHA-256 `4f4ccd178f82abf4e9cb1cdff330b57d34df9340bf23a2d86d75e1fe429a05c3`). It assigns the first and last visible menu rows original 6dp corner masks.
+- Original `Cells/BaseCell.java:150-165` is blob `f352ac78dc0438bd50f6c62ce2a438137540159b` (SHA-256 `a77dd0fe9fad11b3a4d9f055da0492faa7ef9cd171a105d3b9b217372624b183`).
+- Isolated into `app/src/main/java/com/eve/app/ui/home/TelegramPopupRadialSelector.java` under the upstream GPL-2-or-later file header. Uses original eight corner radii, white anti-aliased clockwise mask, original RippleDrawableSafe canvas save/restore/error-handling semantics. Necessary platform-only deviations: Telegram `AndroidUtilities.dp` replaced by context density; `AndroidUtilities.rectTmp` and global `Theme.maskPaint` replaced with instance-owned primitives; `BaseCell.RippleDrawableSafe` reconstructed as independent subclass using EVE logger. `TelegramMenuPopup` binds it to existing seven rows using EVE Day/Night selector color, WITHOUT importing Telegram account/network code, modifying actions, theme reveal or implementing a counterfeit full `ActionBarPopupWindow`.
+- This is a **source-backed mask/selector atom, not a byte-exact import of the full original popup**, which still requires its own vetted dependency chain, entrance/dismissal physics, original popup background and full frame/native verification. Keep the bundled Telegram GPL text, attribution, corresponding source and release compliance gates; APK distribution compatibility with every binary dependency remains unverified.
+
+
+### Mission 06 approved-revision popup background source import
+
+From `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`, `TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarPopupWindow.java:148-170,294-297` (Git blob `6a9dc814bbfdd56f36ac4e5f8ab70fe179b231ea`). Original `popup_fixed_alert2.9.png` copied byte-for-byte under EVE name `telegram_popup_fixed_alert2.9.png`, mdpi/hdpi/xhdpi/xxhdpi. Original Git blob SHAs in that order: `e757e48312943bcea7f4577fef9e5d6f48612f4c`, `a59945a2728562a4dbce645d8d6ea70f0b4a894a`, `a755c2b17917492c0e8200a9be0350019fa56e36`, `7f92a8eaa31cd9c527da8e7f677642762122293a`. Original SHA-256 values: `8ab86f9766f8b4501f3d2e29bc6d29c88efd03307d424d04d15ba42cf3824e22`, `84aa21dbbb203d43f751faf1ffa628af3db468265e882fe790f30b240d3bab49`, `561ff08468cbf8745e2622358809904466b5c72748fef97a742fdde83e0e3bfa`, `c0cf9ea52108442f76d39cc736f991e0c8a1ffd7615cf80d5f03db38d6453811`.
+
+The Home overflow alone uses original 8dp content padding, `PorterDuff.Mode.MULTIPLY` and the existing source-mapped Telegram submenuBackground role. A dormant opt-in property on shared `DesignGlassLayout` maintains this original 9-patch when blur is disabled; all other glass screens are unchanged. EVE's PopupWindow host, measured scroll layout, and entrance/dismissal motion are not copied ActionBarPopupWindow renderers; full source-fidelity and native visual tests remain pending. Source attribution (Nikolai Kudashov/Telegram contributors; GNU GPL v2 or later where individually granted), corresponding-source and production binary license checks remain mandatory.
+
+
+### Mission 06 Home category selected glyph — source property correction
+
+At owner-approved `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`, official `TMessagesProj/src/main/java/org/telegram/ui/Components/FilterTabsView.java:388-400,649-659` (Git blob `52238e832e9abcdbf9f177717cdf281fe219f175`, source SHA-256 `25e2f34494903fedc86375632c769570083135ddb093bb5868f97f2cd02ae87c`) measures title and optional counter, with no checked-icon slot. EVE's existing Home category Chip previously introduced an unrelated checked-icon glyph that changed its width. Only that EVE-only glyph was removed, preserving filter selection, Day/Night selected colors and touch contract; `TargetExamsBottomSheet` retains its own selection checkmark. This is a **verified source-property correction of an EVE Chip**, not a claim that the Material Chip is the exact original `FilterTabsView` layout or indicator physics. No Telegram services/assets were copied for this step.
+
+
+### Mission 06 — original Telegram search-container alpha timing source atom
+
+Upstream `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`, `TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuItem.java:935-1041`, Git blob `55c3634ea5658c31d58df0682c0a73a620472ede`, SHA-256 `1a52bba54d5ca41cb5f8b41d7f5f6ada6964625df829351803fe86efdee2e72f`. Original uses a **150ms AnimatorSet** alpha crossfade between searchContainer and menu icons and preserves keyboard focus. The previous EVE Home spring-width morph was a different implementation; this adaptation uses the verified source duration/alpha property and cancellation semantics. EVE mapping deviation: normalTopBar/searchTopBar are whole EVE header groups rather than original ActionBarMenuItem children; keyboard, selected categories, persisted queries, Lottie and Firebase scoring are preserved. This is not an import of original ActionBar and does not establish exact frame/IME parity before native tests. Retain original Telegram GPL attribution and all release obligations.
+
+
+### Mission 06 — isolated official ActionBarPopupWindow row entrance and default exit
+
+Revision `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`. Original `ActionBarPopupWindow.java:843-913,1024-1069` (Git blob `6a9dc814bbfdd56f36ac4e5f8ab70fe179b231ea`, SHA-256 `4f4ccd178f82abf4e9cb1cdff330b57d34df9340bf23a2d86d75e1fe429a05c3`); `AndroidUtilities.java:5225-5230` (Git blob `efa8e2956c84582b5215083c605e7a9756560748`, SHA-256 `6acc294fa98d5628c0e669f31cf5235e655d79934d06e684d3b4ea6d6f7de4cb`). New GPL-attributed `TelegramPopupSourceMotion.kt` isolates original per-visible-row cascade equation, `-6dp` row entrance translation, `150 + 16 * visibleCount` ms timing, disabled-row alpha=.5, background alpha0..255, and default `scaleOut=false` exit's `-5dp` translation plus fade over 150ms. Necessary EVE deviations: it targets seven existing EVE action rows, the source `backScaleY` background-only growth remains **UNIMPLEMENTED** because original `ActionBarPopupWindowLayout.dispatchDraw` is not ported, and theme reveal cancels row animation on popup dismissal. It does not import Telegram UserConfig, notifications, account services, navigation classes or networking. EVE's unrelated `TelegramPopupHelper` stays as-is for existing non-Home callers. Original copied math/animation expressions carry Telegram upstream GPL-2-or-later attribution; retain full GPL source/delivery compliance. This is source-backed motion subset, not the entire original popup renderer.
+
+
+### Mission 06 — original no-gap popup background-only backScaleY growth
+
+Source: approved `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`, `TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarPopupWindow.java:467-539`, Git blob `6a9dc814bbfdd56f36ac4e5f8ab70fe179b231ea`. Original no-gap, no-swipe, shown-from-top case uses the nine-patch drawing bounds `(0,0,width,(int)(height*backScaleY))`, background alpha `backAlpha`, and clips child drawing to its growth bounds. `TelegramPopupSourceBackground.kt` isolates these source expressions with the genuine unchanged nine-patch and `DesignGlassLayout` popup-only child clip. `TelegramPopupSourceMotion` now drives `backScaleY` with the verified original 150+16×visibleItems animator and 0–255 alpha. **Necessary deviations:** original `GapView`, reactions, swipe-back and shownFromBottom source branches are not transplanted because EVE's seven-action menu has no such content; the original complete ActionBarPopupWindow class with service/navigation dependencies remains NOT fully ported. Source expression license GNU GPL v2 or later per original header; preserve notices, corresponding source and production compatibility audit. No whole-popup scale imitation, no Firebase/account/network import.
+
+
+### Mission 06 — original Telegram normal dialog background atom (source-revision approved)
+
+Source: `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`, `TMessagesProj/src/main/java/org/telegram/ui/ActionBar/AlertDialog.java:302-318,680-693` (original Git blob `c5574d9682d98a276d3d84892e1b6a584f1c7794`). Four **unchanged** Telegram `popup_fixed_alert4.9.png` assets were imported under EVE resource name `telegram_dialog_popup_fixed_alert4.9.png`. Original Git blob SHA-1 values, mdpi/hdpi/xhdpi/xxhdpi: `53fa939aa586826cb9edcacd5624aca5e1eb12ea`, `17d032ef07a97dede8c2edb5f0fa7dbdeae9b94b`, `a1ccada709280d953a0ae7175d06efcbb1fb91fa`, `5275c8cd0ff41411cbf5621d56333395a7e871c8`. Original ZIP asset SHA-256 values are pinned in `TelegramDialogSourceAssetsTest.kt` and match the approved immutable upstream revision. The EVE-only `TelegramDialogSourceBackground` sets original `dialogBackground` role tint using original `PorterDuff.MULTIPLY`. This is applied **only** to Home's admin feedback-deletion confirmation after `showDestructive()`, preserving authorization checks, confirmation listeners, and destructive action styling. Important **non-exact host deviation:** EVE uses the MaterialAlertDialog window to host the original drawable, not Telegram's `AlertDialogView` content container; original Telegram account/Stars/notification dependencies are not imported. No exact complete Telegram AlertDialog functionality, shadow/clip/frame parity or release compliance is claimed. The upstream GPL-v2-or-later file header, attribution, source delivery and existing production release safeguards remain in force.
+
+
+### Mission 06 — source-backed Home category selector geometry and original color roles
+
+Owner-approved `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`. Original `TMessagesProj/src/main/java/org/telegram/ui/Components/FilterTabsView.java:176-178,904-918,1448-1514`, immutable Git blob `52238e832e9abcdbf9f177717cdf281fe219f175` (ZIP SHA-256 `25e2f34494903fedc86375632c769570083135ddb093bb5868f97f2cd02ae87c`). Original `TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ThemeColors.java:15,211-216`, Git blob `ba9c71fa39c7d0ed54d6d574396f6c35608fc1de` (ZIP SHA-256 `49f27ef5f1a33844ca8818feb4b737a96df8d8d4eaef50a20b11225c46c2000d`). New palette roles `actionBarTabLine` and `actionBarTabActiveText` are source `#298ACF` Day, `actionBarTabUnactiveText` `#777C7F`, `actionBarTabSelector` `#121A1D21`, preserving direct Night .attheme key overrides. `HomeCategoryChipGroup` isolates original selector drawable construction: `GradientDrawable`, eight 14dp corners, 28dp height at centerY-14dp, title-width-centered indicator, 12.5dp internal horizontal padding, alpha 31. `EveDesignSystem.createCategoryChip` removes the independently authored solid selected fill and uses source tab active/unactive text roles, preserving 40dp visual height, 48dp touch delegation, selected state, Hindi and alternate no-checkmark behavior.
+
+**Explicit necessary deviations** from original class: EVE is a horizontally scrolled Material ChipGroup rather than Telegram's RecyclerListView/TabView; Android Layout text measurement substitutes for `HintView2.measureCorrectly`, exact Telegram emoji/counter/editing/reordering/delegate/indicator interpolation and list physical gestures are NOT PORTED. Only the verified selector shape/color atom is transplanted from the GPL-2-or-later source; no Telegram account/RPC dependencies introduced. Full visual/device fidelity and combined-binary release license compliance remain pending.
+
+
+### Mission 06 — original Telegram tab indicator EASE_OUT_QUINT and 320ms frame timing
+
+The officially verified unmodified Java `TMessagesProj/src/main/java/org/telegram/ui/Components/CubicBezierInterpolator.java` at owner-approved `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335` is imported **verbatim** to `app/src/main/java/org/telegram/ui/Components/CubicBezierInterpolator.java` (Git blob `3a9cae100e17a03abacf2f4df71db2b82757b968`, SHA-256 `747f7b8f511249f14bc1b567088d7e0da3639729263a6f56243eb61c2ba19387`; upstream license is GPL version 2, with original root LICENSE and EVE's bundled copy retained). The source `FilterTabsView.java:837,855-881,1179-1190,1454-1514` defines `EASE_OUT_QUINT` Bezier (.23,1,.32,1), 320ms duration with a capped 17ms frame delta, interpolated selector bounds and cancellation. Home's previously static original 28dp alpha31 selector now uses that **exact unmodified original interpolator and timing equation** for category changes. EVE host adapters: `ChipGroup` checked change substitutes for Telegram `FilterTabsViewDelegate`, Android `postOnAnimation` replaces Telegram global runOnUIThread queue, drawing reuses the source-backed 28dp rounded selector and the existing selected-category data state. No account, storage, RPC, premium or server components are imported. This remains a source-authentic animation **subset**, not a complete FilterTabsView class or verified frame-accurate device capture; full native tests and combined-GPL release obligations remain outstanding.
+
+
+### Mission 06 — narrowly scoped WCAG AA accommodation for source-original category text
+
+Approved Telegram source role values remain byte-exact in `TelegramColorRoles.defaults` (`ThemeColors.java:15,211-216`): `actionBarTabActiveText=#298ACF`, `actionBarTabUnactiveText=#777C7F`, `actionBarTabLine=#298ACF` and original selector alpha=31. On a white background, active/inactive raw text contrast is approximately 3.73:1/4.22:1, below WCAG AA 4.5:1 for 14sp text. EVE applies its existing `TelegramColorRoles.accessibleForeground()` AA algorithm **only** to the active/inactive Home text colors against the actual selected overlay and Day/Night canvas surfaces. The original raw role values, 14dp/28dp/12.5dp selector geometry, original 320ms EASE_OUT_QUINT source animation and source indicator color stay unchanged. This is an explicit accessibility deviation from exact original text pixels, not an unacknowledged Telegram-original color claim. No unrelated view or backend code is changed; actual on-device font scale/TalkBack/theme visual acceptance remains pending.
+
+
+### Mission 06 — source-verified DarkAlertDialog Night-role subset
+
+Upstream owner-approved `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`, `TMessagesProj/src/main/java/org/telegram/ui/ActionBar/DarkAlertDialog.java:5-19`, Git blob `d90759c4000cb88f709d4e4691a09edd96b924aa`, ZIP SHA-256 `95e78aef9cf6e53fc2555b005f47de8f625c2502394e4a9f76f26c8cc30482a0`. Official DarkAlertDialog overrides `dialogBackground=#FF262626`, `dialogTextBlack=#FFFFFFFF`, `dialogButton=#FFFFFFFF` and `dialogScrollGlow=#FFFFFFFF`. The EVE-only `TelegramDialogSourceBackground.apply` now maps the Home admin confirmation's Night mode to this verified source background/text/negative-button palette while preserving the original unchanged nine-patch, positive **destructive** button fill and admin authorization/confirmation callback. **Explicit deviations:** EVE's MaterialAlertDialog window is not the upstream AlertDialog renderer; it doesn't import original Theme/NotificationCenter or implement the original glow or layout, and Day mode follows original `dialogBackground` role without overriding it. The mapping from EVE Night to Telegram's opt-in DarkAlertDialog variant is an EVE owner-requested integration choice, NOT a byte-exact DarkAlertDialog class import. GPL notices and release-compliance safeguards remain mandatory.
+
+
+### Mission 06 — exact source typography units with accessible dialog-host adaptation
+
+Official `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`, `TMessagesProj/src/main/java/org/telegram/ui/ActionBar/AlertDialog.java:809-821,874-878,1137-1204` (Git blob `c5574d9682d98a276d3d84892e1b6a584f1c7794`), sets the normal title to 20dp, message text to 16dp and both confirmation actions to 16dp. Source `AndroidUtilities.bold():262-271` resolves the official Telegram Roboto Medium typeface. On the Home admin feedback deletion dialog only, `TelegramDialogSourceBackground.apply()` now applies those source numeric text sizes with `SP` units rather than `DIP`, intentionally retaining Android user font-scale accessibility, and applies EVE's verified Telegram medium typeface to title/buttons. This is a **documented font-scale deviation** from unmodified Telegram pixels. MaterialAlertDialog's accessible minimum target, owner-required destructive positive-button fill and callback, original nine-patch, Night DarkAlertDialog override and authorization remain unchanged. This is not a full native Telegram AlertDialog renderer or claim of exact layout hierarchy; GPL and combined-release obligations remain in force.
+
+
+### Mission 06 — original Telegram BottomSheet source scrim and entrance dim animation
+
+Official owner-approved `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`, `TMessagesProj/src/main/java/org/telegram/ui/ActionBar/BottomSheet.java:135-192,213-222,1487-1491,1766-1778`, source Git blob `d45bb36117f11adb5c579ed540400c2897fad9e2`, original header GNU GPL v2 or later. The extracted `TelegramBottomSheetSourceScrim` retains original AA Paint, PorterDuff SRC mode, opaque black paint, four inset-adjusted drawing bounds, drawRect, alpha accessors and color filter; original `AndroidUtilities.makingGlobalBlurBitmap` guard is intentionally excluded because the EVE sheet does not import Telegram global blur state. `TargetExamsBottomSheet` now disables the window-level `FLAG_DIM_BEHIND` (original Telegram explicitly does this) and draws this custom scrim behind its actual content, fading alpha 0–51 in 400ms with the **original unchanged** imported `CubicBezierInterpolator.EASE_OUT_QUINT` and 20ms start delay. Reduced-motion branch snaps to original 51 alpha. The full-screen parent is EVE Material's coordinator rather than Telegram's original nested custom FrameLayout; native host/gesture/pixel/IME verification and complete BottomSheet renderer/drag-physics source fidelity remain **NOT VERIFIED**. All target-exam multi-select, persistence, button handlers, body sheet styling, two detents and authentication are unchanged. This source-backed atom is GPL-covered; retain corresponding sources, license notices and production review.
+
+
+### Mission 06 — original AlertDialog activity-safety gate for admin confirmation
+
+Official approved Telegram `ActionBar/AlertDialog.java:325-328` delegates to `AndroidUtilities.isSafeToShow()`. In verified `TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java:6255-6267` (Git blob `efa8e2956c84582b5215083c605e7a9756560748`), `isActivityRunning(activity)` requires `!activity.isDestroyed() && !activity.isFinishing()`. EVE's Home feedback admin-confirmation flow is asynchronous, so it now preserves this exact activity-safety boolean directly after the backend-admin check, before creating the dialog. No Telegram account/network runtime is imported; the server-access gate, destructive confirmation callback, original nine-patch, title typography, Day/Night roles and all admin operations remain untouched. This is an original-source lifecycle property, not the complete Telegram Dialog renderer.
+
+
+### Mission 06 — original Telegram search collapse focus release
+
+Official owner-approved `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`, `TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuItem.java:961-1005`, Git blob `55c3634ea5658c31d58df0682c0a73a620472ede`. Original search collapse explicitly calls `searchField.clearFocus()` before returning to its menu layout and hiding the keyboard. EVE's source-backed 150ms crossfade already cleared query/cancelled debounces and hid the IME but did not clear focus from the collapsing field. `MainActivity.closeSearch()` now performs the same source focus release; the input retains `requestFocus()` on expand. Existing exam discovery, query restoration, motion/reduced-motion, Lottie and server-authoritative scoring remain unchanged. Necessary view-host deviation: EVE uses two toolbar groups rather than original ActionBarMenuItem hierarchy; no network/account services imported.
+
+
+### Mission 06 — original Telegram overflow row title behavior
+
+Official owner-approved source `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`, `TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuSubItem.java:91-98`, Git blob `3d452aabdf320aae2ebd4a8cfed26bc2902e6df8`. Upstream `textView.setSingleLine(true)`, `setEllipsize(TextUtils.TruncateAt.END)` are now applied to all seven current EVE overflow titles in `TelegramMenuPopup.applyOriginalMenuRoles()`, preserving the existing EVE 48dp row targets, actual menu destinations, Day/Night tint and popup motion. The row's full `contentDescription` remains the untruncated original title for accessibility; high font scales may visually ellipsize as in source. The EVE LinearLayout/TextView row host is an explicit original-view-hierarchy deviation; no claim of full ActionBarMenuSubItem byte-exact transplant or Telegram account imports. Same behavior is asserted in JVM source-contract and final native fixture; original source GPL notice/distribution obligations retained.
+
+
+### Mission 06 — original Telegram Day/Night popup icon pair
+
+Approved `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`, `TMessagesProj/src/main/res/drawable/menu_day_mode_24.xml`, Git blob `53c1495614215b6e69fda039cb8f69464a3998f8`, SHA-256 `f7c0b2b36531b877a01e82a1193ff39ae59ed11784e9123c90fed541d7318c84`. Copied **unchanged** as `app/src/main/res/drawable/telegram_menu_day_mode_24.xml` and used by `TelegramMenuPopup.setupThemeCard()` in Dark mode for the Day action. Existing original Night icon `menu_night_mode_24.xml` is already byte-equal to upstream Git blob `bf0364d4826af33b83d578d2eae1594395590294`, SHA-256 `66f143dbffd1c5abbc85dae15de22161a6a7d3c13ded1fc0168051b2af41d861`. Both remain 24dp original vector geometry with menu tint from official source role and the existing protected EVE circular theme reveal handoff unchanged. These are genuine upstream icons (GPL obligations apply), not invented vector replacements. Two-branch selection is enforced in JVM tests and icon display is covered by the terminal native fixture; source bitmap/color on-device validation remains outstanding.
+
+
+### Mission 06 — correction: saved-question icon was already official Telegram source
+
+The existing `app/src/main/res/drawable-{mdpi,hdpi,xhdpi,xxhdpi}/ic_bookmark.webp` files are each **byte-for-byte identical** to original `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`, `TMessagesProj/src/main/res/drawable-{density}/msg_saved.webp`. Their Git blobs mdpi/hdpi/xhdpi/xxhdpi: `e7cdcff6e452c07459dc31eac58af0f36d1c7d62`, `ec3097732ea3a2462e241386876ca93a00af44d2`, `bf4fda65e037332f7bfe8f02a74d2ebc53238eba`, `63c064cafb3e217d55df9b31575352dc7c9efe66`. Immutable SHA-256 and original byte counts are enforced by `TelegramPopupBookmarkSourceTest`. These files were verified both against the supplied approved source ZIP and upstream immutable GitHub objects.
+
+Source-fidelity correction: initial Mission 06 icon swap at `d55ef3a6` misidentified this existing original Saved Messages artwork as third-party and temporarily used another genuine upstream asset `menu_browser_bookmarks.webp`, intended for Telegram's Browser Bookmarks. For EVE's saved-question Bookmarks destination, the already-present `msg_saved.webp` is the appropriate original source, so the popup row has been restored to `@drawable/ic_bookmark`; the four newly introduced browser-specific files are deleted from the current tree. Existing `ic_bookmark.webp` original bytes have **not** been rewritten, re-encoded or deleted. All actions and tint/Day/Night/theme reveal protections remain unchanged. Original Telegram GPL and corresponding-source obligations apply.
+
+
+
+### Mission 06 — source-original Home popup title horizontal alignment
+
+Official upstream `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`, `TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuSubItem.java:83-84,206-218` (Git blob `3d452aabdf320aae2ebd4a8cfed26bc2902e6df8`). The original popup row uses 18dp outer padding and 43dp title inset when an icon is present, i.e. text starts at 61dp from the logical start edge. EVE has an existing **24dp** icon inside a horizontal LinearLayout, so its previously generic 20dp label gap placed title at 62dp (18+24+20). The **popup-local** `telegram_popup_label_gap=19dp` is derived exactly as `43-24`, restores the original 61dp logical inset in LTR and RTL and changes all seven popup labels only. The shared `design_shadow_room` 20dp remains unchanged for all other screens. Source mapping and RTL/large-screen native geometry tests are included. Host view hierarchy still differs from Telegram's FrameLayout; no unsupported whole-class fidelity is claimed. GPL source and distribution requirements remain unchanged.
+
+
+### Mission 06 — original ActionBar popup animation ownership
+
+Owner-approved `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`, `TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuItem.java:841-845,884-889` (Git blob `55c3634ea5658c31d58df0682c0a73a620472ede`) explicitly calls `popupWindow.setAnimationStyle(0)` when its custom `ActionBarPopupWindow.startAnimation()` controls entrance. EVE `TelegramMenuPopup.show()` now does the same and clears its platform `exitTransition` before running the already-verified source-backed 150+16×visibleRow cascade; this avoids stacking Android PopupWindow's default transition on top of the original Telegram animation. The existing 150ms custom dismiss, 7 actions, pinned anchor/window bounds, accessibility, and circular reveal handoff remain intact. This is original animation *ownership* only, not full `ActionBarPopupWindow` window/gesture parity. JVM and native contracts check style zero and unchanged source cascade. GPL source obligations retained.
+
+
+### Mission 06 — shared EVE destructive confirmations adopt verified source renderer atoms
+
+Owner-approved `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`, `TMessagesProj/src/main/java/org/telegram/ui/ActionBar/AlertDialog.java:302-318,680-693,809-821,874-878,1137-1204` and `DarkAlertDialog.java:11-19` (original upstream per-file blobs previously verified). The original Telegram four-density `popup_fixed_alert4.9.png`, `dialogBackground`/Dark `#262626`, `MULTIPLY` tint, 20/16/16 text sizing and Roboto Medium are applied through EVE's existing central `AlertDialog.Builder.showDestructive()` extension rather than being limited to a Home-only call. This covers existing EVE-owned destructive action builders (including admin delete, user/premium management and settings) **only when they call the shared showDestructive API**; other plain show()/custom builders and Android system permission dialogs are deliberately untouched. The EVE-hosted MaterialAlertDialog hierarchy, 48dp minimum touch targets, destructive primary button fill/contrast, callbacks, server authentication, and dismissal outcome remain unchanged. `MainActivity` no longer duplicates the source adapter; native fixtures exercise the shared path. It is an **original source-backed background/typography subset** rather than a full byte-exact Telegram AlertDialog/animation port. GPL and release gate obligations remain enforced.
+
+
+### Mission 06 — TestActivity exit and submit confirmations use verified original AlertDialog atoms
+
+Owner-approved original `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`, `TMessagesProj/src/main/java/org/telegram/ui/ActionBar/AlertDialog.java:302-318,680-693,809-821,874-878,1137-1204` and `DarkAlertDialog.java:11-19` (original Git blobs already recorded). `TestActivity` Leave Test and Submit Test confirmations now use the existing verified `TelegramDialogSourceBackground.apply` adapter **after** their AndroidX dialog has been shown. The unchanged original four-density nine-patch, Day `dialogBackground` / Night `#262626`, `MULTIPLY` and original title/message/action typography are reused, with documented EVE SP accessibility deviation. This does **not** port the Telegram AlertDialog view hierarchy or change the Android system permission UI. New guards allow at most one active Leave or Submit confirmation at a time, reject callbacks after Activity teardown, and dismiss Activity-owned windows on destroy. EVE's original exit pause/session persistence, timer lifecycle, palette counts, cancel/continue behavior, server-authoritative submission and offline queue are unchanged. This is a genuine source-backed renderer subset plus EVE functional guards, not a claimed full Telegram dialog physics transplant. GPL and distribution obligations remain in force.
+
+
+### Mission 06 — remaining exam notices use original AlertDialog atoms without changing recovery flow
+
+The existing `TestActivity` Attempt Limit Reached, Submission Failed, and Submission Saved Offline notices now use one Activity-scoped `showExamNotice(AlertDialog.Builder)` adapter. All three retain their original title/message, retry, save-offline, cancel, acknowledgement/finish callbacks and noncancelable status where originally specified. The helper guards `!isFinishing && !isDestroyed`, dismisses any still-open earlier exam notice, tracks the currently visible dialog and dismisses it in `onDestroy`. After showing it, the approved-revision `TelegramDialogSourceBackground` applies source `AlertDialog.java:302-318,680-693,809-821,874-878` background/typography and `DarkAlertDialog.java:11-19` Night role. This is **not** a full Telegram dialog/class/animation port; all original EVE server-side scoring, clientAttemptId, pending submission queue and retry/session integrity remain unchanged. GPL source attribution and release obligations remain in force.
+
+
+### Mission 06 — completed-exam reattempt and attempt-limit confirmations
+
+EVE `CompletedExamBottomSheet` now applies the already verified official Telegram `AlertDialog.java:302-318,680-693` and `DarkAlertDialog.java:11-19` nine-patch/typography atoms to its two EVE-owned reattempt dialog variants (limit reached, confirm new attempt). This is a MaterialAlertDialog host adaptation, **not** a full Telegram AlertDialog class or physics replacement. Existing attempt-limit check, positive action, pending/history clearing, result navigation, callbacks and bottom-sheet UX are preserved. The UI suppresses duplicate asynchronous attempt-limit lookups and stacked windows, ignores completed checks after the parent sheet or Activity closes, and dismisses any outstanding confirmation when the parent sheet goes away. No Firebase scoring or server authorization code changed. Original GPL and complete-source release conditions remain required.
+
+
+### Mission 06 — original Telegram BottomSheet scrim shared between exam sheets
+
+Verified owner-approved Telegram `BottomSheet.java:135-192,213-222,1766-1778` source atom remains the existing `TelegramBottomSheetSourceScrim` drawing class, with original AA/SRC black inset paint and alpha=51. The unchanged `ValueAnimator` 400ms `EASE_OUT_QUINT`, 20ms delay, no `FLAG_DIM_BEHIND`, reduced-motion snap and detach cancellation move into the one EVE-only `TelegramBottomSheetSourceBackdrop.install` host adapter. Both Target Exams and Completed Exam call this original-source-backed adapter after showing their Material BottomSheetDialog. Existing chip selection/target preference persistence, completed-result review, reattempt authorization, callbacks and Material detents remain unchanged. This remains a **source-backed scrim subset**, not an original Telegram full BottomSheet drag/nested/IME renderer. Upstream GPL-source and distribution requirements apply.
+
+
+### Mission 06 — Settings account-deletion confirmation window ownership
+
+The existing EVE-owned Settings Delete Account confirmation uses the previously original-source-backed shared `showDestructive()` adapter (approved original Telegram `AlertDialog.java:302-318,680-693,809-821,874-878,1137-1204`, `DarkAlertDialog.java:11-19`). For the source-verified Telegram Activity safety contract, `AndroidUtilities.java:6255-6267` requires `!isDestroyed && !isFinishing`. The Settings confirmation now enforces that exact lifecycle guard plus a single active destructive dialog, clears its Activity-owned dialog on dismissal, and dismisses it during Activity destruction. The existing 280ms protection, 6000ms auto-dismiss, authenticated Firebase deletion/reauthentication, original source-backed nine-patch and destructive button colors/callbacks remain unchanged. This is a lifecycle adapter, not a full original Telegram AlertDialog/animation implementation.
+
+
+### Mission 06 — original Telegram normal-dialog source atoms in Settings choices
+
+Two EVE-owned Settings selectors (Daily Goal and App Language) now use the existing, independently verified `TelegramDialogSourceBackground.apply()` through new non-destructive `AlertDialog.Builder.showTelegramSourceDialog()`. Approved original: `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`, `TMessagesProj/src/main/java/org/telegram/ui/ActionBar/AlertDialog.java:302-318,680-693,809-821,874-878,1137-1204`; `DarkAlertDialog.java:11-19`. The existing original `popup_fixed_alert4.9.png` nine-patch, Day/Night tint and original typography subset are reused with EVE's documented SP accommodation. Settings language choice, daily-goal radio handlers, original callbacks, locale change logic and Cancel buttons are untouched. Destructive account-deletion styling is not inherited by these non-destructive selectors. AndroidX MaterialAlertDialog host remains an explicit renderer-hierarchy deviation. Original GPL source/distribution requirements remain mandatory. FAST compiles the new native runtime window fixture; native emulators remain deferred to terminal FULL.
+
+
+### Mission 06 — original DarkAlertDialog action roles for normal versus destructive dialogs
+
+Approved immutable `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`, `TMessagesProj/src/main/java/org/telegram/ui/ActionBar/DarkAlertDialog.java:11-19` (Git blob `d90759c4000cb88f709d4e4691a09edd96b924aa`), maps `Theme.key_dialogButton` to opaque white and normal dialog background to `#262626`. The EVE source-only rendering adapter now applies original Night white to positive/negative/neutral actions, and source original 16-unit typography to all three. The existing `showDestructive()` pathway **explicitly requests `preserveDestructivePositive=true`** so EVE's required red Delete/Remove positive text/fill is not overwritten; the original white negative/neutral roles remain. Normal Settings selectors, exam submit/exit/retry and related non-destructive confirmations use the original Night white actions by default. Both variants still use original nine-patch/black text roles, and no Android system dialogs or data mutation/authorization callbacks are touched. This is a documented original-role subset with an EVE-required destructive exception, not a complete Telegram Dialog renderer. JVM and terminal native assertions check both cases; GPL corresponding-source obligations remain active.
+
+
+### Mission 06 — Telegram source atoms for Settings deletion error and Google reauthentication prompt
+
+The EVE-owned `Account Deletion Failed` and `Re-authentication Required` dialogs in `SettingsActivity` use the previously source-verified non-destructive `showTelegramSourceDialog()`: owner-approved `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`, original `ActionBar/AlertDialog.java:302-318,680-693,809-821,874-878`, `DarkAlertDialog.java:11-19`. Both retain their original Firebase/server error handling, existing authentication flow, callbacks and Cancel action. Original `AndroidUtilities.java:6255-6267` disallows opening windows when the Activity is destroyed or finishing, and the Settings deletion-result coroutine now enforces that safety check before showing an error dialog. The Google-sign-in ActivityResult launch also verifies that the host is still live after asynchronous sign-out. This only adapts EVE's dialog visuals and lifecycle; actual credential verification/authorization, account deletion, pending submissions and login services are unchanged. The separate custom password-input reauth dialog remains outside this microstep; no claim of the full Telegram renderer or an original system permission UI replacement. Preserve original Telegram GPL source and corresponding-distribution obligations.
+
+
+### Mission 06 — custom email/password reauthentication uses verified source dialog atoms
+
+The password-confirmation branch of the EVE-owned Settings account deletion flow uses its pre-existing `MaterialAlertDialogBuilder` and secure `TYPE_TEXT_VARIATION_PASSWORD` field, and now applies the verified approved original Telegram `AlertDialog.java:302-318,680-693,809-821,874-878` and `DarkAlertDialog.java:11-19` source-backed background/typography atom **after `dialog.show()`**. Its original on-show Verify click handling is not replaced, so blank-password validation, `EmailAuthProvider.getCredential`, `FirebaseUser.reauthenticate`, error recovery and explicit disabled/re-enabled submit remain unchanged. Added one-owned-window guard prevents stacking multiple password prompts; the password field is cleared upon any dismissal, and the Activity-owned window is dismissed on destruction. This is an explicit Material host/custom input deviation, not a full Telegram AlertDialog view renderer. No private credential is logged, persisted, or exposed; the existing backend account-deletion and server-side authorization remain untouched. Original GPL source/distribution obligations apply.
+
+
+### Mission 06 — admin App Configuration maintenance confirmation uses original Telegram dialog atoms
+
+The owner-approved original `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335` `AlertDialog.java:302-318,680-693,809-821,874-878,1137-1204`, `DarkAlertDialog.java:11-19` backgrounds/typography and `AndroidUtilities.java:6255-6267` lifecycle safety are now used by the EVE-owned `Enable Maintenance Mode?` confirmation via the existing source-backed `showTelegramSourceDialog()`. Its privileged `AdminAccessGate.requireAdmin(requireFreshServer = true)`, server-side `adminRepo.updateAppConfig`, admin audit log, original positive-only save action and Cancel semantics remain unchanged. One window at a time prevents duplicate privileged confirmation taps and the Activity closes its owned window during teardown. Disabling maintenance still saves immediately as before. The Material host is an explicit Telegram view-hierarchy/physics deviation, not a claimed full original renderer. Applicable GPL and corresponding source distribution obligations remain enforced.
+
+
+### Mission 06 — authentic Telegram popup keyboard/input ownership
+
+Owner-approved `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`, `TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuItem.java:850-865` (source Git blob `55c3634ea5658c31d58df0682c0a73a620472ede`). The original `toggleSubMenu` sets `INPUT_METHOD_NOT_NEEDED`, `SOFT_INPUT_STATE_UNSPECIFIED`, focusable-in-touch-mode content, and dismisses the popup on a nonrepeating `KEYCODE_MENU` ACTION_UP. EVE Home overflow now applies those exact Android platform contracts to its existing popup root, preserving already-source-backed 9-patch, item cascade, seven callbacks, outside-touch dismissal, IME-safe sizing and theme reveal. The EVE `PopupWindow` host remains a documented alternative to Telegram's full `ActionBarPopupWindow`, not falsely byte-identical. JVM and AndroidTest-source contracts guard the same runtime properties; native execution remains due only at the owner's final FULL gate. Original GPL corresponding-source and binary release obligations are unchanged.
+
+
+### Mission 06 — popup toggle and Activity teardown from source caller
+
+At approved `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`, `TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuItem.java:768-782` (verified blob `55c3634ea5658c31d58df0682c0a73a620472ede`) checks if its existing `popupWindow.isShowing()`, dismisses **that popup**, and returns before creating a replacement. EVE's `MainActivity` had previously created a new `TelegramMenuPopup` on each overflow click, allowing stacked focusable windows on rapid taps. EVE now holds one host popup and reproduces the original toggle-on-repeat contract. On Activity `onDestroy` it cancels the source-backed popup animator and immediately dismisses the window, preventing a retained window or stale action/navigation callback after lifecycle teardown; normal user dismiss still uses Telegram's 150ms source exit. This adds a narrow EVE host lifecycle adapter, not Telegram account/navigation infrastructure or a complete ActionBarPopupWindow substitute. Confirmation/Theme reveal, 7 actions, GPL provenance and release gates remain intact.
+
+
+### Mission 06 — Report Question form uses verified Telegram dialog surfaces
+
+Original approved `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`, `TMessagesProj/src/main/java/org/telegram/ui/ActionBar/AlertDialog.java:302-318,680-693,809-821,874-878` (source Git blob `c5574d9682d98a276d3d84892e1b6a584f1c7794`), and `DarkAlertDialog.java:11-19` (source blob `d90759c4...`) already have their verified original 9-patch, Day/Night paint/tint and typography isolated in `TelegramDialogSourceBackground`. EVE `ReportQuestionDialog` now applies that same original source-backed chrome immediately after its existing `.create()`/`.show()`. The form, custom report reasons and comment, disabled Submit during asynchronous request, server reporting payload, retry, and success/error callbacks remain unchanged; replacing `.create()` with `Builder.show()` would have broken its custom non-auto-dismiss positive button, so that was deliberately avoided. This is source-exact background/typography within a MaterialAlertDialog host, not a full Telegram AlertDialog renderer, and GPL release obligations remain outstanding.
+
+
+### Mission 06 — EVE admin feedback reply dialog source atoms and single-window lifetime
+
+The existing `FeedbackMessagesActivity.showReplyDialog()` is EVE-owned admin UI with a manually validated Send Reply button. It now applies the already-verified original Telegram `AlertDialog.java:302-318,680-693` and `DarkAlertDialog.java:11-19` source-backed 9-patch, tint and type roles via `TelegramDialogSourceBackground.apply(dialog)` immediately after the original `.create()`/`.show()` sequence. The owner's admin access gate, custom reply form, non-auto-dismiss button, server `replyFeedbackMessage(message.id, replyText)` payload, disable/retry behavior and undoable Delete action are unmodified. Original `AlertDialog.java:325-328`/`AndroidUtilities.java:6255-6267` activity-liveness gate is retained, with an EVE-only single-modal guard and Activity destruction cleanup to prevent duplicated admin windows and leaked tokens. This does NOT import Telegram account/notification dependencies or assert complete Telegram AlertDialog parity. GPL attribution/source delivery and final native/full tests remain required.
+
+
+### Mission 06 — admin Create Poll dialog uses Telegram source chrome
+
+The EVE-owned `ManagePollsActivity.showCreatePollDialog()` custom input form now uses the already-verified original Telegram `AlertDialog.java:302-318,680-693`/`DarkAlertDialog.java:11-19` background, tint and typeface adapter after its existing AppCompat `AlertDialog.Builder.create()` and `dialog.show()`. It adopts the original activity-liveness contract from `AlertDialog.java:325-328`/`AndroidUtilities.java:6255-6267`, with a single-dialog guard, onDismiss cleanup and Activity onDestroy dismissal to prevent stacked windows. This is NOT a full Telegram renderer. AdminAccessGate, custom option input, poll validation, date/time selection, CreatePoll server payload, error retry, and the Android-owned DatePickerDialog/TimePickerDialog are preserved. Source licenses and release gates remain unchanged.
+
+
+### Mission 06 — original source chrome for admin exam editing and import preview
+
+Under the approved original Telegram `AlertDialog.java:302-318,680-693` and `DarkAlertDialog.java:11-19`, EVE's already-tested `AlertDialog.Builder.showTelegramSourceDialog()` attaches authentic source-backed normal/Night dialog 9-patch and typography, without replacing the Material host. `EditExamActivity` now uses that adapter for exactly three previously plain Material dialogs: Bulk Question Import Preview, Add New Question, and Edit Question. The existing protected Delete Question dialog **continues to use** `showDestructive()`. Button callbacks, input validation, question-import preview/results, add/edit/delete repository payloads, undo, Lottie/spinner, and Admin access remain unchanged. This is a source-backed chrome subset, not a byte-exact Telegram whole-dialog port; original GPL, source-delivery and final native/release checks remain in force.
+
+
+### Mission 06 — admin System Monitor source-backed retry and failure confirmations
+
+For the approved source `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`, original `ActionBar/AlertDialog.java:302-318,325-328,680-693` and `DarkAlertDialog.java:11-19` supply the already-proven 9-patch, text and Day/Night roles in `showTelegramSourceDialog()`. `SystemMonitorActivity.confirmRetry()` now uses this shared EVE-owned dialog surface and the original Activity-safe display condition, with a single retry-confirmation window guard, dismissal state cleanup and Activity teardown. The asynchronous retry error alert uses the same source adapter only when the Activity remains live. The backend-admin gate, `retryGenerationJob(id)` call, `CancellationException` handling, server monitored records, Retry/Cancel callbacks and refresh workflow are unchanged. The original Telegram full dialog hierarchy/entrance animation is not transplanted; only the documented source-backed atoms and native-host lifecycle protections are claimed. License obligations and final native/FULL gate remain outstanding.
+
+
+### Mission 06 screenshot correction — owner Night drawer icon legibility
+
+User-provided screenshot shows five static drawer navigation icons dark/muted against the owner-required opaque black drawer (`#FF000000`). This was traced to `app/src/main/res/values-night/telegram_colors.xml`, where `telegram_drawer_icon=#FF828282` reproduces original Telegram `TMessagesProj/src/main/assets/night.attheme:292 chats_menuItemIcon`. Owner explicitly requested icons to remain clearly visible in Night, so ONLY the EVE Home drawer icon resource overrides this verified original role to opaque white `#FFFFFFFF`. This is a **documented user-authorized accessibility/color deviation** from Telegram's raw Night role, not a claim of exact source color. All five drawer row icons inherit this resource without modifying their artwork, Lottie Premium, Night drawer black fill, system status icons, other semantic/disabled icons or routes. Dedicated JVM regression checks enforce this, and Day drawer stays on its original `#FF889198` role. The broader app-wide icon/color audit remains subject to actual affected call sites and screenshots, not indiscriminate whitening.
+
+
+### Mission 06 owner screenshots — Home-only toolbar seam / Night glass contrast
+
+The supplied Night Home screenshot shows a visibly charcoal `EveGlassToolbar` region above an otherwise pure-black Home canvas. The runtime root cause is `EveGlassToolbar.onPreDraw()` toggling shared `DesignGlassLayout.glassEnabled` on scroll, whose Night coating uses a translucent charcoal glass target. The previous Home-specific `drawHairline=false` removed the perimeter stroke but NOT the contrasting coating. The owner requested no contrasting line/strip or search-row flash: `MainActivity.setupTopBarDepth()` now opts the **Home** toolbar out of scroll-backed glass and keeps its background transparent in both Day/Night. `EveGlassToolbar.scrollBackdropEnabled` defaults **true** for every other screen, and the Home-only opt-out bypasses the view-tree scan and repeated blur controller toggles on each pre-draw. This is a documented EVE-specific canvas continuity accommodation, NOT a Telegram source-exact original ActionBar background. Search icons, status-bar insets, circular reveal and other screens' glass behavior remain unchanged; pixel/native verification is still required for final acceptance.
+
+
+### Mission 06 screenshot correction — original popup entrance without a second root fade
+
+In verified upstream `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`, `ActionBarPopupWindow.java:843-848,874-913`, Telegram calls `content.setAlpha(1.0f)` and animates background-only `backScaleY/backAlpha` and per-row alpha/translation for exactly `150+16*visibleCount` milliseconds. EVE had additionally faded the ENTIRE root `0.01f→1` during this same animation, multiplying background/row transparency and making the popup visibly slower than the approved source. The extra root fade has been removed; popup root alpha stays 1 while original background and row cascade animation/timing remain unchanged. The native theme-reveal interruption fixture now detects the genuine partially-grown `TelegramPopupSourceBackground.backScaleY/backAlpha` instead of checking the previously invented root fade, then executes the same real mid-animation action/cancellation checks. This is a verified source-fidelity correction; it does NOT assert exact full ActionBarPopupWindow layout parity or change the release/native gates.
+
+
+### Mission 06 screenshot correction — source-scoped Home search title overlap and relayout hitch
+
+Verified original `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335` `TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuItem.java:950-1031` creates a 150ms `AnimatorSet` for searchContainer versus menu **icon views only**. EVE had faded the entire `normalTopBar` (including the unrelated `EVE` / `Hi, …` Home title), leaving title text overlapping the search field for 150ms and changing header height only at the animation END. It now animates the `homeGlassToolbar` icon row against `searchTopBar`, while hiding/showing the EVE title row at transition initiation so no delayed title/text overlap remains. The exact original 150ms duration, alpha crossfade, cancellation/rapid-retap guards, focus/IME, reduced-motion, back, saved query, category filters, and remaining icons are retained. The Home title is an EVE-specific row outside original ActionBarMenuItem, so its immediate visibility is a **documented host-layout accommodation**, not a claim of byte-exact Telegram ActionBar hierarchy. No source timing guess or unrelated physics change was introduced. Tests enforce the icon-only crossfade and restoration sequence; final frame-pixel verification is still required.
+
+
+### Mission 06 screenshot correction — authentic normal ActionBar popup silhouette
+
+The initial source-backed Home popup atom used the real `popup_fixed_alert2.9.png` (correct for Telegram's optional menu `topView` background at `ActionBarMenuItem.java:815-825` or the default constructor). The owner reports that the resulting Home three-dot silhouette still differs from normal Telegram. The approved upstream `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`, `TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuItem.java:412-418` **specifically constructs a normal ActionBar menu using `popup_fixed_alert4`**, not alert2; the popup has no custom topView. The current `TelegramMenuPopup.applyOriginalMenuRoles()` now selects that exact original 9-patch via the previously verified four-density `telegram_dialog_popup_fixed_alert4.9.png` resource. It retains original `PorterDuff.Mode.MULTIPLY` submenu tint, 8dp layout insets, background-only scale/alpha, source ripple geometry and all seven actions. The old four `telegram_popup_fixed_alert2.9.png` resources had no remaining runtime consumer after this swap; they are deleted from current tree, while their original historical import remains transparently recorded in Git/old provenance sections. New menu JVM hash regression tests pin exact four official upstream alert4 blobs and bytes; dialog code also reuses the same authentic resources. This is a **verified upstream normal-menu background correction**, not a claim that EVE's full ActionBarMenuItem layout/gestures are byte-exact. GPL and source-delivery obligations remain intact.
+
+
+### Mission 06 screenshot correction — authentic popup density, dynamic width, motion curve, and dynamic contrast
+
+1. **Authentic row density and height**: Verified upstream `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335` `ActionBarMenuSubItem.java:62,126` uses `setPadding(dp(18), 0, dp(18), 0)` and `itemHeight = 48dp` (exact 48dp item height, 0dp top/bottom padding). Subitems have `minWidth = 196dp` and `height = 48dp` (`ActionBarMenuItem.java:2467,2475`). EVE's rows previously had 8dp top and 8dp bottom padding (16dp vertical padding per row, adding 112dp across 7 rows), which made the popup visually oversized. Setting `paddingTop="0dp"`, `paddingBottom="0dp"`, `minHeight="48dp"`, and `minWidth="196dp"` in `popup_telegram_menu.xml` restores authentic Telegram row density and 48dp row height while maintaining 48dp accessibility targets.
+2. **Dynamic popup width**: `TelegramMenuPopup` now measures content dynamically via `wrap_content` with a minimum item width of 196dp (matching `ActionBarMenuItem.java:2467` and `ActionBarPopupWindowLayout:205-245` `fitItems` behavior), bounded by display frame margins, replacing the hardcoded 250dp width.
+3. **Snappy entrance motion curve**: `TelegramPopupSourceMotion.kt` now applies `DecelerateInterpolator` on entrance and exit animators (matching `ActionBarPopupWindow.java:66,397`), ensuring the background growth and row cascade begin at peak velocity from frame 0 rather than easing in sluggishly.
+4. **Dynamic Night drawer contrast**: `TelegramThemeApplier` now explicitly handles `telegram_drawer_icon` and `telegram_type_primary`, ensuring dynamic Day/Night theme toggling mid-session preserves `#FFFFFFFF` (owner accessibility override on pure-black drawer) and `palette.textPrimary` without requiring an Activity restart.
+
+### Mission 11 original Telegram popup GapView shadow transplant (2026-10-30)
+
+- **Uploaded verified archive:** `Telegrammaster.zip`, SHA-256 `4b65e10b8fc63b4cbcb7377026a5da470782547fc0c0575bf0b71da676028c10` (matching documented immutable Telegram snapshot `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`).
+- **Upstream source:** `TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarPopupWindow.java:1110-1139` and `Theme.java:8910-8916`. The popup divider uses a themed `GapView`, a 6dp gap and `greydivider.9.png` shadow with PorterDuff MULTIPLY. The Day separator is `ThemeColors.java:206` `#FFF5F5F5`; night is `assets/night.attheme:108` `#FF1E1E1F`. Shadow tint is `ThemeColors.java:134` black.
+- **Byte-exact original assets, renamed only:** `drawable-{mdpi,hdpi,xhdpi,xxhdpi}/greydivider.9.png` to `telegram_menu_greydivider.9.png` in matching qualifiers. Original source SHA-256 values, in order: `08fcaed4891c9dec8cd9774df438d5e367419886bb0a9b867f0c7eb8ff89df8b`, `84f8905c4e97c8eefb64d6c5d88b9d8790e9ea4e254202cd06d8ac5eb6cfbb15`, `daf5731b3290361fa2bfa4fc7fe934dace0d8018cc270bf9e32b36d153978d58`, `bcb4e022907ef3a3a23235a26a1ea230db37ce438966961282868de88a3300e2`. Tested by `HomePopupSectionGapTest.kt`.
+- **EVE mapping:** `TelegramPopupGapView.kt` adapts original `GapView.onDraw()` and `Theme.getThemedDrawable()` into EVE's existing PopupWindow XML host. The original nine-patch bytes, 6dp size, themed separator colors and shadow MULTIPLY operation are EXACT. The overall popup host remains ADAPTED, not Telegram's full ActionBarPopupWindow system.
+- **Copyright/license:** Telegram Android contributors including Nikolai Kudashov, GNU GPL v2 or later per the upstream Java header; original root LICENSE is GPL v2. Retain this attribution, exact sources and existing fail-closed distribution-compatibility checks. No Telegram network/auth/service code or credentials are imported.
+
+### Mission 11 — native Telegram message-confirmation port (ADAPTED)
+
+Owner-verified `Telegrammaster.zip` SHA-256 `4b65e10b8fc63b4cbcb7377026a5da470782547fc0c0575bf0b71da676028c10`; upstream `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`. `TelegramNativeAlertDialog.kt` is a GPL-2.0-or-later derived EVE-only port of `ActionBar/AlertDialog.java:302-318,489-504,809-821,920,1137-1215`; `Theme.Eve.TelegramNativeDialog` uses original `res/values/styles.xml:143-157` floating, translucent no-title window attributes. Copyright Nikolai Kudashov 2013–2018. The source-isolated EVE dialog host now covers the EVE-owned message, confirmation, list-item, EVE-adapted single-choice, custom-form, destructive action, and inline-progress-dialog uses in Settings, exam/test/results, Home, Profile, admin operations and debug crash trace UI. EVE callbacks, Firebase authentication, server-authoritative scoring, admin authorization and private crash storage remain EVE-only. Original Telegram source-derived backgrounds, width math, 50dp list-row atoms, typography and button roles are mapped where supported; integration, radio-choice confirmation, EVE touch-target and permission behaviors are ADAPTED. This port is NOT Telegram's dependency-complete renderer: upstream native blur, rich-emoji/account-specific, network-bound, advanced progress and animation branches are not claimed EXACT. Native emulator/runtime and visual acceptance must be recorded separately; an Android FAST build is not proof of pixel or animation parity. Retain upstream notices, corresponding-source obligations and production release compliance gates; no blanket distribution clearance is asserted.
+
+### Mission 11 — source-derived native inline loading spinner (ADAPTED)
+
+`TelegramNativeSpinnerDialog.kt` is an EVE-only port of `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`, `ActionBar/AlertDialog.java:329-336,371-375,901-915` (Nikolai Kudashov, GPL-2.0-or-later). Upstream spinner dimensions 86dp, 18dp radius, 32dp spinner size, 190ms and `OvershootInterpolator(1.3f)` are retained. The EVE existing `TelegramRadialProgressView` is an adapted upstream component, and the inline-progress background role, blur and remote-loading behavior are **not** claimed source-exact. No Telegram account/service dependencies were imported. This new class is not yet migrated to every EVE progress dialog; production distribution/combined-work compatibility remains under existing release compliance gates.
+
+### Mission 01 — official Telegram profile page, switch, and action assets (ADAPTED & EXACT)
+
+Under Mission 01 authorization:
+- **Upstream source archive:** `Telegrammaster.zip` SHA-256 `4b65e10b8fc63b4cbcb7377026a5da470782547fc0c0575bf0b71da676028c10` (matching official commit `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`).
+- **Verbatim imported assets (EXACT):**
+  - `TMessagesProj/src/main/res/drawable-{mdpi,hdpi,xhdpi,xxhdpi}/ic_ab_done.webp` imported as `ic_ab_done.webp` across all 4 densities:
+    - mdpi: `bd423d9161de653c4b8658f2abcd2d4c974976ff79d653274c3c34ab2abbba31`
+    - hdpi: `7d64c482d47741d2143db109e4024c166fd2aaf025f32c9f9524456c0c6c270c`
+    - xhdpi: `480afa50bf24da4c60c2b9db3a2b1b6cb59cf4232b0d6eafb6e1976ce8e95ab3`
+    - xxhdpi: `78bce3757bb9a9922ff52a3f4b181e96122367e7e1f2bc22dd59cb6a17702a51`
+  - `TMessagesProj/src/main/res/drawable/filled_profile_edit_24.xml` -> `app/src/main/res/drawable/telegram_profile_edit.xml`:
+    - SHA-256: `31a142ccdd2f7abca3fa54c7b173c14aeda16a0dd8d8979265d53c60a3c654ba` (EXACT)
+  - `TMessagesProj/src/main/res/drawable/filled_profile_photo.xml` -> `app/src/main/res/drawable/telegram_profile_photo.xml`:
+    - SHA-256: `25dd0210a22bd206b386a2777d62ba5e217a403e969e3acd12235cba9d5c9958` (EXACT)
+  - `TMessagesProj/src/main/res/drawable/filled_profile_settings.xml` -> `app/src/main/res/drawable/telegram_profile_settings.xml`:
+    - SHA-256: `56411bb903af5fa7df6d89e2b0fb97ef77fe7fd068240698175e1e668e78c3df` (EXACT)
+- **Adapted components (ADAPTED):**
+  - `TelegramSwitch.kt`: Ported from Telegram `Switch.java` (`TMessagesProj/src/main/java/org/telegram/ui/Components/Switch.java`), featuring authentic track/thumb geometry and animation:
+    - Track width: 31dp (`Switch.java:380`)
+    - Track height: 14dp (`Switch.java:383, 448`)
+    - Thumb backplate radius: 10dp / diameter 20dp (`Switch.java:381, 450`)
+    - Thumb inner radius: 8dp (`Switch.java:497`)
+    - Thumb travel distance: 17dp (`Switch.java:384`)
+    - Animation: 200ms `ObjectAnimator` on `"progress"` (`Switch.java:237-238`)
+    - Standalone cell layout bounds: 37x20dp (`TextCheckCell.java:126`)
+    - Day track off: `0xFFA6ADB3` (`ThemeColors.java:115` `defaultColors[key_switchTrack]`)
+    - Day track on: `0xFF229AF0` (`ThemeColors.java:14, 116` `TELEGRAM_COLOR`)
+    - Night track off: `0xFF606060` (`assets/night.attheme:31` `switchTrack=-10461088`)
+    - Night track on: `0xFF459CE3` (`assets/night.attheme:366` `switchTrackChecked=-12215069`)
+    - Thumb: `0xFFFFFFFF` (`Theme.key_windowBackgroundWhite`)
+  - `ProfileGooeyView.kt` and `NotchInfoUtils.kt`: Ported from `ProfileGooeyView.java` and `NotchInfoUtils.java` for API 31+ `RenderEffect` liquid camera collapse with CPU fallback. Note: `ProfileMetaballView.java` is obsolete upstream (commented out at `ProfileActivity.java:391`) and replaced by `ProfileGooeyView.java`.
+  - Profile and editing activities: `ProfileActivity.kt`, `ChangeNameActivity.kt`, `ChangeUsernameActivity.kt`, `ChangePhoneActivity.kt` adapting Telegram's profile structure, layout math, and edit workflows.
+- **Copyright/License:** Telegram Android contributors including DrKLO / Telegram FZ-LLC / Nikolai Kudashov. Upstream source is GNU GPL v2. EVE code is GPL-3.0-or-later. Upstream attribution and corresponding-source obligations are strictly preserved.
+
+## Home notification bell — owner-approved independent artwork
+
+The Home idle/fallback `ic_home_notification.xml` and animation
+`home_notification_bell.json` use the **MIT-licensed Tabler bell**, v3.49.0,
+[`bbed884d15354b5cebf2493371f20dc2d5e83eaf`](https://github.com/tabler/tabler-icons/tree/bbed884d15354b5cebf2493371f20dc2d5e83eaf),
+`icons/outline/bell.svg`. Copyright (c) 2020–2026 Paweł Kuna.
+Original SVG, full MIT license and conversion hashes are retained in
+`docs/sources/home-bell/`; the bundled MIT notice remains in
+`app/src/main/assets/licenses/Tabler-LICENSE.txt`.
+The Android vector conversion, cubic arc approximation and EVE-authored ringing
+motion are **ADAPTED**, not original Apple/iOS or Telegram artwork or animation.
+The owner explicitly approved an independent permissively licensed substitute
+in this mission after Apple's Android-use licensing limitation was established.
+Shared Telegram bell assets and historical EVE animation remain for unrelated
+notification inbox/reminder callers; Home no longer references them.
+
+## Telegram profile integration and EVE identity adapter
+
+Official source was re-authenticated through https://telegram.org/apps/android,
+which links `DrKLO/Telegram`; live HEAD and immutable GitHub tree/raw blobs pin
+`21f7d109da6ab3506c9e9577f98c6a38771ab335`.
+`docs/sources/profile-mission/source-map.json` records hashes and exact asset pairs.
+The QR toolbar glyph `outline_header_qr_24.xml` is imported unchanged as
+`telegram_profile_qr.xml` (SHA-256
+`ddaffe85034df6a6d52ff14f8dd9d307127d9486859146015bc66267c89c1255`).
+Telegram's root GPL v2 license applies to the asset; an asset-specific “or later”
+grant is not asserted. Existing distribution compatibility/release gates remain.
+
+`ProfilePullScrollView.kt` and `ProfileHeaderExpansion.kt` are GPL-v2-or-later
+source-derived EVE adapters of the cited `ProfileActivity.java` paths, whose Java
+header grants v2 or later (Nikolai Kudashov and Telegram contributors). Existing
+Gooey/action/icon/typography adapters and notices are retained. The complete screen,
+parent/viewer rendering, EVE navigation, accessibility sizing and data integration
+are ADAPTED, not a byte-exact Telegram subsystem or verified visual-equivalence claim.
+
+Username QR encoding uses ZXing Core 3.5.3 from
+https://github.com/zxing/zxing/tree/zxing-3.5.3 under Apache License 2.0;
+the full license ships in `app/src/main/assets/licenses/ZXing-LICENSE.txt`.
+The upstream project NOTICE is retained in `app/src/main/assets/licenses/ZXing-NOTICE.txt`,
+including the Barcode4J attribution relevant to bundled PDF417 encoder code.
+No Telegram identity, messaging, account service, credentials or network client is
+imported. The EVE-specific URI shares only a username and never establishes ownership.
+
+## Home reuse of the existing Notifications empty-state bell
+
+The owner's newer instruction replaces the Tabler Home artwork described above.
+Home now reuses `res/raw/notification_bell.json`'s existing paths and keyframes;
+`home_notification_bell.json` changes only canvas padding and root translation.
+The idle vector is a cubic-path conversion of frame zero, not a traced screenshot.
+The historical file entered this repository in commit
+`e9bad22a81ad5617dc2cca72a7f08583cb75e220`. Its embedded name is
+`Lottie Files_Icon_Notifications`; no author, original URL or asset-specific license
+was found in the file or introduction history. Repository GPL-3.0 does not by
+itself establish the original contributor's rights to this asset. External origin
+and asset-specific redistribution permission remain UNKNOWN; no Apple, Telegram
+or Tabler provenance is claimed for this artwork. No new external asset was copied.
+Retain this limitation for release review and obtain original provenance before
+claiming asset licensing clearance.
+
+## Profile regression repair — official normal ActionBar popup and grouped sections
+
+Pinned upstream: `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`
+(official 13.1.1 HEAD rechecked through Git and immutable GitHub objects).
+See `docs/sources/profile-mission/regression-source-map.json` for authenticated
+source hashes and eight unchanged static menu asset pairs across four densities.
+`menu_username_change.webp` / `msg_link2.webp` are renamed with a `profile_` prefix.
+These assets have the upstream root GPL v2 license; no asset-specific later-version
+grant is asserted.
+
+`ui/profile/popup/ActionBarPopupWindow.java`, `PopupSwipeBackLayout.java`,
+`CubicBezierInterpolator.java`, `Easings.java`, the static-icon selection from
+`ActionBarMenuSubItem.java`, and extracted `AndroidUtilities`, `LayoutHelper`,
+`Theme.RippleRadMaskDrawable` / `BaseCell.RippleDrawableSafe` methods are adapted
+from the authenticated official files. Java headers in ActionBarPopupWindow,
+AndroidUtilities, LayoutHelper, Theme and BaseCell retain the GPL v2-or-later
+permission (Copyright Nikolai Kudashov, 2013–2018). Files without a per-file grant
+remain covered by the root GPL v2 evidence only; do not infer a later-version grant.
+The original attributed source and modifications must accompany any distribution
+as applicable. Existing combined-work release compliance gates remain unchanged.
+
+EVE isolates package/resource/theme/density/identity/destination adapters. Telegram
+account selection, account notification locking, downloaded emoji/image/check-box
+menu variants, and the unused Telegram menu slider type are excluded. The actual
+normal popup renderer and swipe-back measurement/drawing parent remain included.
+No Telegram authentication, messaging, service calls or credentials enter EVE.
+
+`TelegramProfileSection.kt` adapts `RecyclerListView.setSections()` and
+`drawBackgroundRect()` to fixed EVE groups: 12dp outside margin, 16dp section radius,
+no Material card content padding/elevation/state animator, upstream optional shadow
+paint values with the upstream default disabled. Category and Daily Practice
+Reminder are EVE business rows in one section, explicitly ADAPTED. Entire-screen
+visual parity and the complete ProfileActionsView / QrShareView subsystems are not
+asserted by these imports. See `docs/PROFILE_REGRESSION_REPAIR.md` for boundaries.
+
+The profile popup's legacy private PopupWindow listener interception and private
+layout-in-screen reflection are removed for EVE target API 36 compatibility.
+Public platform anchor tracking owns attachment/scroll/detachment on EVE minSdk 24+;
+public layout-in-screen API is used only on API 29+. This is an ADAPTED platform
+boundary; it does not change the source popup drawing/animation bodies. AOSP API
+24/API 36 implementation was inspected as evidence, not copied. See the forward
+repair section of `docs/PROFILE_REGRESSION_REPAIR.md` and its original failed FULL
+run. No lint/release safeguard is suppressed.
+
+
+### Telegram personal QR control icons (2026-11-01 internal development)
+
+Official origin: \`https://github.com/DrKLO/Telegram\`, full revision
+\`21f7d109da6ab3506c9e9577f98c6a38771ab335\`.
+Copied unchanged from \`TMessagesProj/src/main/res/drawable-{mdpi,hdpi,xhdpi,xxhdpi}/\`
+for \`msg_close.webp\`, \`msg_qr_scan.webp\`, \`msg_share.webp\`,
+\`msg_download.webp\` into EVE \`eve_qr_close.webp\`, \`eve_qr_qr_scan.webp\`,
+\`eve_qr_share.webp\`, \`eve_qr_download.webp\` (16 byte-identical files,
+corresponding density qualifiers). Source and imported Git blobs match. See
+\`docs/PROFILE_REGRESSION_REPAIR.md\` for source-based static QR adaptation.
+Telegram root LICENSE contains GNU GPL v2; rights to each asset and combined
+GPLv3-EVE redistributability are not assumed. This does not authorize
+production distribution; the fail-closed release approval remains mandatory.
+
+### EVE local QR adaptation and camera scanner (2026-11-01)
+
+Upstream reference: official DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335, verified attached archive SHA-256 4b65e10b8fc63b4cbcb7377026a5da470782547fc0c0575bf0b71da676028c10. EVE implementation SHAs: UI 35a7533fbed68a3438643874af82ce86dee18427 and scanner 5b8b40f5be8296c2d2a4efd6b3963726eac858b5.
+
+EVE's newly authored `TelegramQrMotion.kt`, modified `TelegramQrSceneView.kt` and `EveQrLiveScannerActivity.kt` are adaptations of publicly observable Telegram QR motion and layout parameters. They are **not** verbatim imports or source-identical implementations of the original QR rendering hierarchy. The reference parameters include opening 860ms / closing 200ms, scan overlay open 390ms / close 330ms, QR assembly 380ms, theme transition 600ms and the source-described spring/rubber/glide mechanics. Selected palette RGB values are source-referenced data from `ui/QrShare/Backdrops.java`; the drawing implementation is EVE-authored. See `docs/EVE_TELEGRAM_QR_UI_SOURCE_MAP.md`.
+
+The EVE QR encodes `eve-mock-test://username/...` and only handles local EVE deep links. Telegram accounts, MTProto credentials, paid-message tokens, server gifts/themes and custom Telegram media are not imported. The CameraX/ZXing pipeline scans frames and gallery images locally and requires an explicit camera permission request.
+
+**Production distribution not cleared:** the reference archive's root license is GPL v2. Individual source and palette/asset grants, EVE's GPLv3 combination, Android dependencies, notice/source-delivery obligations and matching signed APK inspection require review. The release approval gate remains unchanged. A successful build, a source SHA comparison or public repository availability does not satisfy this review.
+
+### EVE QR animated-emoji renderer (2026-11-01)
+
+- QR feature reference: `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`, `TMessagesProj/src/main/java/org/telegram/ui/QrShare/QrShareView.java:175,972-992,3171-3233,3239-3269,3369-3407` and `QrEmojiPanel.java:56-95`. Root Telegram LICENSE is GPL version 2; source-specific grants and combined-app redistribution compatibility remain under review.
+- `app/src/main/java/com/eve/app/ui/profile/QrEmojiPattern.kt` contains source-derived numeric placement/selection behavior, including a deterministic hash and six-selection cap. `TelegramQrSceneView.kt` renders EVE-hosted animated Lottie content with an ADAPTED canvas field. `UsernameCardActivity.kt` hosts EVE's own picker; no Telegram account/network API or proprietary credentials are imported.
+- EVE's authenticated read-only endpoint `/api/emoji/items/public` lists only enabled animated assets, with disabled-pack and global-source switch enforcement. Admin-only write endpoints remain restricted. Current user-facing QR themes are free; no paid messaging or collectible gifts are represented as working.
+- No source-exact or pixel-identical QR acceptance is claimed. The production release GPL gate and `EVE_GPL_RELEASE_APPROVED` safeguard remain unchanged.
+
+### Original native QR backdrop and Java scene subsystem (2026-11-02 development)
+
+Official `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`,
+`TMessagesProj/jni/image.cpp:1211-1377`, is isolated as
+`app/src/main/cpp/telegram_qr_backdrop.cpp` and compiled in C++ into
+`libeve_qr_backdrop.so`. Original gradient, circular-wave antialiasing and
+premultiplied glowing-ring algorithms remain; the JNI name, minimal headers and
+allocation-failure cleanup are adaptations. No unrelated image/account/network
+subsystem is included. `QrBackdropNative.java` supplies a bounded EVE JNI adapter.
+
+Original Java from `QrShareView.java:124-134,685-724,1534-1575,2095-2121,
+2140-2175,2260-2426,3573-3806,4533-4583` and transition driving from
+`QrShareActivity.java:819-848` are extracted/adapted into `QrBackdropScene.java`,
+`QrCardShadow.java`, `QrCardMotion.java`, `QrSceneReveal.java` and the existing EVE scene/control hosts.
+They retain their original implementation languages. EVE supplies view ownership,
+public username payloads, existing bounded animated assets, lifecycle, reduced
+motion and Activity integration. The old Kotlin reveal-math copy delegates to the
+canonical extracted Java equations. The complete Telegram QR screen is not EXACT.
+
+Telegram contributors retain the original rights. The upstream root LICENSE is
+GPL version 2; no absent per-file later-version grant or redistribution clearance
+is assumed. Existing combined-app/license review and production release-compliance
+gates remain OPEN and unchanged. Corresponding derived source, source identities,
+precise adaptations, test limitations and license dependencies are recorded in
+`docs/qr-native-upstream-manifest.json` and `docs/QR_SCENE_NATIVE_SOURCE_MAP.md`.
+The C++ host bitmap API shim is EVE test infrastructure, excluded from APKs.
+
+
+## Telegram QR scan-found outline Java adaptation — 2026-11-02
+
+app/src/main/java/com/eve/app/telegram/qr/QrScanFound.java adapts the
+original Java QrScanOverlay.java:108-112,346-355,700-782,994-1011,
+1040-1063, official DrKLO/Telegram revision
+21f7d109da6ab3506c9e9577f98c6a38771ab335. Telegram contributors
+retain copyright. Root Telegram GPLv2/per-file and combined EVE APK
+redistribution obligations require independent legal review; source
+adaptation and green development builds grant no production clearance.
+
+## Telegram scanner live camera glass — 2026-11-02
+
+`QrCameraBackdrop.java` ADAPTS original Java from official
+DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335,
+`messenger/camera/CameraView.java:1012-1035,1096-1106` and
+`ui/QrShare/QrScanOverlay.java:517-546,804-879` (under
+TMessagesProj/src/main/java/org/telegram). `QrScannerGlass.java`
+adapts the latter's source white fill, fallback, sheen and rim.
+EVE's Kotlin CameraX host records only its preview layer, replacing Telegram's
+camera/account infrastructure; Android power-save replaces LiteMode.
+Telegram contributors retain copyright; root GPLv2/per-file and combined-app
+redistribution review remains OPEN. No production release approval is implied.
+See docs/QR_SCANNER_CAMERA_GLASS_SOURCE_MAP.md and the native source manifest.
+
+## Telegram QR ready-item appearance — 2026-11-02
+
+`QrEmojiAppearance.java` ADAPTS original Java from official
+DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335,
+QrShareView.java:1015-1016,3171-3180,3187-3192,3245-3250,3281-3304.
+Original timestamps, seeded appearance and backOut are integrated through EVE
+owned native frames; Telegram ImageReceiver/account/document services are excluded.
+Telegram contributors retain copyright. Root GPLv2/per-file and combined-app
+release obligations remain OPEN; production clearance is not inferred. See
+QR_EMOJI_APPEARANCE_SOURCE_MAP.md and the recorded source manifest.
+
+## Telegram QR card/caption and source font — 2026-11-02
+
+QrCardLayout.java and QrCardCaption.java ADAPT original Java from official
+DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335,
+QrShareView.java:1879-1881,2046-2061,3858-3892,4060-4109, with extracted
+SettingsSearchCell.java:40-79 and StaticLayoutEx.java:56-145. Telegram
+contributors / Nikolai Kudashov retain their notices; root GPLv2 and these
+per-file GPLv2-or-later notices apply. The exact-byte renamed qr_at glyphs
+and rcondensedbold.ttf identities are in the native upstream manifest.
+The font retains embedded Copyright 2011 Google Inc. All Rights Reserved;
+it has no embedded license name IDs13/14. No new font redistribution clearance
+is inferred: font-specific and combined-app human legal review remain OPEN,
+with the existing release gate unchanged. See docs/QR_CARD_CAPTION_SOURCE_MAP.md.
+
+## Telegram scanner source controls — 2026-11-02
+
+QrScannerLayout.java and QrScannerControl.java ADAPT original Java from official
+DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335,
+QrScanOverlay.java:328-350,579-599,689-701,770-802,867-920. BackDrawable.java
+retains the original Java and GPLv2-or-later header, Copyright Nikolai Kudashov
+2013-2018, with mechanical package/unit provider adaptations. Telegram contributors
+retain copyright under the root/per-file terms. Eight renamed qr_flashlight and
+qr_gallery assets match source bytes; existing telegram_roboto_medium.ttf matches
+rmedium.ttf at the current pin. No new font is introduced by this batch. Source
+identity, dependency scope and runtime limitations: QR_SCANNER_CONTROLS_SOURCE_MAP.md
+and native upstream manifest. Human combined-app release review remains OPEN.
+
+## Telegram username status theme roles — 2026-11-02
+
+The existing `TelegramColorRoles.kt` / `TelegramThemeEngine.kt` and adapted
+`ChangeUsernameActivity.kt` use official `DrKLO/Telegram` revision
+`21f7d109da6ab3506c9e9577f98c6a38771ab335`, `ActionBar/ThemeColors.java:94,96,106`,
+`ChangeUsernameActivity.java:1205-1353` and `assets/night.attheme:145,178,425`.
+Exact file SHA-256 and scalar provenance are in
+`docs/color-migration/source-role-contract.json`. Original Telegram contributors
+retain copyright; ChangeUsernameActivity carries its GPL-2.0-or-later notice,
+while ThemeColors has no separate header grant and remains subject to upstream
+root LICENSE and combined-work review. EVE applies its existing contrast policy,
+localized native labels and EVE's five-character backend contract: ADAPTED, not
+an exact Telegram screen. No Telegram accounts/network imported. Distribution
+review and `EVE_GPL_RELEASE_APPROVED` remain unapproved; this notice grants no
+combined APK redistribution clearance.
+
+## Telegram square checkbox and selection geometry — 2026-11-06
+
+- `app/src/main/java/com/eve/app/ui/common/TelegramCheckBoxSquare.kt`:
+  Ported from Telegram `CheckBoxSquare.java` (`TMessagesProj/src/main/java/org/telegram/ui/Components/CheckBoxSquare.java:24-193`),
+  Copyright Nikolai Kudashov 2013-2018, GNU GPL v2 or later.
+  Official revision: `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`.
+  - Box dimensions: 18x18dp (`CheckBoxSquare.java:62`)
+  - Corner radii: 4dp outer roundRect, 3dp inner clear cutout (`CheckBoxSquare.java:168, 173`)
+  - Checkmark vertex: (7dp, 13dp) with 3dp left wing and 7dp right wing (`CheckBoxSquare.java:180-186`)
+  - Motion: 300ms ObjectAnimator with bounce progress curve (`CheckBoxSquare.java:96, 150-158`)
+- Drawables:
+  - `ic_checkbox_checked.xml`: Derived from Telegram `TMessagesProj/src/main/res/drawable/iv_checkbox_on.xml`
+  - `ic_checkbox_unchecked.xml`: Derived from Telegram `TMessagesProj/src/main/res/drawable/iv_checkbox_off.xml`
+  - `ic_target_exam_checked.xml`, `ic_check_circle.xml`: Derived from Telegram `CheckBoxBase.java:631-646` round checkmark geometry
+
+## Telegram theme selector and round-rect ripple geometry — 2026-11-06
+
+- `app/src/main/java/com/eve/app/designsystem/TelegramThemeSelectors.kt`:
+  Ported from Telegram `Theme.java` (`TMessagesProj/src/main/java/org/telegram/ui/ActionBar/Theme.java:4798-4850, 4856-4875`),
+  Copyright Nikolai Kudashov 2013-2018 / Telegram Android contributors, GNU GPL v2 or later.
+  Official revision: `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`.
+  - Methods: `getRoundRectSelectorDrawable`, `getSelectorDrawable`, and `getCircleSelectorDrawable`.
+  - Ripple calculation: `(color & 0x00FFFFFF) | 0x19000000` (Telegram's canonical 10% alpha ripple).
+  - Mask: `GradientDrawable` with configurable corner radius or rectangular mask.
+  - Replaces obsolete Android framework `android.R.drawable.list_selector_background` across the entire codebase.
+
+## Telegram vector drawables port — 2026-11-06
+
+Ported official vector drawables from `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`,
+TMessagesProj resources, Copyright Telegram Android contributors, GNU GPL v2 or later:
+- `app/src/main/res/drawable/ic_timer.xml`: Ported from `TMessagesProj/src/main/res/drawable/filled_poll_deadline_24.xml` (official Telegram poll deadline/stopwatch timer).
+- `app/src/main/res/drawable/ic_warning.xml`: Ported from `TMessagesProj/src/main/res/drawable/warning_sign.xml` (official Telegram warning sign vector).
+- `app/src/main/res/drawable/ic_message_dots.xml`: Ported from `TMessagesProj/src/main/res/drawable/menu_comments.xml` (official Telegram comments/discussion bubble).
+- `app/src/main/res/drawable/ic_campaign.xml`: Ported from `TMessagesProj/src/main/res/drawable/menu_topic_add.xml` (official Telegram topic/post creation icon).
+- `app/src/main/res/drawable/ic_star_bookmark_filled.xml`: Ported from `TMessagesProj/src/main/res/drawable/outline_saved_24.xml` (official Telegram Saved Messages ribbon).
+- `app/src/main/res/drawable/ic_visibility.xml`: Ported from `TMessagesProj/src/main/res/drawable/filled_poll_view_24.xml` (official Telegram poll view/eye icon).
+- `app/src/main/res/drawable/ic_status_circle_unattempted.xml`, `ic_status_circle_right.xml`, `ic_status_circle_wrong.xml`, `illustration_empty_all_caught_up.xml`: Derived from Telegram `CheckBoxBase.java:631-646` round checkmark and circular stroke geometry.
+- `app/src/main/res/drawable/ic_maintenance.xml`: Ported from `TMessagesProj/src/main/res/drawable/outline_profile_settings.xml` (official Telegram profile settings and operational config gear).
+- `app/src/main/res/drawable/ic_trophy.xml`: Ported from `TMessagesProj/src/main/res/drawable/filled_rating_crown.xml` (official Telegram leaderboard rating crown).
+- `app/src/main/res/drawable/ic_syllabus.xml`: Ported from `TMessagesProj/src/main/res/drawable/dialog_media_checklist_20.xml` (official Telegram checklist media icon).
+- `app/src/main/res/drawable/ic_account_balance.xml`: Ported from `TMessagesProj/src/main/res/drawable/filled_card_add.xml` (official Telegram payment card vector).
+- `app/src/main/res/drawable/ic_performance_increase.xml`: Ported from `TMessagesProj/src/main/res/drawable/mini_stats.xml` (official Telegram analytics/stats bar chart).
+- `app/src/main/res/drawable/ic_image.xml`: Ported from `TMessagesProj/src/main/res/drawable/outline_profile_photo.xml` (official Telegram profile photo/camera vector).
+- `app/src/main/res/drawable/ic_save.xml`: Ported from `TMessagesProj/src/main/res/drawable/mini_checklist_done.xml` (official Telegram checklist done/save icon).
+- `app/src/main/res/drawable/ic_bug_report.xml`: Ported from `TMessagesProj/src/main/res/drawable/report.xml` (official Telegram report badge icon).
+- `app/src/main/res/drawable/ic_leaderboard_star.xml`: Ported from `TMessagesProj/src/main/res/drawable/star.xml` (official Telegram star vector).
+- `app/src/main/res/drawable/ic_topic.xml`: Ported from `TMessagesProj/src/main/res/drawable/settings_folders.xml` (official Telegram folder/topic vector).
+- `app/src/main/res/drawable/ic_visibility_off.xml`: Derived from `TMessagesProj/src/main/res/drawable/filled_poll_view_24.xml` and `_menu_stream_comments_off_24.xml` (official Telegram visibility eye and diagonal slash geometry).
+- `app/src/main/res/drawable/ic_description.xml`: Ported from `TMessagesProj/src/main/res/drawable/iv_list.xml` (official Telegram document/checklist vector).
+- `app/src/main/res/drawable/ic_exam_placeholder.xml`: Ported from `TMessagesProj/src/main/res/drawable/dialog_media_checklist_20.xml` (official Telegram checklist badge).
+- `app/src/main/res/drawable/ic_flag.xml`: Ported from `TMessagesProj/src/main/res/drawable/report.xml` (official Telegram report vector).
+- `app/src/main/res/drawable/ic_pyq.xml`: Ported from `TMessagesProj/src/main/res/drawable/iv_ordered_list.xml` (official Telegram numbered/ordered list vector).
+
+## Telegram Poll Percentage Normalization — 2026-11-07
+
+`app/src/main/java/com/eve/app/data/model/Poll.kt` adapts the `normalizePollPercents` algorithm from official source `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`, `TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java` (lines 29518-29547). Copyright Telegram Android contributors, GNU GPL v2 or later.
+
+
+
+
+
+## Telegram profile photo menu, camera, editor and rejection feedback — 2026-11-12
+
+Official source: `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`
+(version 13.1.1/7237), archive SHA-256
+`4b65e10b8fc63b4cbcb7377026a5da470782547fc0c0575bf0b71da676028c10`.
+Telegram contributors including Nikolai Kudashov retain copyright. The Java
+headers grant GNU GPL v2 or later; the upstream root `LICENSE` is GPLv2.
+Combined-work production distribution review remains OPEN and unchanged.
+
+- `app/src/main/java/com/eve/app/ui/profile/ProfilePhotoMenu.kt` is a
+  source-derived Kotlin host for `ImageUpdater.java:253-332` menu composition
+  and `BottomSheet.java:1040-1145,1400-1432` title/cell geometry. It retains the
+  source order (`Take photo`, `Upload from gallery`, conditional
+  `Remove photo`), 48dp title/rows, 56dp icon column, 20sp bold title, 16sp
+  labels, 72dp text start, and destructive text/icon roles
+  (`text_RedBold`/`text_RedRegular`). EVE's Material bottom-sheet host and theme
+  palette replace Telegram's `BottomSheet` window/host; this is ADAPTED, not a
+  complete `BottomSheet` renderer or drag-physics port.
+- `ProfileActivity.kt` camera/gallery/removal wiring mirrors
+  `ImageUpdater.java:650-760,817-830`: CAMERA permission, system
+  `ACTION_IMAGE_CAPTURE` through `ActivityResultContracts.TakePicture` and a
+  FileProvider cache URI, image preview/save through EVE's existing
+  authenticated local-photo pipeline, and direct removal from the source action
+  menu. `util/ExifTransform.kt` ports
+  `AndroidUtilities.java:6269-6320`'s eight-value EXIF `(rotation, invert)`
+  mapping and the `PhotoViewer.java:11350-11366` rotate-then-mirror matrix
+  order; `ProfilePhotoManager.savePhoto` bakes that orientation into a single
+  up-to-800×800 quality-80 JPEG, matching `ImageUpdater.java:845-855`'s export size
+  and quality while retaining EVE's one-local-file avatar contract. Decode is
+  sampled to keep at least 800 px on the shorter side so full-resolution camera
+  images do not create an avoidable memory spike; intermediate bitmaps are
+  recycled, and the completed JPEG is renamed over the prior avatar only after
+  compression succeeds. Telegram account photo services are not imported. Photo
+  persistence remains UID-scoped, device-local EVE data.
+- `app/src/main/java/com/eve/app/ui/profile/AvatarCropGeometry.kt`,
+  `AvatarCropView.kt`, `AvatarCropActivity.kt` and
+  `res/layout/activity_avatar_crop.xml` adapt
+  `PhotoCropActivity.java:40-360` (`PhotoCropView`) and the
+  `ImageUpdater.java:592-646,845-930` crop result/export handoff: fitted bitmap,
+  centered square, drag-to-move, four corner resizes, 80 % scrim, 2 dp border,
+  corner handles, rule-of-thirds grid, source dark/white colours, and an
+  up-to-800×800 quality-80 cache JPEG adopted by one atomic copy. EVE maps x/y
+  source coordinates independently (the upstream `getBitmap` divisor uses
+  bitmap width for both axes) and does not port rotate, freeform crop, video
+  avatar recording, or the PhotoViewer avatar-constructor transition. This is
+  ADAPTED, and combined-work distribution review remains OPEN.
+- `app/src/main/java/com/eve/app/ui/profile/ChangeBioActivity.kt` and
+  `CodepointsLengthInputFilter.kt` adapt `ChangeBioActivity.java:88-180,200-252`
+  and `CodepointsLengthInputFilter.java:7-30`: 18 sp input, 36 dp minimum,
+  four-line maximum, Unicode code-point limit, IME Done, trailing-newline Done,
+  newline stripping on save, unchanged-value close, and source rejection
+  feedback (`AndroidUtilities.shakeView`, `AndroidUtilities.java:3489-3512`,
+  plus `Vibrator.vibrate(200)`). EVE keeps its backend's 160-code-point
+  contract instead of Telegram's 70/140 service limits and disables the field
+  during the authenticated save; this is ADAPTED.
+- `ChangeUsernameActivity.kt` adapts `ChangeUsernameActivity.java:790-800,
+  1196-1300,1360-1466`: IME Done, unchanged-handle close, local character rules,
+  and `shakeIfOff` spring shakes plus the `APP_ERROR` vibration. EVE keeps its
+  Worker's 5–32 character username contract; clearing to empty is blocked by
+  that existing backend contract.
+- `ChangeNameActivity.kt` adapts `ChangeNameActivity.java:45-230`: IME Done,
+  unchanged-name no-write, and focus/keyboard behavior. EVE's single display-name
+  field and 1–100 character backend contract replace Telegram's separate
+  first/last fields; this is ADAPTED.
+- `app/src/main/java/com/eve/app/util/TelegramShake.kt` ports
+  `AndroidUtilities.java:3489-3554` (`shakeView` and `shakeViewSpring`).
+  `VibrationHelper.vibrateAppError` ports
+  `BotWebViewVibrationEffect.java:18` `APP_ERROR`
+  (30/10/150/10ms at amplitudes 0/100/0/100, fallback 40/60/40/60/65/60/40).
+- Byte-identical assets imported unchanged from
+  `TMessagesProj/src/main/res/drawable-{mdpi,hdpi,xhdpi,xxhdpi}/msg_photos.webp`
+  and `drawable-xxhdpi/msg_delete.png` as `msg_photos.webp` and
+  `ic_delete.png`; SHA-256 values are recorded in
+  `docs/telegram-verbatim-imports.json`. The source assets carry the upstream
+  root GPLv2 terms; no asset-specific later-version grant is asserted.
+
+No Telegram account, authentication, MTProto, messaging, media service,
+telemetry or network endpoint is imported or contacted by these components.
+

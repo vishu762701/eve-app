@@ -1,0 +1,288 @@
+<?xml version='1.0' encoding='utf-8'?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/loginRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:clipToPadding="false"
+    android:clipChildren="false"
+    style="@style/Widget.Eve.Token.Screen">
+
+    <ScrollView
+        android:id="@+id/scrollView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:fillViewport="true"
+        android:overScrollMode="ifContentScrolls"
+        android:scrollbars="none"
+        android:clipToPadding="false"
+        android:clipChildren="false"
+        android:paddingLeft="@dimen/telegram_login_outer_margin"
+        android:paddingRight="@dimen/telegram_login_outer_margin"
+        android:paddingBottom="0dp"
+        style="@style/Widget.Eve.Token.Scroll">
+
+        <FrameLayout
+            android:id="@+id/contentLayout"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:clipChildren="false"
+            style="@style/Widget.Eve.Token.Column">
+
+            <LinearLayout
+                android:id="@+id/cardLogin"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_vertical"
+                android:layout_marginTop="30dp"
+                android:orientation="vertical"
+                android:clipChildren="false"
+                android:clipToPadding="false"
+                style="@style/Widget.Eve.Token.Column">
+
+                <FrameLayout
+                    android:id="@+id/avatarContainer"
+                    style="@style/Widget.Eve.Token.Column"
+                    android:layout_width="78dp"
+                    android:layout_height="78dp"
+                    android:layout_gravity="center_horizontal"
+                    android:layout_marginBottom="16dp"
+                    android:clipChildren="false"
+                    android:clipToPadding="false"
+                    android:visibility="gone">
+
+                    <ImageView
+                        android:id="@+id/ivLoginEmblem"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:background="@drawable/design_avatar_surface"
+                        android:clipToOutline="true"
+                        android:scaleType="centerInside"
+                        android:padding="20dp"
+                        android:src="@drawable/telegram_profile_photo"
+                        app:tint="@color/telegram_type_primary"
+                        android:contentDescription="Registration profile photo" />
+                </FrameLayout>
+
+                <TextView
+                    android:id="@+id/tvTagline"
+                    style="@style/TextAppearance.Eve.Telegram.LoginTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="0dp"
+                    android:layout_marginHorizontal="32dp"
+                    android:gravity="center"
+                    android:lineSpacingExtra="2dp"
+                    android:text="Prepare for your next exam" />
+
+                <TextView
+                    android:id="@+id/tvSubtitle"
+                    style="@style/TextAppearance.Eve.Telegram.LoginSubtitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/design_card_gap"
+                    android:layout_marginHorizontal="32dp"
+                    android:gravity="center"
+                    android:lineSpacingExtra="2dp"
+                    android:text="Sign in to keep your mock tests and results in sync." />
+
+                <com.eve.app.designsystem.TelegramOutlineEditText
+                    android:id="@+id/tilName"
+                    style="@style/Widget.Eve.Token.TextInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="20dp"
+                    android:layout_marginBottom="@dimen/design_screen_margin"
+                    android:hint="Full name"
+                    android:visibility="gone">
+
+                    <com.eve.app.designsystem.TelegramEditText
+                        android:id="@+id/etName"
+                        style="@style/Widget.Eve.Token.Input"
+                        android:layout_width="match_parent"
+                        android:layout_height="@dimen/design_input_height"
+                        android:inputType="textCapWords"
+                        android:imeOptions="actionNext"
+                        android:maxLines="1" />
+                </com.eve.app.designsystem.TelegramOutlineEditText>
+
+                <com.eve.app.designsystem.TelegramOutlineEditText
+                    android:id="@+id/tilEmail"
+                    style="@style/Widget.Eve.Token.TextInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="20dp"
+                    android:layout_marginBottom="@dimen/design_screen_margin"
+                    android:hint="Email">
+
+                    <com.eve.app.designsystem.TelegramEditText
+                        android:id="@+id/etEmail"
+                        style="@style/Widget.Eve.Token.Input"
+                        android:layout_width="match_parent"
+                        android:layout_height="@dimen/design_input_height"
+                        android:inputType="textEmailAddress"
+                        android:imeOptions="actionNext"
+                        android:maxLines="1" />
+                </com.eve.app.designsystem.TelegramOutlineEditText>
+
+                <com.eve.app.designsystem.TelegramOutlineEditText
+                    android:id="@+id/tilPassword"
+                    style="@style/Widget.Eve.Token.TextInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="Password"
+                    app:endIconMode="password_toggle">
+
+                    <com.eve.app.designsystem.TelegramEditText
+                        android:id="@+id/etPassword"
+                        style="@style/Widget.Eve.Token.Input"
+                        android:layout_width="match_parent"
+                        android:layout_height="@dimen/design_input_height"
+                        android:imeOptions="actionDone"
+                        android:inputType="textPassword"
+                        android:maxLines="1" />
+                </com.eve.app.designsystem.TelegramOutlineEditText>
+
+                <TextView
+                    android:id="@+id/tvError"
+                    style="@style/TextAppearance.Eve.Token.Secondary.red"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/design_card_padding"
+                    android:gravity="center"
+                    android:visibility="gone" />
+
+                <FrameLayout
+                    android:id="@+id/layoutBtnSubmit"
+                    style="@style/Widget.Eve.Token.Column"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="52dp"
+                    android:layout_marginTop="@dimen/design_shadow_room"
+                    android:clipChildren="false"
+                    android:clipToPadding="false">
+
+                    <com.eve.app.designsystem.TelegramButton
+                        android:id="@+id/btnSubmit"
+                        style="@style/Widget.Eve.Token.Button"
+                        android:layout_width="match_parent"
+                        android:layout_height="@dimen/design_touch_min"
+                        android:text="Sign In" />
+
+                    <com.eve.app.designsystem.TelegramRadialProgressView
+                        android:id="@+id/progressSubmit"
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:layout_gravity="center"
+                        android:visibility="gone" />
+                </FrameLayout>
+
+                <LinearLayout
+                    android:id="@+id/dividerLayout"
+                    style="@style/Widget.Eve.Token.Column"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/design_icon_size"
+                    android:layout_marginBottom="4dp"
+                    android:gravity="center"
+                    android:orientation="horizontal"
+                    android:clipChildren="false"
+                    android:clipToPadding="false">
+
+                    <View
+                        android:layout_width="0dp"
+                        android:layout_height="1dp"
+                        android:layout_weight="1"
+                        android:background="@color/hairline" />
+
+                    <TextView
+                        style="@style/TextAppearance.Eve.Token.Secondary"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginHorizontal="@dimen/design_screen_margin"
+                        android:text="or" />
+
+                    <View
+                        android:layout_width="0dp"
+                        android:layout_height="1dp"
+                        android:layout_weight="1"
+                        android:background="@color/hairline" />
+                </LinearLayout>
+
+                <FrameLayout
+                    android:id="@+id/layoutBtnGoogle"
+                    style="@style/Widget.Eve.Token.Column"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="52dp"
+                    android:layout_marginTop="20dp"
+                    android:clipChildren="false"
+                    android:clipToPadding="false">
+
+                    <com.eve.app.designsystem.TelegramButton
+                        android:id="@+id/btnGoogle"
+                        style="@style/Widget.Eve.Token.Button"
+                        android:layout_width="match_parent"
+                        android:layout_height="56dp"
+                        android:insetTop="4dp"
+                        android:insetBottom="4dp"
+                        android:contentDescription="Continue with Google"
+                        android:text="Continue with Google"
+                        app:icon="@drawable/ic_social_google"
+                        app:iconGravity="textStart"
+                        app:iconPadding="@dimen/design_card_padding" />
+
+                    <com.eve.app.designsystem.TelegramRadialProgressView
+                        android:id="@+id/progressGoogle"
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:layout_gravity="center"
+                        android:visibility="gone" />
+                </FrameLayout>
+
+                <com.eve.app.designsystem.TelegramButton
+                    android:id="@+id/btnToggleMode"
+                    style="@style/Widget.Eve.Token.Button.Secondary"
+                    android:layout_width="match_parent"
+                    android:layout_height="@dimen/design_touch_min"
+                    android:layout_marginTop="@dimen/design_pill_padding"
+                    android:text="Don't have an account? Sign Up" />
+            </LinearLayout>
+        </FrameLayout>
+    </ScrollView>
+
+    <LinearLayout
+        android:id="@+id/topBar"
+        style="@style/Widget.Eve.Token.Column"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        android:layout_margin="16dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:clipChildren="false"
+        android:clipToPadding="false">
+
+        <ImageButton
+            android:id="@+id/btnBack"
+            style="@style/Widget.Eve.Token.IconButton"
+            android:layout_width="@dimen/design_touch_min"
+            android:layout_height="@dimen/design_touch_min"
+            android:contentDescription="Back"
+            android:src="@drawable/ic_back"
+            app:tint="@color/telegram_type_primary" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+
+        <TextView
+            android:id="@+id/tvLogo"
+            style="@style/TextAppearance.Eve.Token.Secondary"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="EVE" />
+    </LinearLayout>
+</FrameLayout>

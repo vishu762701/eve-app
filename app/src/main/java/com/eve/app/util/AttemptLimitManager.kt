@@ -1,0 +1,126 @@
+package com.eve.app.util
+
+import android.content.Context
+import com.eve.app.data.repository.AdminRepository
+import com.eve.app.data.repository.HistoryRepository
+import com.google.firebase.auth.FirebaseAuth
+import kotlinx.coroutines.withTimeoutOrNull
+
+object AttemptLimitManager {
+
+    const val MAX_ATTEMPTS = 3
+    private const val PREFS_NAME = "eve_attempt_limits"
+    private const val KEY_PREFIX = "attempt_count_"
+
+    /** Local cache is a fresh Worker presentation hint, never an offline grant. */
+    suspend fun isAdmin(email: String?, context: Context? = null): Boolean {
+        if (email.isNullOrBlank()) return false
+        return withTimeoutOrNull(2000L) { AdminRepository().isAdmin(email) } ?: false
+    }
+
+    fun isCurrentUserAdmin(): Boolean {
+        val user = FirebaseAuth.getInstance().currentUser ?: return false
+        return SessionManager.getCachedAdminStatus(user.email, allowStale = false) == true
+    }
+
+    fun clearLocalForUser(context: Context, uid: String) {
+        if (uid.isBlank()) return
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val edit = prefs.edit()
+        prefs.all.keys.filter {
+            it.startsWith("${KEY_PREFIX}${uid}_") || it.startsWith("confirmed_${uid}_")
+        }.forEach { edit.remove(it) }
+        edit.apply()
+    }
+
+    private fun isOriginalAccount(uid: String): Boolean =
+        SubmissionRetryPolicy.ownsSubmission(uid, FirebaseAuth.getInstance().currentUser?.uid)
+
+    fun getLocalAttemptCount(context: Context, examId: String, uid: String): Int {
+        if (examId.isBlank() || uid.isBlank()) return 0
+        val sp = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return sp.getInt("${KEY_PREFIX}${uid}_$examId", 0)
+    }
+
+    fun setLocalAttemptCount(context: Context, examId: String, uid: String, count: Int) {
+        if (examId.isBlank() || uid.isBlank()) return
+        val sp = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        sp.edit().putInt("${KEY_PREFIX}${uid}_$examId", count).apply()
+    }
+
+    /**
+     * Fetches current attempt count for user on the given exam.
+     * Combines local preferences and existing attempts in history.
+     * Guaranteed non-blocking and instant when offline.
+     */
+    suspend fun getAttemptCount(context: Context, examId: String): Int {
+        val user = FirebaseAuth.getInstance().currentUser
+        val uid = user?.uid.orEmpty()
+        val localCount = getLocalAttemptCount(context, examId, uid)
+        if (uid.isBlank() || examId.isBlank()) return localCount
+
+        if (!NetworkUtil.isOnline(context)) {
+            return localCount
+        }
+
+        var historyCount = 0
+        try {
+            withTimeoutOrNull(2000L) {
+                val attempts = HistoryRepository().getAttempts(uid).filter { it.examId == examId }
+                historyCount = attempts.size
+            }
+        } catch (_: Exception) {
+            // optional: failure is fine
+        }
+
+        // A suspended history read must never publish a result to a different Firebase account.
+        if (!isOriginalAccount(uid)) return localCount
+        val highest = maxOf(localCount, historyCount)
+        if (highest != localCount) {
+            setLocalAttemptCount(context, examId, uid, highest)
+        }
+        return highest
+    }
+
+    /**
+     * Checks if current user can start or reattempt the given exam.
+     * Admins have unlimited attempts. Normal users are capped at MAX_ATTEMPTS.
+     */
+    suspend fun canAttempt(context: Context, examId: String): Boolean {
+        val user = FirebaseAuth.getInstance().currentUser ?: return true
+        val originalUid = user.uid
+        val adminAllowed = isAdmin(user.email, context)
+        if (!isOriginalAccount(originalUid)) return false
+        if (adminAllowed) return true
+        if (com.eve.app.data.repository.PremiumRepository.isCurrentUserPremium(context)) {
+            return isOriginalAccount(originalUid)
+        }
+        val count = getAttemptCount(context, examId)
+        return isOriginalAccount(originalUid) && count < MAX_ATTEMPTS
+    }
+
+    fun canAttemptLocal(context: Context, examId: String): Boolean {
+        val user = FirebaseAuth.getInstance().currentUser ?: return true
+        val originalUid = user.uid
+        if (isCurrentUserAdmin()) return isOriginalAccount(originalUid)
+        if (com.eve.app.data.repository.PremiumRepository.isCurrentUserPremium(context)) {
+            return isOriginalAccount(originalUid)
+        }
+        val count = getLocalAttemptCount(context, examId, originalUid)
+        return isOriginalAccount(originalUid) && count < MAX_ATTEMPTS
+    }
+
+    /**
+     * Increments the attempt count for this exam in local preferences as an offline hint.
+     */
+    @Synchronized
+    fun recordAttempt(context: Context, examId: String, confirmedAttemptId: String, ownerUid: String) {
+        val user = FirebaseAuth.getInstance().currentUser ?: return
+        if (examId.isBlank() || confirmedAttemptId.isBlank() || user.uid != ownerUid) return
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val marker = "confirmed_${user.uid}_$confirmedAttemptId"
+        if (prefs.getBoolean(marker, false)) return
+        val key = "${KEY_PREFIX}${user.uid}_$examId"
+        prefs.edit().putInt(key, prefs.getInt(key, 0) + 1).putBoolean(marker, true).apply()
+    }
+}

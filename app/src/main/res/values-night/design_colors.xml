@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Source-derived default roles; source mapping and AA accommodations: docs/color-migration/. -->
+    <color name="surface_inset">#000000</color>
+    <color name="text_primary">#FFFFFF</color>
+    <color name="text_secondary">#75FFFFFF</color>
+    <color name="hairline">#000000</color>
+    <color name="track">#16FFFFFF</color>
+    <color name="accent">#229AF0</color>
+    <color name="on_accent">#FFFFFF</color>
+    <color name="solid_white">#FFFFFF</color>
+    <color name="transparent">#00000000</color>
+    <color name="glass_tint">#C2262627</color>
+    <color name="glass_fallback">#C2262627</color>
+    <color name="card_shadow">#99000000</color>
+    <color name="navigation_legacy_background">#000000</color>
+    <color name="solid_black">#000000</color>
+<color name="modal_scrim">#4D000000</color>
+
+
+    <color name="bg_app">#000000</color>
+    <!-- Home side-drawer only. Night #000000 is an explicit owner override. -->
+    <color name="home_drawer_background">#FF000000</color>
+    <color name="surface">#181819</color>
+    <color name="system_red">#FF4245</color>
+    <color name="system_red_container">#33FF4245</color>
+    <color name="system_green">#30D158</color>
+    <color name="system_green_container">#3330D158</color>
+    <color name="system_blue">#0091FF</color>
+    <color name="system_blue_container">#330091FF</color>
+    <color name="system_indigo">#6155F5</color>
+    <color name="system_indigo_container">#336155F5</color>
+    <color name="system_orange">#FF9230</color>
+    <color name="system_orange_container">#33FF9230</color>
+    <color name="system_purple">#DB34F2</color>
+    <color name="system_purple_container">#33DB34F2</color>
+    <color name="system_yellow">#FFD600</color>
+    <color name="system_yellow_container">#33FFD600</color>
+    <color name="dialog_surface">#1E1E1E</color>
+    <color name="system_red_text">#FFFF6265</color>
+    <color name="system_green_text">#FF30D158</color>
+    <color name="system_blue_text">#FF219FFF</color>
+    <color name="system_orange_text">#FFFF9230</color>
+    <color name="system_yellow_text">#FFFFD600</color>
+    <color name="system_purple_text">#FFE25BF4</color>
+    <color name="system_indigo_text">#FF8D85F7</color>
+    <color name="accent_icon">#FF229AF0</color>
+    <color name="accent_text">#FF229AF0</color>
+</resources>

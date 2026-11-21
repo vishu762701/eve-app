@@ -1,0 +1,11 @@
+rules_version = '2';
+// Legacy syllabus reads remain supported. Administrative uploads/deletions use
+// Worker-authorized Supabase routes; no Firebase client can self-authorize.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /syllabi/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+  }
+}

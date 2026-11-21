@@ -1,0 +1,219 @@
+package com.eve.app.ui.home
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import java.io.File
+import javax.xml.parsers.DocumentBuilderFactory
+import org.w3c.dom.Element
+
+/** Three retained EVE overflow actions remain reachable as 48dp+ standalone accessibility targets. */
+class HomeMenuAccessibilityContractTest {
+    private val rowIds = listOf(
+        "cardTheme", "menuRowHistory", "menuRowBookmarks", "menuRowMistakes", "menuRowTopic", "menuRowPyq", "menuRowLogout"
+    )
+
+    @Test fun popupLabelGeometryMatchesOfficialTelegramSourceTextInset() {
+        // ActionBarMenuSubItem.java:83-84/206-218. EVE linear-host mapping:
+        // original 18dp outer + 43dp inner = EVE 18dp + 24dp icon + 19dp gap.
+        val source = File("src/main/res/values/telegram_popup_dimens.xml").readText()
+        assertTrue(source.contains("name=\"telegram_popup_label_gap\">19dp"))
+        val layout = DocumentBuilderFactory.newInstance().newDocumentBuilder()
+            .parse(File("src/main/res/layout/popup_telegram_menu.xml"))
+        val nodes = layout.getElementsByTagName("LinearLayout")
+        for (id in rowIds) {
+            val row = (0 until nodes.length).map { nodes.item(it) as Element }
+                .first { it.getAttribute("android:id") == "@+id/$id" }
+            val label = row.getElementsByTagName("TextView").item(0) as Element
+            assertEquals("Original source requires 18dp outer inset: $id",
+                "18dp", row.getAttribute("android:paddingStart"))
+            assertEquals("Original Telegram 43dp title inset with 24dp icon: $id",
+                "@dimen/telegram_popup_label_gap",
+                label.getAttribute("android:layout_marginStart"))
+        }
+        assertEquals(61, 18 + 24 + 19)
+    }
+
+    @Test fun popupRetainsReorganizedFocusableActionsAtLeast48dpTall() {
+        val layout = File("src/main/res/layout/popup_telegram_menu.xml")
+        val dom = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(layout)
+        val nodes = dom.getElementsByTagName("LinearLayout")
+        val elements = (0 until nodes.length).map { nodes.item(it) as Element }
+        for (id in rowIds) {
+            val element = elements.firstOrNull { it.getAttribute("android:id") == "@+id/$id" }
+            assertNotNull("Missing menu action $id", element)
+            assertEquals("true", element!!.getAttribute("android:clickable"))
+            assertEquals("true", element.getAttribute("android:focusable"))
+            assertEquals("48dp", element.getAttribute("android:minHeight"))
+            assertEquals("196dp", element.getAttribute("android:minWidth"))
+            assertEquals("0dp", element.getAttribute("android:paddingTop"))
+            assertEquals("0dp", element.getAttribute("android:paddingBottom"))
+            assertEquals(1, element.getElementsByTagName("ImageView").length)
+            assertEquals(1, element.getElementsByTagName("TextView").length)
+        }
+
+    }
+
+    @Test fun originalTelegramRadialPopupMaskIsAppliedWithExactRowCorners() {
+        val popup = File("src/main/java/com/eve/app/ui/home/TelegramMenuPopup.kt").readText()
+        val selector = File("src/main/java/com/eve/app/ui/home/TelegramPopupRadialSelector.java").readText()
+        assertTrue(popup.contains("row.background = TelegramPopupRadialSelector.create("))
+        assertTrue(popup.contains("if (index == 0) 12 else 0"))
+        assertTrue(popup.contains("if (index == rows.lastIndex) 12 else 0"))
+        assertTrue(popup.contains("row.foreground = null"))
+        assertTrue(selector.contains("path.addRoundRect(rect, radii, Path.Direction.CW)"))
+        assertTrue(selector.contains("new Paint(Paint.ANTI_ALIAS_FLAG)"))
+        assertTrue(selector.contains("final int save = canvas.save()"))
+        assertTrue(selector.contains("canvas.restoreToCount(save)"))
+        assertTrue(selector.contains("21f7d109da6ab3506c9e9577f98c6a38771ab335"))
+        assertTrue(!selector.contains("org.telegram.messenger"))
+    }
+
+    @Test fun sourceBackedNinePatchOnlyChangesHomeOverflow() {
+        val popup = File("src/main/java/com/eve/app/ui/home/TelegramMenuPopup.kt").readText()
+        val glass = File("src/main/java/com/eve/app/designsystem/TelegramMenuPopupLayout.kt").readText()
+        assertTrue("Normal ActionBarMenuItem uses popup_fixed_alert4, not topView alert2",
+            popup.contains("R.drawable.telegram_dialog_popup_fixed_alert4"))
+        assertTrue(!popup.contains("R.drawable.telegram_popup_fixed_alert2"))
+        assertTrue(popup.contains("PorterDuff.Mode.MULTIPLY"))
+        assertTrue(popup.contains("palette.submenuBackground"))
+        assertTrue(popup.contains("binding.root.glassEnabled = false"))
+        assertTrue(popup.contains("binding.root.originalPopupBackground = sourceBackground"))
+        assertTrue(popup.contains("TelegramPopupSourceBackground(it)"))
+        assertTrue(glass.contains("var originalPopupBackground: Drawable? = null"))
+    }
+
+    @Test fun sourcePopupRetainsInputModeAndMenuKeyDismissContract() {
+        val source = File("src/main/java/com/eve/app/ui/home/TelegramMenuPopup.kt").readText()
+        val init = source.substringAfter("    init {").substringBefore("        setupThemeCard()")
+        assertTrue(init.contains("inputMethodMode = PopupWindow.INPUT_METHOD_NOT_NEEDED"))
+        assertTrue(init.contains("softInputMode = WindowManager.LayoutParams.SOFT_INPUT_STATE_UNSPECIFIED"))
+        assertTrue(init.contains("binding.root.isFocusableInTouchMode = true"))
+        assertTrue(init.contains("keyCode == KeyEvent.KEYCODE_MENU"))
+        assertTrue(init.contains("event.repeatCount == 0"))
+        assertTrue(init.contains("event.action == KeyEvent.ACTION_UP && isShowing"))
+        assertTrue(init.contains("dismiss()"))
+        assertTrue(source.contains("isOutsideTouchable = true"))
+        assertTrue(source.contains("isClippingEnabled = true"))
+    }
+
+    @Test fun officialItemOptionsUsesPopupContextAnimationAndProgrammaticDismissExit() {
+        val popup = File("src/main/java/com/eve/app/ui/home/TelegramMenuPopup.kt").readText()
+        val themes = File("src/main/res/values/themes.xml").readText()
+        val anim = File("src/main/res/anim/popup_context_in.xml").readText()
+        val shown = popup.substringAfter("fun show(anchorView: View)")
+            .substringBefore("private fun applyOriginalMenuRoles()")
+        assertTrue("Original ItemOptions.java:1394 uses PopupContextAnimation",
+            shown.contains("animationStyle = R.style.PopupContextAnimation"))
+        assertTrue("Custom exit must not trigger an extra platform transition",
+            shown.contains("exitTransition = null"))
+        assertTrue("PopupContextAnimation style defined in themes.xml",
+            themes.contains("name=\"PopupContextAnimation\""))
+        assertTrue("PopupContextAnimation references @anim/popup_context_in",
+            themes.contains("@anim/popup_context_in"))
+        assertTrue("popup_context_in alpha duration 150ms",
+            anim.contains("android:duration=\"150\""))
+        assertTrue("popup_context_in scale duration 200ms",
+            anim.contains("android:duration=\"200\""))
+        assertTrue("popup_context_in uses overshoot_interpolator",
+            anim.contains("@android:anim/overshoot_interpolator"))
+        assertTrue("popup_context_in scales from 95% to 100%",
+            anim.contains("android:fromXScale=\"95%\"") && anim.contains("android:toXScale=\"100%\""))
+        assertTrue("Theme reveal handoff still dismisses immediately without a second animation",
+            popup.contains("ThemeManager.reservePopupHandoff()") &&
+                popup.contains("ThemeFrameCoordinator.afterFrame("))
+    }
+
+    @Test fun popupUsesOfficialDismissMotionWithoutWholePopupScale() {
+        val popup = File("src/main/java/com/eve/app/ui/home/TelegramMenuPopup.kt").readText()
+        val motion = File("src/main/java/com/eve/app/ui/home/TelegramPopupSourceMotion.kt").readText()
+        assertTrue(popup.contains("TelegramPopupSourceMotion.exit(binding.root, actionRows())"))
+        assertTrue(popup.contains("TelegramPopupSourceMotion.cancel(binding.root, actionRows())"))
+        assertTrue(!popup.contains("TelegramPopupHelper.animateEntrance"))
+        assertTrue(!popup.contains("TelegramPopupHelper.animateExit"))
+        assertTrue("Telegram ActionBarPopupWindow.java:66,397 uses decelerateInterpolator",
+            motion.contains("interpolator = DecelerateInterpolator()"))
+        assertTrue("Telegram ActionBarPopupWindow.java:1068 dismiss duration is 150ms",
+            motion.contains("duration = 150L"))
+        assertTrue("Telegram ActionBarPopupWindow.java:1066 dismiss translation distance is -5dp",
+            motion.contains("val distance = -5f * root.resources.displayMetrics.density"))
+        assertTrue(motion.contains("isMotionEnabled(root.context)"))
+        assertTrue(!motion.contains("root.scaleY =") && !motion.contains("View.SCALE_Y"))
+        assertTrue(!motion.contains("UserConfig"))
+    }
+
+    @Test fun officialPopupNinePatchGrowsWithoutScalingEntireRowLayout() {
+        val source = File("src/main/java/com/eve/app/designsystem/TelegramPopupSourceBackground.kt").readText()
+        val glass = File("src/main/java/com/eve/app/designsystem/TelegramMenuPopupLayout.kt").readText()
+        val motion = File("src/main/java/com/eve/app/ui/home/TelegramPopupSourceMotion.kt").readText()
+        assertTrue(source.contains("fun visibleHeight(totalHeight: Int): Int"))
+        assertTrue(source.contains("sourceDrawable.setBounds(box.left, box.top, box.right, box.top + y)"))
+        assertTrue(source.contains("sourceDrawable.alpha = backAlpha"))
+        assertTrue(glass.contains("var backScaleY: Float = 1.0f"))
+        assertTrue(motion.contains("source.backScaleY = progress"))
+        assertTrue(motion.contains("source.backAlpha = (progress * 255f).toInt().coerceIn(0, 255)"))
+        assertTrue(!source.contains("UserConfig"))
+        assertTrue(!motion.contains("root.scaleY =") && !motion.contains("View.SCALE_Y"))
+    }
+
+    @Test fun originalTelegramPopupTitlesAreSingleLineEndEllipsizedWithoutAccessibilityLoss() {
+        val source = File("src/main/java/com/eve/app/ui/home/TelegramMenuPopup.kt").readText()
+        val roles = source.substringAfter("private fun applyOriginalMenuRoles()")
+            .substringBefore("private fun dismissWithAction(")
+        assertTrue("Telegram ActionBarMenuSubItem.java:91-98 requires one visual line",
+            roles.contains("child.setSingleLine(true)"))
+        assertTrue("Telegram original visual menu titles end-ellipsize",
+            roles.contains("child.ellipsize = android.text.TextUtils.TruncateAt.END"))
+        assertTrue("Full untruncated title remains available to screen readers",
+            roles.contains("row.contentDescription = child.text"))
+        assertTrue(roles.contains("row.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES"))
+    }
+
+    @Test fun allRowsAreReadAsSingleDynamicLabelWithoutDecorativeDuplication() {
+        val source = File("src/main/java/com/eve/app/ui/home/TelegramMenuPopup.kt").readText()
+        val roles = source.substringAfter("private fun applyOriginalMenuRoles()")
+            .substringBefore("private fun dismissWithAction(")
+        // Rows are now explicitly typed once in actionRows(), reused by animation
+        // and accessibility. Verify all seven mappings and the applying loop.
+        val mapping = source.substringAfter("private fun actionRows()")
+            .substringBefore("    init {")
+        for (id in rowIds) assertTrue("Accessibility row mapping missing $id",
+            mapping.contains("binding.$id"))
+        assertTrue("Accessibility roles must iterate the actual action rows",
+            roles.contains("val rows = actionRows()"))
+        assertTrue(roles.contains("row.contentDescription = child.text"))
+        assertTrue(roles.contains("row.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES"))
+        assertTrue(roles.contains("child.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO"))
+        assertTrue(roles.contains("binding.root.updatePalette(palette)"))
+    }
+
+    @Test fun popupUsesSource196dpMinWidthAndDynamicWrapContent() {
+        val popup = File("src/main/java/com/eve/app/ui/home/TelegramMenuPopup.kt").readText()
+        assertTrue("Original ActionBarMenuItem.java:2467 uses 196dp minWidth",
+            popup.contains("val minRowWidth = (196f * context.resources.displayMetrics.density).toInt()"))
+        assertTrue("Popup width expands from wrap_content with minPopupWidth",
+            popup.contains("val targetWidth = maxOf(binding.root.measuredWidth, minPopupWidth).coerceAtMost(maxWidth)"))
+        assertTrue(!popup.contains("targetWidth = minOf((250f"))
+    }
+
+    @Test fun itemOptionsDimOverlayMatchesUpstreamDimViewContract() {
+        val popup = File("src/main/java/com/eve/app/ui/home/TelegramMenuPopup.kt").readText()
+        val overlay = File("src/main/java/com/eve/app/ui/home/TelegramPopupDimOverlay.kt").readText()
+        assertTrue("Popup uses TelegramPopupDimOverlay instead of FLAG_DIM_BEHIND",
+            popup.contains("TelegramPopupDimOverlay(context, container, anchorView, dimAlpha = 0x08)"))
+        assertTrue("FLAG_DIM_BEHIND not used on window",
+            !popup.contains("FLAG_DIM_BEHIND"))
+        assertTrue("Overlay default dimAlpha is 0x08 per DialogsActivity.java:13678",
+            overlay.contains("dimAlpha: Int = 0x08"))
+        assertTrue("Overlay animates progress over 150ms per ItemOptions.java:1347",
+            overlay.contains("duration = 150L"))
+        assertTrue("Overlay renders anchor view on top of dim per ItemOptions.java:2192-2194",
+            overlay.contains("anchor.draw(canvas)"))
+        assertTrue("Overlay uses OnPreDrawListener for synchronized invalidation",
+            overlay.contains("ViewTreeObserver.OnPreDrawListener"))
+        assertTrue("Overlay cleans up on dismissal and immediate teardown",
+            popup.contains("dimOverlay?.dismiss(animated = true)") &&
+                popup.contains("dimOverlay?.dismiss(animated = false)"))
+    }
+}

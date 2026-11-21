@@ -1,0 +1,24 @@
+package com.eve.app.data.remote
+
+import com.google.gson.annotations.SerializedName
+
+data class ApiResponse<T>(
+    @SerializedName("success")
+    val success: Boolean,
+    @SerializedName("data")
+    val data: T? = null,
+    @SerializedName("error")
+    val error: String? = null,
+    @SerializedName("message")
+    val message: String? = null,
+    @SerializedName("serverNow")
+    val serverNow: Long? = null,
+    @SerializedName("pagination")
+    val pagination: com.eve.app.data.model.AdminUsersPagination? = null,
+    @SerializedName("categoryEmoji")
+    val categoryEmoji: Map<String, com.eve.app.data.model.EmojiPlacement>? = null,
+    @SerializedName("code")
+    val errorCode: String? = null,
+    @SerializedName("requestId")
+    val requestId: String? = null
+)

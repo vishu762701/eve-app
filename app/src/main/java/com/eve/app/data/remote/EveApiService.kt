@@ -1,0 +1,886 @@
+package com.eve.app.data.remote
+
+import com.eve.app.data.model.*
+import okhttp3.MultipartBody
+import okhttp3.RequestBody
+import retrofit2.http.*
+
+data class AiHealthSlot(
+    val slot: String = "",
+    val ok: Boolean = false,
+    val latencyMs: Long = 0L,
+    val providerStatus: String = "",
+    val message: String = ""
+)
+
+data class AiHealthResponse(
+    val primaryModel: String? = null,
+    val workingModel: String? = null,
+    val slots: List<AiHealthSlot> = emptyList()
+)
+
+data class AiGenerationErrorDetails(
+    val providerStatus: String? = null,
+    val providerMessage: String? = null,
+    val model: String? = null,
+    val correlationId: String? = null
+)
+
+data class AiGenerationErrorResponse(
+    val success: Boolean = false,
+    val error: String? = null,
+    val code: String? = null,
+    val details: AiGenerationErrorDetails? = null
+)
+
+data class AttemptSubmitResult(
+    val attemptId: String,
+    val score: Double,
+    val total: Int,
+    val correct: Int,
+    val wrong: Int,
+    val unattempted: Int,
+    val timeTakenSeconds: Long = 0L,
+    val counted: Int = 1,
+    val answers: List<AnswerItem> = emptyList()
+)
+
+data class StartAttemptResponse(
+    val alreadySubmitted: Boolean = false,
+    val completedAttemptId: String? = null,
+    val startedAt: Long,
+    val clientAttemptId: String? = null,
+    val serverNow: Long,
+    val timeLimitSeconds: Long,
+    val remainingSeconds: Long? = null,
+    val activeSeconds: Long? = null,
+    val questions: List<Question>? = null
+)
+
+data class QuestionStatsDto(
+    val attempts: Int = 0,
+    val correct: Int = 0,
+    val wrong: Int = 0,
+    val unattempted: Int = 0,
+    val avgTimeSeconds: Int = 0
+)
+
+data class LeaderboardStatsResponse(
+    val participants: Int = 0,
+    val topperScore: Double = 0.0,
+    val averageScore: Double = 0.0,
+    val myRank: Int? = null,
+    val myScore: Double? = null,
+    val myTimeSeconds: Long? = null,
+    val myPercentile: Double? = null
+)
+
+data class MistakeItem(
+    val questionId: String = "",
+    val questionText: String = "",
+    val questionTextHi: String = "",
+    val selected: String = "",
+    val selectedText: String = "",
+    val selectedTextHi: String = "",
+    val correct: String = "",
+    val correctText: String = "",
+    val correctTextHi: String = "",
+    val explanation: String = "",
+    val explanationHi: String = "",
+    val topic: String = "",
+    val examId: String = "",
+    val examName: String = "",
+    val timestamp: Long = 0L
+)
+
+data class StreakResponse(
+    val currentStreak: Int = 0,
+    val longestStreak: Int = 0,
+    val todayCount: Int = 0,
+    val lastActiveDate: String? = null
+)
+
+data class UserStatsResponse(
+    val totalUsers: Long,
+    val onlineUsers: Long
+)
+
+data class UserVoteResponse(
+    val optionIndex: Int?
+)
+
+data class AttemptLockResponse(
+    val hasLock: Boolean,
+    val timestamp: Long? = null
+)
+
+data class FloatingLinkResponse(
+    val url: String? = null,
+    val x: Float? = null,
+    val y: Float? = null
+)
+
+data class SyllabusUploadResponse(
+    val syllabusUrl: String,
+    val syllabusFileName: String
+)
+
+data class PresenceLeaseResponse(val expiresAt: Long)
+
+data class UserProfileResponse(
+    val id: String,
+    val eveId: String? = null,
+    val email: String,
+    val displayName: String,
+    val dob: String,
+    val category: String,
+    val username: String? = null,
+    val phone: String? = null,
+    val bio: String? = null,
+    val isOnline: Boolean? = null
+)
+
+data class UsernameCheckResponse(
+    val available: Boolean,
+    val code: String? = null,
+    val error: String? = null
+)
+
+data class AuthUserResponse(
+    val uid: String,
+    val email: String,
+    val displayName: String,
+    val isAdmin: Boolean
+)
+
+data class SubmitReportRequest(
+    val questionId: String,
+    val examId: String,
+    val examName: String,
+    val questionText: String,
+    val reason: String,
+    val comment: String
+)
+
+data class QuestionReportDto(
+    val id: String = "",
+    val questionId: String = "",
+    val examId: String = "",
+    val examName: String = "",
+    val questionText: String = "",
+    val reason: String = "",
+    val comment: String = "",
+    val studentId: String = "",
+    val studentEmail: String = "",
+    val timestamp: Long = 0L,
+    val status: String = "pending",
+    val reportType: String = "content"
+)
+
+data class CreateAuditLogRequest(
+    val actionType: String,
+    val description: String,
+    val adminEmail: String? = null
+)
+
+data class AdminAuditLogDto(
+    val id: String = "",
+    val actionType: String = "",
+    val description: String = "",
+    val adminEmail: String = "",
+    val timestamp: Long = 0L,
+    val actorUid: String? = null,
+    val targetType: String? = null,
+    val targetId: String? = null,
+    val source: String? = "server",
+    val metadata: Map<String, Any?>? = null
+)
+
+interface EveApiService {
+
+    @GET("api/admin/system/overview")
+    suspend fun systemOverview(): ApiResponse<com.google.gson.JsonObject>
+
+    @GET("api/admin/system/health")
+    suspend fun systemHealth(): ApiResponse<com.google.gson.JsonObject>
+
+    @GET("api/admin/system/operations")
+    suspend fun systemOperations(@Query("offset") offset: Int): ApiResponse<com.google.gson.JsonObject>
+
+    @POST("api/admin/system/jobs/{id}/retry")
+    suspend fun retryGenerationJob(@Path("id") id: String): ApiResponse<com.google.gson.JsonObject>
+
+
+    // --- Auth & Profile ---
+    @GET("api/auth/me")
+    suspend fun getMe(): ApiResponse<AuthUserResponse>
+
+    @POST("api/users/sync")
+    suspend fun syncUser(@Body body: Map<String, @JvmSuppressWildcards Any>): ApiResponse<Unit>
+
+    @GET("api/users/profile")
+    suspend fun getProfile(@retrofit2.http.Tag owner: ProfileRequestOwner? = null): ApiResponse<UserProfileResponse>
+
+    @GET("api/users/username/check")
+    suspend fun checkUsername(@retrofit2.http.Query("u") username: String): ApiResponse<UsernameCheckResponse>
+
+    @PUT("api/users/profile")
+    suspend fun updateProfile(@Body body: Map<String, @JvmSuppressWildcards Any>, @retrofit2.http.Tag owner: ProfileRequestOwner? = null): ApiResponse<Unit>
+
+    @POST("api/users/presence")
+    suspend fun startPresence(@Body body: Map<String, String>, @retrofit2.http.Tag owner: ProfileRequestOwner? = null): ApiResponse<PresenceLeaseResponse>
+
+    @retrofit2.http.HTTP(method = "DELETE", path = "api/users/presence", hasBody = true)
+    suspend fun endPresence(@Body body: Map<String, String>, @retrofit2.http.Tag owner: ProfileRequestOwner? = null): ApiResponse<Unit>
+
+    @POST("api/users/fcm-token")
+    suspend fun updateFcmToken(@Body body: Map<String, String>): ApiResponse<Unit>
+
+    @DELETE("api/users/account")
+    suspend fun deleteAccount(): ApiResponse<Map<String, Any>>
+
+    // --- Exams ---
+    @GET("api/exams")
+    suspend fun getExams(): ApiResponse<List<Exam>>
+
+    @GET("api/exams/{id}")
+    suspend fun getExam(@Path("id") id: String): ApiResponse<Exam>
+
+    @POST("api/exams")
+    suspend fun createExam(@Body body: Map<String, @JvmSuppressWildcards Any>): ApiResponse<Map<String, String>>
+
+    @PUT("api/exams/{id}")
+    suspend fun updateExam(@Path("id") id: String, @Body body: Map<String, @JvmSuppressWildcards Any>): ApiResponse<Unit>
+
+    @PUT("api/exams/{id}/image")
+    suspend fun updateExamImage(@Path("id") id: String, @Body body: Map<String, String>): ApiResponse<Unit>
+
+    @PUT("api/exams/{id}/rename")
+    suspend fun renameExam(@Path("id") id: String, @Body body: Map<String, String>): ApiResponse<Unit>
+
+    @DELETE("api/exams/{id}")
+    suspend fun deleteExam(@Path("id") id: String): ApiResponse<Unit>
+
+    @GET("api/exams/{id}/deletion-info")
+    suspend fun examDeletionInfo(@Path("id") id: String): ApiResponse<com.eve.app.data.model.DeletionInfo>
+
+    @GET("api/generated-tests/{id}/deletion-info")
+    suspend fun testDeletionInfo(@Path("id") id: String): ApiResponse<com.eve.app.data.model.DeletionInfo>
+
+    @POST("api/exams/{id}/unpublish-tests")
+    suspend fun unpublishExamTests(@Path("id") id: String): ApiResponse<Unit>
+
+    @POST("api/exams/{id}/syllabus")
+    suspend fun uploadSyllabus(
+        @Path("id") id: String,
+        @Header("x-file-name") fileName: String,
+        @Header("Content-Type") contentType: String = "application/pdf",
+        @Body body: RequestBody
+    ): ApiResponse<SyllabusUploadResponse>
+
+    @DELETE("api/exams/{id}/syllabus")
+    suspend fun removeSyllabus(@Path("id") id: String): ApiResponse<Unit>
+
+    @POST("api/exams/{id}/syllabus/reassign")
+    suspend fun reassignSyllabus(@Path("id") sourceId: String, @Body body: Map<String, String>): ApiResponse<Map<String, String>>
+
+    // --- Questions ---
+    @GET("api/questions/exam/{examId}")
+    suspend fun getQuestions(
+        @Path("examId") examId: String,
+        @Query("isPyq") isPyq: Boolean? = null,
+        @Query("topic") topic: String? = null,
+        @Query("pyqYear") pyqYear: Int? = null,
+        @Query("pyqPaper") pyqPaper: String? = null
+    ): ApiResponse<List<Question>>
+
+    @POST("api/questions")
+    suspend fun addQuestion(@Body body: Map<String, @JvmSuppressWildcards Any>): ApiResponse<Map<String, String>>
+
+    @POST("api/questions/batch")
+    suspend fun addQuestionsBatch(@Body body: Map<String, @JvmSuppressWildcards Any>): ApiResponse<Map<String, Any>>
+
+    @PUT("api/questions/{id}")
+    suspend fun updateQuestion(@Path("id") id: String, @Body body: Map<String, @JvmSuppressWildcards Any>): ApiResponse<Unit>
+
+    @DELETE("api/questions/{id}")
+    suspend fun deleteQuestion(@Path("id") id: String): ApiResponse<Unit>
+
+    @GET("api/questions/stats")
+    suspend fun getQuestionStats(@Query("ids") ids: String): ApiResponse<Map<String, QuestionStatsDto>>
+
+    // --- Attempts & Grading ---
+    @POST("api/attempts/start")
+    suspend fun startAttempt(@Body body: Map<String, String>): ApiResponse<StartAttemptResponse>
+
+    @POST("api/attempts/pause")
+    suspend fun pauseAttempt(@Body body: Map<String, String>): ApiResponse<Map<String, @JvmSuppressWildcards Any>>
+
+    @POST("api/attempts/resume")
+    suspend fun resumeAttempt(@Body body: Map<String, String>): ApiResponse<Map<String, @JvmSuppressWildcards Any>>
+
+    @POST("api/attempts/submit")
+    suspend fun submitAttempt(@Body body: Map<String, @JvmSuppressWildcards Any>): ApiResponse<AttemptSubmitResult>
+
+    @GET("api/attempts")
+    suspend fun getAttempts(): ApiResponse<List<TestAttempt>>
+
+    @GET("api/attempts/mistakes")
+    suspend fun getMistakes(
+        @Query("limit") limit: Int = 100,
+        @Query("filter") filter: String = "all"
+    ): ApiResponse<List<MistakeItem>>
+
+    @GET("api/attempts/streak")
+    suspend fun getStreak(@Query("tzOffsetMinutes") tzOffsetMinutes: Int): ApiResponse<StreakResponse>
+
+    @GET("api/attempts/locks")
+    suspend fun getAttemptLocks(): ApiResponse<List<String>>
+
+    @GET("api/attempts/locks/{examId}")
+    suspend fun checkAttemptLock(@Path("examId") examId: String): ApiResponse<AttemptLockResponse>
+
+    @POST("api/attempts/reset")
+    suspend fun resetAttemptPost(@Body body: Map<String, String>): ApiResponse<Map<String, @JvmSuppressWildcards Any>>
+
+    @DELETE("api/attempts/exam/{examId}")
+    suspend fun resetAttempt(@Path("examId") examId: String): ApiResponse<Map<String, @JvmSuppressWildcards Any>>
+
+    // --- Leaderboard ---
+    @GET("api/leaderboard")
+    suspend fun getLeaderboard(
+        @Query("examId") examId: String,
+        @Query("limit") limit: Int = 50
+    ): ApiResponse<List<LeaderboardEntry>>
+
+    @GET("api/leaderboard/rank")
+    suspend fun getUserRank(@Query("examId") examId: String): ApiResponse<RankInfo?>
+
+    @GET("api/leaderboard/stats")
+    suspend fun getLeaderboardStats(@Query("examId") examId: String): ApiResponse<LeaderboardStatsResponse>
+
+    // --- Broadcasts ---
+    @GET("api/broadcasts")
+    suspend fun getBroadcasts(@Query("limit") limit: Int = 100): ApiResponse<List<BroadcastMessage>>
+
+    @POST("api/broadcasts")
+    suspend fun sendBroadcast(@Body body: Map<String, @JvmSuppressWildcards Any>): ApiResponse<BroadcastMessage>
+
+    @DELETE("api/broadcasts/{id}")
+    suspend fun deleteBroadcast(@Path("id") id: String): ApiResponse<Unit>
+
+    @POST("api/broadcasts/bulk-delete")
+    suspend fun bulkDeleteBroadcasts(@Body body: Map<String, List<String>>): ApiResponse<Map<String, Any>>
+
+    // --- Feedback Messages ---
+    @POST("api/feedback/messages")
+    suspend fun sendFeedbackMessage(@Body body: Map<String, @JvmSuppressWildcards Any>): ApiResponse<Map<String, String>>
+
+    @GET("api/feedback/messages")
+    suspend fun getFeedbackMessages(): ApiResponse<List<FeedbackMessage>>
+
+    @PUT("api/feedback/messages/{id}/read")
+    suspend fun markFeedbackRead(@Path("id") id: String): ApiResponse<Unit>
+
+    @DELETE("api/feedback/messages/{id}")
+    suspend fun deleteFeedbackMessage(@Path("id") id: String): ApiResponse<Unit>
+
+    // --- Feedback Posts & Replies ---
+    @GET("api/feedback/posts")
+    suspend fun getFeedbackPosts(): ApiResponse<List<FeedbackPost>>
+
+    @POST("api/feedback/posts")
+    suspend fun createFeedbackPost(@Body body: Map<String, @JvmSuppressWildcards Any>): ApiResponse<Map<String, String>>
+
+    @PUT("api/feedback/posts/{id}")
+    suspend fun updateFeedbackPost(@Path("id") id: String, @Body body: Map<String, @JvmSuppressWildcards Any>): ApiResponse<Unit>
+
+    @DELETE("api/feedback/posts/{id}")
+    suspend fun deleteFeedbackPost(@Path("id") id: String): ApiResponse<Unit>
+
+    @GET("api/feedback/posts/{postId}/replies")
+    suspend fun getPostReplies(@Path("postId") postId: String): ApiResponse<List<FeedbackPostReply>>
+
+    @POST("api/feedback/posts/{postId}/replies")
+    suspend fun submitPostReply(@Path("postId") postId: String, @Body body: Map<String, @JvmSuppressWildcards Any>): ApiResponse<Map<String, String>>
+
+    @PUT("api/feedback/posts/{postId}/replies/{replyId}/read")
+    suspend fun markReplyRead(@Path("postId") postId: String, @Path("replyId") replyId: String): ApiResponse<Unit>
+
+    @DELETE("api/feedback/posts/{postId}/replies/{replyId}")
+    suspend fun deleteReply(@Path("postId") postId: String, @Path("replyId") replyId: String): ApiResponse<Unit>
+
+    // --- Banners ---
+    @GET("api/banners")
+    suspend fun getBanners(): ApiResponse<List<HomeBanner>>
+
+    @Multipart
+    @POST("api/banners")
+    suspend fun uploadBanner(
+        @Part file: MultipartBody.Part,
+        @Part("linkUrl") linkUrl: RequestBody,
+        @Part("linkLabel") linkLabel: RequestBody
+    ): ApiResponse<HomeBanner>
+
+    @PUT("api/banners/{id}/link")
+    suspend fun updateBannerLink(
+        @Path("id") id: String,
+        @Body body: Map<String, String>
+    ): ApiResponse<Map<String, String>>
+
+    @DELETE("api/banners/{id}")
+    suspend fun deleteBanner(@Path("id") id: String): ApiResponse<Unit>
+
+    @PUT("api/banners/{id}/reorder")
+    suspend fun reorderBanner(@Path("id") id: String, @Body body: Map<String, Boolean>): ApiResponse<Unit>
+
+    // --- Pinned Exams ---
+    @GET("api/pins")
+    suspend fun getPinnedExams(): ApiResponse<List<String>>
+
+    @POST("api/pins/{examId}")
+    suspend fun pinExam(@Path("examId") examId: String): ApiResponse<Unit>
+
+    @DELETE("api/pins/{examId}")
+    suspend fun unpinExam(@Path("examId") examId: String): ApiResponse<Unit>
+
+    @POST("api/pins/{examId}/toggle")
+    suspend fun togglePin(@Path("examId") examId: String): ApiResponse<Map<String, Boolean>>
+
+    // --- Bookmarks ---
+    @GET("api/bookmarks/ids")
+    suspend fun getBookmarkIds(): ApiResponse<List<String>>
+
+    @GET("api/bookmarks")
+    suspend fun getBookmarks(): ApiResponse<List<BookmarkedQuestion>>
+
+    @POST("api/bookmarks")
+    suspend fun addBookmark(@Body body: Map<String, @JvmSuppressWildcards Any>): ApiResponse<Unit>
+
+    @DELETE("api/bookmarks/{id}")
+    suspend fun deleteBookmark(@Path("id") id: String): ApiResponse<Unit>
+
+    @POST("api/bookmarks/toggle")
+    suspend fun toggleBookmark(@Body body: Map<String, @JvmSuppressWildcards Any>): ApiResponse<Map<String, Boolean>>
+
+    // --- Polls ---
+    @GET("api/polls")
+    suspend fun getPolls(): ApiResponse<List<Poll>>
+
+    @GET("api/polls/active")
+    suspend fun getActivePoll(): ApiResponse<Poll?>
+
+    @POST("api/polls")
+    suspend fun createPoll(@Body body: Map<String, @JvmSuppressWildcards Any>): ApiResponse<Map<String, String>>
+
+    @PUT("api/polls/{id}/status")
+    suspend fun updatePollStatus(@Path("id") id: String, @Body body: Map<String, Boolean>): ApiResponse<Unit>
+
+    @DELETE("api/polls/{id}")
+    suspend fun deletePoll(@Path("id") id: String): ApiResponse<Unit>
+
+    @GET("api/polls/{id}/vote")
+    suspend fun getUserVote(@Path("id") id: String): ApiResponse<UserVoteResponse>
+
+    @POST("api/polls/{id}/vote")
+    suspend fun submitVote(@Path("id") id: String, @Body body: Map<String, Int>): ApiResponse<Unit>
+
+    // --- App Content ---
+    @GET("api/app-content/{type}")
+    suspend fun getAppContent(@Path("type") type: String): ApiResponse<AppContent>
+
+    @PUT("api/app-content/{type}")
+    suspend fun updateAppContent(@Path("type") type: String, @Body body: Map<String, @JvmSuppressWildcards Any>): ApiResponse<Unit>
+
+    // --- Admin Management ---
+    @GET("api/admin/me")
+    suspend fun getAdminMe(): ApiResponse<AdminMeData>
+
+    @GET("api/admin/admins")
+    suspend fun getDynamicAdmins(): ApiResponse<List<DynamicAdminItem>>
+
+    @POST("api/admin/admins")
+    suspend fun addAdmin(@Body body: Map<String, @JvmSuppressWildcards Any>): ApiResponse<Map<String, Any>>
+
+    @PUT("api/admin/admins/{email}/rights")
+    suspend fun updateAdminRights(
+        @Path("email") email: String,
+        @Body body: UpdateAdminRightsRequest
+    ): ApiResponse<DynamicAdminItem>
+
+    @DELETE("api/admin/admins/{email}")
+    suspend fun removeAdmin(@Path("email") email: String): ApiResponse<Unit>
+
+    @GET("api/admin/analytics/exams")
+    suspend fun getExamAnalytics(@Query("days") days: Int? = null): ApiResponse<List<ExamAnalytics>>
+
+    @GET("api/admin/analytics/questions")
+    suspend fun getQuestionAnalytics(@Query("examId") examId: String? = null): ApiResponse<List<QuestionAnalytics>>
+
+    @GET("api/admin/stats/users")
+    suspend fun getUserStats(): ApiResponse<UserStatsResponse>
+
+    @GET("api/admin/users")
+    suspend fun getUsers(
+        @Query("q") query: String? = null,
+        @Query("page") page: Int? = null,
+        @Query("pageSize") pageSize: Int? = null
+    ): ApiResponse<List<AdminUser>>
+
+    @POST("api/admin/users/{id}/status")
+    suspend fun toggleUserStatus(@Path("id") id: String, @Body body: Map<String, Boolean>): ApiResponse<Map<String, Any>>
+
+    @GET("api/admin/users/{id}/attempts")
+    suspend fun getUserAttempts(@Path("id") id: String): ApiResponse<List<TestAttempt>>
+
+    @POST("api/feedback/messages/{id}/reply")
+    suspend fun replyFeedbackMessage(@Path("id") id: String, @Body body: Map<String, String>): ApiResponse<Map<String, Any>>
+
+    @GET("api/app-config")
+    suspend fun getAppConfig(): ApiResponse<AppConfig>
+
+    @PUT("api/admin/config")
+    suspend fun updateAppConfig(@Body body: Map<String, @JvmSuppressWildcards Any>): ApiResponse<AppConfig>
+
+    @GET("api/admin/api-usage")
+    suspend fun getApiUsage(@Query("month") month: String? = null): ApiResponse<MonthlyApiUsageDto>
+
+    @POST("api/admin/questions/reformat-explanation")
+    suspend fun reformatExplanation(@Body body: Map<String, String>): ApiResponse<Map<String, String>>
+
+    // --- Generated Tests ---
+    @GET("api/generated-tests")
+    suspend fun getGeneratedTests(@Query("examId") examId: String? = null): ApiResponse<List<GeneratedTest>>
+
+    @GET("api/generated-tests/{id}")
+    suspend fun getGeneratedTest(@Path("id") id: String): ApiResponse<GeneratedTest>
+
+    @PUT("api/generated-tests/{id}/status")
+    suspend fun updateGeneratedTestStatus(@Path("id") id: String, @Body body: Map<String, String>): ApiResponse<Unit>
+
+    @PUT("api/generated-tests/{id}/schedule")
+    suspend fun scheduleGeneratedTest(
+        @Path("id") id: String,
+        @Body body: Map<String, Long>
+    ): ApiResponse<Map<String, Any>>
+
+    @DELETE("api/generated-tests/{id}")
+    suspend fun deleteGeneratedTest(@Path("id") id: String): ApiResponse<Unit>
+
+    @POST("api/generated-tests/generate-now")
+    suspend fun triggerAiTestGeneration(@Body body: Map<String, @JvmSuppressWildcards Any>): ApiResponse<Map<String, Any>>
+
+    @POST("api/admin/ai-health")
+    suspend fun checkAiHealth(): ApiResponse<AiHealthResponse>
+
+    // --- Floating Community Link ---
+    @GET("api/floating-link")
+    suspend fun getFloatingLink(): ApiResponse<FloatingLinkResponse>
+
+    @GET("api/admin/floating-link")
+    suspend fun getAdminFloatingLink(): ApiResponse<FloatingLinkResponse>
+
+    @PUT("api/admin/floating-link")
+    suspend fun updateAdminFloatingLink(@Body body: Map<String, @JvmSuppressWildcards Any>): ApiResponse<FloatingLinkResponse>
+
+    // --- Premium & Payment Endpoints ---
+    @GET("api/premium/plan")
+    suspend fun getPremiumPlan(): ApiResponse<PremiumPlanDto>
+
+    @GET("api/premium/status")
+    suspend fun getPremiumStatus(): ApiResponse<PremiumStatusDto>
+
+    @POST("api/premium/orders/create")
+    suspend fun createPremiumOrder(@Body body: CreateOrderRequest): ApiResponse<CreateOrderResponse>
+
+    @GET("api/premium/orders/{orderId}/status")
+    suspend fun getOrderStatus(@Path("orderId") orderId: String): ApiResponse<OrderStatusDto>
+
+    @POST("api/premium/orders/{orderId}/simulate-sandbox-payment")
+    suspend fun simulateSandboxPayment(@Path("orderId") orderId: String): ApiResponse<Any>
+
+    // --- Admin Premium Management Endpoints ---
+    @GET("api/admin/premium/config")
+    suspend fun getAdminPremiumConfig(): ApiResponse<AdminPremiumConfigDto>
+
+    @PUT("api/admin/premium/config")
+    suspend fun updateAdminPremiumConfig(@Body body: AdminPremiumConfigDto): ApiResponse<Any>
+
+    @GET("api/admin/premium/transactions")
+    suspend fun getAdminTransactions(
+        @Query("limit") limit: Int = 100,
+        @Query("status") status: String = ""
+    ): ApiResponse<List<AdminTransactionDto>>
+
+    @GET("api/admin/premium/users")
+    suspend fun getAdminPremiumUsers(): ApiResponse<List<AdminPremiumUserDto>>
+
+    @POST("api/admin/premium/users/grant")
+    suspend fun grantPremium(@Body body: AdminGrantRequest): ApiResponse<Any>
+
+    @POST("api/admin/premium/users/extend")
+    suspend fun extendPremium(@Body body: AdminExtendRequest): ApiResponse<Any>
+
+    @POST("api/admin/premium/users/revoke")
+    suspend fun revokePremium(@Body body: AdminRevokeRequest): ApiResponse<Any>
+
+    // --- Question Reports ---
+    @POST("api/reports")
+    suspend fun submitReport(@Body body: SubmitReportRequest): ApiResponse<Map<String, Any>>
+
+    @GET("api/admin/reports")
+    suspend fun getAdminReports(@Query("type") type: String? = null): ApiResponse<List<QuestionReportDto>>
+
+    @PUT("api/admin/reports/{id}/dismiss")
+    suspend fun dismissReport(@Path("id") id: String): ApiResponse<Unit>
+
+    @POST("api/admin/reports/dismiss-batch")
+    suspend fun dismissReportBatch(@Body body: Map<String, List<String>>): ApiResponse<Unit>
+
+    @DELETE("api/admin/reports/{id}")
+    suspend fun deleteReport(@Path("id") id: String): ApiResponse<Unit>
+
+    // --- Admin Audit Log ---
+    @POST("api/admin/audit-log")
+    suspend fun createAuditLog(@Body body: CreateAuditLogRequest): ApiResponse<Unit>
+
+    @GET("api/admin/audit-log")
+    suspend fun getAdminAuditLogs(
+        @Query("range") range: String = "all",
+        @Query("before") before: Long? = null,
+        @Query("admin") admin: String? = null,
+        @Query("type") type: String? = null,
+        @Query("q") q: String? = null,
+        @Query("limit") limit: Int? = 50
+    ): ApiResponse<List<AdminAuditLogDto>>
+
+    @GET("api/admin/audit-log/types")
+    suspend fun getAuditLogTypes(): ApiResponse<List<String>>
+
+    // Legacy public read contract for already-installed clients; editor writes are retired.
+    @GET("api/typography/published")
+    suspend fun getPublishedTypography(): ApiResponse<com.eve.app.typography.TypographyConfig>
+
+    @GET("api/admin/export/exams")
+    suspend fun exportExams(
+        @Query("limit") limit: Int = 50,
+        @Query("offset") offset: Int = 0
+    ): ApiResponse<ExportExamsResponseDto>
+
+    // --- Animated Emoji System (Mission 03 F4) ---
+    @GET("api/admin/emoji/packs")
+    suspend fun getEmojiPacks(): ApiResponse<EmojiPacksResponseDto>
+
+    @POST("api/admin/emoji/packs")
+    suspend fun createEmojiPack(@Body body: CreateEmojiPackRequest): ApiResponse<EmojiPackDto>
+
+    @PUT("api/admin/emoji/packs/{id}/status")
+    suspend fun toggleEmojiPackStatus(
+        @Path("id") id: String,
+        @Body body: Map<String, Boolean>
+    ): ApiResponse<Map<String, Any>>
+
+    @PUT("api/admin/emoji/global-telegram-status")
+    suspend fun toggleGlobalTelegramEmojiStatus(
+        @Body body: Map<String, Boolean>
+    ): ApiResponse<Map<String, Any>>
+
+    @DELETE("api/admin/emoji/packs/{id}")
+    suspend fun deleteEmojiPack(@Path("id") id: String): ApiResponse<Map<String, Any>>
+
+    /** Read-only enabled animated QR assets for authenticated non-admin users. */
+    @GET("api/emoji/items/public")
+    suspend fun getPublicQrEmojiItems(
+        @Query("offset") offset: Int = 0,
+        @Query("limit") limit: Int = 24
+    ): ApiResponse<List<EmojiItemDto>>
+
+    @GET("api/admin/emoji/items")
+    suspend fun getEmojiItems(
+        @Query("packId") packId: String? = null,
+        @Query("q") q: String? = null,
+        @Query("offset") offset: Int = 0,
+        @Query("limit") limit: Int = 50
+    ): ApiResponse<List<EmojiItemDto>>
+
+    @DELETE("api/admin/emoji/items/{id}")
+    suspend fun deleteEmojiItem(@Path("id") id: String): ApiResponse<Map<String, Any>>
+
+    @POST("api/admin/emoji/upload")
+    suspend fun uploadEmoji(@Body body: RequestBody): ApiResponse<EmojiItemDto>
+
+    @POST("api/admin/emoji/import/telegram")
+    suspend fun importTelegramEmoji(@Body body: ImportTelegramEmojiRequest): ApiResponse<ImportTelegramEmojiResponseDto>
+
+    @POST("api/admin/emoji/import/noto")
+    suspend fun importNotoEmoji(@Body body: ImportNotoEmojiRequest): ApiResponse<ImportNotoEmojiResponseDto>
+
+    @GET("api/admin/emoji/placements")
+    suspend fun getEmojiPlacements(): ApiResponse<List<EmojiPlacementDto>>
+
+    @POST("api/admin/emoji/placements")
+    suspend fun setEmojiPlacement(@Body body: SetEmojiPlacementRequest): ApiResponse<Map<String, Any>>
+
+    @DELETE("api/admin/emoji/placements")
+    suspend fun clearEmojiPlacement(
+        @Query("slotType") slotType: String,
+        @Query("targetId") targetId: String
+    ): ApiResponse<Map<String, Any>>
+
+    @GET("api/emoji/placements/public")
+    suspend fun getPublicEmojiPlacements(): ApiResponse<PublicEmojiDataDto>
+}
+
+@com.google.gson.annotations.JsonAdapter(MonthlyApiUsageJsonAdapter::class)
+data class MonthlyApiUsageDto(
+    val yearMonth: String = "",
+    val monthDisplayName: String = "",
+    val geminiCalls: Long = 0L,
+    val geminiSuccessfulCalls: Long = 0L,
+    val geminiFailedCalls: Long = 0L,
+    val documentsCreated: Long = 0L,
+    val testSubmissions: Long = 0L,
+    val countedSince: String? = null,
+    val lastUpdated: Long = 0L
+)
+
+data class ExportExamsResponseDto(
+    val exams: List<Map<String, @JvmSuppressWildcards Any?>> = emptyList(),
+    val pagination: ExportPaginationDto = ExportPaginationDto()
+)
+
+data class ExportPaginationDto(
+    val offset: Int = 0,
+    val limit: Int = 50,
+    val totalExams: Int = 0,
+    val totalQuestions: Int = 0,
+    val hasMore: Boolean = false
+)
+
+data class AdminMeData(
+    val email: String = "",
+    val isOwner: Boolean = false,
+    val rights: List<String> = emptyList(),
+    val customTitle: String? = null
+)
+
+data class DynamicAdminItem(
+    val email: String = "",
+    val isOwner: Boolean = false,
+    val rights: List<String> = emptyList(),
+    val customTitle: String? = null,
+    val createdAt: Long = 0L
+)
+
+data class UpdateAdminRightsRequest(
+    val rights: List<String>,
+    val customTitle: String? = null
+)
+
+data class EmojiPackDto(
+    val id: String = "",
+    val name: String = "",
+    val title: String = "",
+    val source: String = "",
+    val licenseAttribution: String? = null,
+    val enabled: Boolean = true,
+    val itemCount: Int = 0,
+    val createdAt: Long = 0L,
+    val createdBy: String? = null
+)
+
+data class EmojiPacksResponseDto(
+    val packs: List<EmojiPackDto> = emptyList(),
+    val globalTelegramEnabled: Boolean = true,
+    val telegramBotConfigured: Boolean = false
+)
+
+data class EmojiItemDto(
+    val id: String = "",
+    val packId: String = "",
+    val packTitle: String? = null,
+    val packSlug: String? = null,
+    val altEmoji: String = "",
+    val kind: String = "lottie",
+    val url: String = "",
+    val storageKey: String? = null,
+    val byteSize: Int = 0,
+    val sha256: String? = null,
+    val enabled: Boolean = true,
+    val premiumOrigin: Boolean = false,
+    val telegramCustomEmojiId: String? = null,
+    val source: String = "",
+    val createdAt: Long = 0L
+)
+
+data class EmojiPlacementDto(
+    val id: String = "",
+    val slotType: String = "",
+    val targetId: String = "",
+    val itemId: String = "",
+    val altEmoji: String = "",
+    val kind: String = "lottie",
+    val url: String = "",
+    val packTitle: String? = null,
+    val updatedBy: String? = null,
+    val updatedAt: Long = 0L
+)
+
+data class PublicEmojiDataDto(
+    val examPlacements: Map<String, EmojiItemSimpleDto> = emptyMap(),
+    val categoryPlacements: Map<String, EmojiItemSimpleDto> = emptyMap(),
+    val broadcastPlacements: Map<String, EmojiItemSimpleDto> = emptyMap()
+)
+
+data class EmojiItemSimpleDto(
+    val id: String = "",
+    val url: String = "",
+    val kind: String = "lottie",
+    val alt: String = ""
+)
+
+data class CreateEmojiPackRequest(
+    val name: String,
+    val title: String,
+    val source: String = "upload",
+    val licenseAttribution: String? = null
+)
+
+data class ImportTelegramEmojiRequest(
+    val packName: String? = null,
+    val customEmojiIds: List<String>? = null,
+    val offset: Int = 0,
+    val limit: Int = 5
+)
+
+data class ImportTelegramEmojiResponseDto(
+    val packId: String = "",
+    val packName: String = "",
+    val packTitle: String = "",
+    val totalStickers: Int = 0,
+    val offset: Int = 0,
+    val limit: Int = 5,
+    val importedCount: Int = 0,
+    val nextOffset: Int? = null,
+    val errors: List<String>? = null
+)
+
+data class ImportNotoEmojiRequest(
+    val category: String = "popular"
+)
+
+data class ImportNotoEmojiResponseDto(
+    val packId: String = "",
+    val importedCount: Int = 0,
+    val errors: List<String>? = null
+)
+
+data class SetEmojiPlacementRequest(
+    val slotType: String,
+    val targetId: String,
+    val itemId: String
+)
+
+
+
+

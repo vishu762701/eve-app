@@ -1,0 +1,452 @@
+/*
+ * DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335:
+ * ActionBar/AlertDialog.java:157,302-318,489-504,809-821,920,1010-1042,1137-1215,1526-1528,1834-1842.
+ * Copyright Nikolai Kudashov, 2013-2018. GPL-2.0-or-later.
+ *
+ * Dependency-isolated ADAPTED port of the Telegram message-confirmation path.
+ * Not the entire original renderer: specialized progress, blur and rich-content
+ * variants remain out of this isolated host. No Telegram account/service dependencies.
+ */
+package com.eve.app.designsystem
+
+import android.app.Activity
+import android.app.Dialog
+import android.content.Context
+import android.content.ContextWrapper
+import android.content.DialogInterface
+import android.content.res.ColorStateList
+import android.content.res.Configuration
+import android.graphics.Color
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffColorFilter
+import android.graphics.Rect
+import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.RippleDrawable
+import android.os.Bundle
+import android.text.TextUtils
+import android.text.TextPaint
+import android.util.TypedValue
+import android.view.Gravity
+import android.view.View
+import android.view.ViewGroup
+import android.view.WindowManager
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
+import androidx.appcompat.content.res.AppCompatResources
+import androidx.core.content.ContextCompat
+import com.eve.app.R
+import com.eve.app.theme.TelegramThemeEngine
+import com.eve.app.ui.common.TelegramCheckBox2
+import com.eve.app.util.FontManager
+
+/** Source-isolated Telegram dialog for message, action, item, check-box and custom-view variants. */
+class TelegramNativeAlertDialog private constructor(
+    context: Context,
+    private val titleText: CharSequence?,
+    private val messageText: CharSequence?,
+    private val positiveText: CharSequence?,
+    private val onPositive: DialogInterface.OnClickListener?,
+    private val negativeText: CharSequence?,
+    private val onNegative: DialogInterface.OnClickListener?,
+    private val rowItems: Array<out CharSequence>?,
+    private val rowItemIcons: IntArray?,
+    private val selectedItemIndex: Int,
+    private val onItemClick: DialogInterface.OnClickListener?,
+    private val dismissItemsOnSelection: Boolean,
+    private val customContent: View?,
+    private val neutralText: CharSequence?,
+    private val onNeutral: DialogInterface.OnClickListener?,
+    private val redButtons: Set<Int>,
+    private val checkBoxLabel: CharSequence?,
+    private var checkBoxChecked: Boolean,
+    private val onCheckBoxClick: View.OnClickListener?
+) : Dialog(context, R.style.Theme_Eve_TelegramNativeDialog) {
+
+    private fun dp(value: Int) = (value * context.resources.displayMetrics.density + 0.5f).toInt()
+    private val actionButtons = mutableMapOf<Int, TextView>()
+    // ADAPTED AlertDialog.java:157,1526-1528: custom forms own validated dismissal.
+    private var dismissDialogByButtons = true
+    fun setDismissDialogByButtons(value: Boolean) { dismissDialogByButtons = value }
+
+    fun getActionButton(which: Int): TextView? = actionButtons[which]
+    fun isCheckBoxChecked(): Boolean = checkBoxChecked
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        val palette = TelegramThemeEngine.resolveCurrentPalette(context)
+        val textInk = if (palette.isDark) Color.WHITE else palette.textPrimary
+        val actionInk = if (palette.isDark) Color.WHITE else palette.accent
+        val backgroundInk = if (palette.isDark) 0xFF262626.toInt() else palette.dialogSurface
+        val background = requireNotNull(AppCompatResources.getDrawable(
+            context, R.drawable.telegram_dialog_popup_fixed_alert4
+        )).mutate()
+        background.colorFilter = PorterDuffColorFilter(backgroundInk, PorterDuff.Mode.MULTIPLY)
+        window?.setBackgroundDrawable(background)
+        window?.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+        window?.setDimAmount(0.5f)
+
+        val root = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            clipChildren = false
+            clipToPadding = false
+        }
+        titleText?.let { label ->
+            root.addView(TextView(context).apply {
+                tag = "telegram_native_alert_title"
+                text = label
+                setTextColor(textInk)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
+                typeface = FontManager.telegramMediumTypeface(context)
+                gravity = Gravity.START
+                // AlertDialog.java:818-821: title bottom margin 14dp with item list, else 10dp.
+                setPadding(dp(24), dp(19), dp(24), dp(if (rowItems != null) 14 else 10))
+            }, LinearLayout.LayoutParams(-1, -2))
+        }
+        if (messageText != null || rowItems != null || customContent != null) {
+            // Telegram AlertDialog.java:850-871,920,932-949: a single scroll host
+            // for message + 50dp list cells, independent of the action row.
+            val scrollContainer = LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+            }
+            messageText?.let { message ->
+                scrollContainer.addView(TextView(context).apply {
+                    tag = "telegram_native_alert_message"
+                    text = message
+                    setTextColor(textInk)
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+                    gravity = Gravity.START
+                    // AlertDialog.java:920: margins 24,0,24 and bottom customViewOffset (12dp)
+                    // when an item list or custom view follows, else 0.
+                    setPadding(
+                        dp(24), if (titleText == null) dp(19) else 0, dp(24),
+                        dp(if (customContent != null || rowItems != null) 12 else 0)
+                    )
+                }, LinearLayout.LayoutParams(-1, -2))
+            }
+            rowItems?.forEachIndexed { index, label ->
+                val row = LinearLayout(context).apply {
+                    tag = "telegram_native_alert_item_$index"
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    minimumHeight = dp(50)
+                    setPadding(dp(24), 0, dp(24), 0)
+                    isClickable = true
+                    isFocusable = true
+                    this.background = TelegramThemeSelectors.getRoundRectSelectorDrawable(
+                        dp(8).toFloat(),
+                        palette.actionSelector
+                    )
+                    setOnClickListener {
+                        if (!isShowing) return@setOnClickListener
+                        try {
+                            onItemClick?.onClick(this@TelegramNativeAlertDialog, index)
+                        } finally {
+                            if (isShowing && (selectedItemIndex < 0 || dismissItemsOnSelection)) {
+                                dismiss()
+                            } else if (isShowing && selectedItemIndex >= 0) {
+                                // EVE confirm-later choice: selecting a row updates
+                                // its radio indicator without closing the dialog.
+                                (0 until (rowItems.size)).forEach { itemIndex ->
+                                    scrollContainer.findViewWithTag<LinearLayout>(
+                                        "telegram_native_alert_item_$itemIndex"
+                                    )?.let { choiceRow ->
+                                        choiceRow.isSelected = itemIndex == index
+                                        for (childIndex in 0 until choiceRow.childCount) {
+                                            (choiceRow.getChildAt(childIndex) as? android.widget.Checkable)?.isChecked = itemIndex == index
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                val iconRes = if (rowItemIcons != null && index < rowItemIcons.size) rowItemIcons[index] else 0
+                if (iconRes != 0) {
+                    row.addView(ImageView(context).apply {
+                        setImageDrawable(AppCompatResources.getDrawable(context, iconRes))
+                        colorFilter = PorterDuffColorFilter(palette.textSecondary, PorterDuff.Mode.MULTIPLY)
+                        scaleType = ImageView.ScaleType.CENTER_INSIDE
+                    }, LinearLayout.LayoutParams(dp(24), dp(24)).apply {
+                        marginEnd = dp(20)
+                    })
+                }
+                row.addView(TextView(context).apply {
+                    text = label
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+                    setTextColor(textInk)
+                    gravity = Gravity.CENTER_VERTICAL
+                    maxLines = 2
+                    ellipsize = TextUtils.TruncateAt.END
+                }, LinearLayout.LayoutParams(0, -2, 1f))
+                if (selectedItemIndex >= 0) {
+                    // EVE radio-choice behavior is ADAPTED: Telegram's upstream
+                    // AlertDialog only defines setItems(), not setSingleChoiceItems().
+                    row.addView(com.eve.app.ui.common.TelegramRadioButton(context).apply {
+                        isChecked = index == selectedItemIndex
+                        isClickable = false
+                        isFocusable = false
+                        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                    }, LinearLayout.LayoutParams(dp(40), dp(48)))
+                    row.isSelected = index == selectedItemIndex
+                }
+                scrollContainer.addView(row, LinearLayout.LayoutParams(-1, dp(50)))
+            }
+            customContent?.let { child ->
+                // Telegram AlertDialog.java:950-956 detaches an existing parent before
+                // mounting the custom View into the dialog's scrollable content.
+                (child.parent as? ViewGroup)?.removeView(child)
+                scrollContainer.addView(child, LinearLayout.LayoutParams(-1, -2))
+                // Native EVE inputs use the standard IME resize path, no Telegram services.
+                window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+            }
+            root.addView(ScrollView(context).apply {
+                isVerticalScrollBarEnabled = false
+                addView(scrollContainer, android.widget.FrameLayout.LayoutParams(-1, -2))
+            }, LinearLayout.LayoutParams(-1, -2))
+        }
+        // AlertDialog.java:1010-1042: optional checkBox row above the action bar.
+        checkBoxLabel?.let { label ->
+            val checkRow = LinearLayout(context).apply {
+                tag = "telegram_native_alert_checkbox_row"
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                minimumHeight = dp(48)
+                setPadding(dp(24), dp(4), dp(24), dp(4))
+                isClickable = true
+                isFocusable = true
+                this.background = TelegramThemeSelectors.getRoundRectSelectorDrawable(
+                    dp(8).toFloat(),
+                    palette.actionSelector
+                )
+            }
+            val checkBox = TelegramCheckBox2(context).apply {
+                tag = "telegram_native_alert_checkbox"
+                setSize(20f)
+                setChecked(checkBoxChecked, animated = false)
+                isClickable = false
+                isFocusable = false
+            }
+            val checkText = TextView(context).apply {
+                text = label
+                setTextColor(textInk)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            checkRow.addView(checkBox, LinearLayout.LayoutParams(dp(20), dp(20)).apply {
+                marginEnd = dp(16)
+            })
+            checkRow.addView(checkText, LinearLayout.LayoutParams(0, -2, 1f))
+            checkRow.setOnClickListener { v ->
+                checkBoxChecked = !checkBoxChecked
+                checkBox.setChecked(checkBoxChecked, animated = true)
+                onCheckBoxClick?.onClick(v)
+            }
+            root.addView(checkRow, LinearLayout.LayoutParams(-1, -2))
+        }
+        if (positiveText != null || negativeText != null || neutralText != null) {
+            // Original Telegram AlertDialog.java:957-987 measures action labels
+            // and switches to a vertical row when a narrow screen cannot fit them.
+            val actionLabels = listOfNotNull(neutralText, negativeText, positiveText)
+            val measurePaint = TextPaint().apply {
+                textSize = TypedValue.applyDimension(
+                    TypedValue.COMPLEX_UNIT_SP, 16f, context.resources.displayMetrics
+                )
+                typeface = FontManager.telegramMediumTypeface(context)
+            }
+            val estimatedWidth = actionLabels.sumOf {
+                measurePaint.measureText(it.toString()).toDouble()
+            }.toFloat() + dp(24 * actionLabels.size + 8 * (actionLabels.size - 1))
+            val screenWidth = context.resources.displayMetrics.widthPixels
+            // Telegram AlertDialog.java:980: buttonsWidth > screenWidth - dp(64)
+            val verticalActions = estimatedWidth > (screenWidth - dp(64))
+            val actions = LinearLayout(context).apply {
+                tag = "telegram_native_alert_actions"
+                orientation = if (verticalActions) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
+                clipChildren = false
+                clipToPadding = false
+                if (verticalActions) {
+                    gravity = Gravity.END or Gravity.CENTER_VERTICAL
+                    setPadding(dp(16), 0, dp(16), 0)
+                } else {
+                    // AlertDialog.java:1108,1160-1163: bar padding 8dp, 40dp buttons at the top-right.
+                    gravity = Gravity.END or Gravity.CENTER_VERTICAL
+                    setPadding(dp(8), dp(4), dp(16), dp(8))
+                }
+            }
+            fun addAction(which: Int, label: CharSequence, listener: DialogInterface.OnClickListener?) {
+                val mask = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = dp(20).toFloat()
+                    setColor(Color.WHITE)
+                }
+                // Original AlertDialog.Builder.makeRed():1991-2008.
+                // EVE destructive-red override is ADAPTED to its owner token.
+                val buttonInk = if (which in redButtons) {
+                    ContextCompat.getColor(context, R.color.design_destructive_text)
+                } else actionInk
+                val action = TextView(context).apply {
+                    tag = which
+                    text = label
+                    setTextColor(buttonInk)
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+                    typeface = FontManager.telegramMediumTypeface(context)
+                    gravity = Gravity.CENTER
+                    minWidth = dp(64)
+                    // Telegram AlertDialog.java:1162: 40dp button height
+                    minHeight = dp(40)
+                    setPadding(dp(12), 0, dp(12), 0)
+                    isSingleLine = true
+                    ellipsize = TextUtils.TruncateAt.END
+                    setBackground(RippleDrawable(
+                        ColorStateList.valueOf((buttonInk and 0x00FFFFFF) or 0x19000000), null, mask
+                    ))
+                    setOnClickListener {
+                        if (!isShowing) return@setOnClickListener
+                        try {
+                            listener?.onClick(this@TelegramNativeAlertDialog, which)
+                        } finally {
+                            if (isShowing && dismissDialogByButtons) {
+                                // AlertDialog button actions dismiss; only Back/outside
+                                // cancellation dispatches OnCancelListener.
+                                dismiss()
+                            }
+                        }
+                    }
+                }
+                action.minimumHeight = dp(48)
+                actionButtons[which] = action
+                val lp = LinearLayout.LayoutParams(
+                    if (verticalActions) -1 else -2, dp(48)
+                )
+                if (actions.childCount != 0 && !verticalActions) lp.marginStart = dp(8)
+                actions.addView(action, lp)
+            }
+            neutralText?.let { addAction(DialogInterface.BUTTON_NEUTRAL, it, onNeutral) }
+            negativeText?.let { addAction(DialogInterface.BUTTON_NEGATIVE, it, onNegative) }
+            positiveText?.let { addAction(DialogInterface.BUTTON_POSITIVE, it, onPositive) }
+            // Telegram actions row: wrap content so full 48dp touch targets are never clipped
+            val rowHeight = LinearLayout.LayoutParams.WRAP_CONTENT
+            root.addView(actions, LinearLayout.LayoutParams(-1, rowHeight))
+        }
+        customContent?.let {
+            com.eve.app.theme.TelegramThemeApplier.applyToViewTree(it, palette)
+        }
+        setContentView(root, ViewGroup.LayoutParams(-1, -2))
+    }
+
+    /** Upstream AndroidUtilities.isSafeToShow():6255-6267, AlertDialog.java:325-328. */
+    private fun hostActivityIsAlive(): Boolean {
+        var current: Context? = context
+        while (current is ContextWrapper) {
+            if (current is Activity) return !current.isFinishing && !current.isDestroyed
+            current = current.baseContext
+        }
+        return true
+    }
+
+    override fun show() {
+        if (!hostActivityIsAlive()) return
+        super.show()
+        // Upstream AlertDialog.java:489-504 width constraints and 9-patch padding.
+        val metrics = context.resources.displayMetrics
+        val size = context.resources.configuration.screenLayout and Configuration.SCREENLAYOUT_SIZE_MASK
+        val isTablet = size >= Configuration.SCREENLAYOUT_SIZE_LARGE
+        val minSideDp = minOf(metrics.widthPixels, metrics.heightPixels) / metrics.density
+        val maxWidthDp = if (!isTablet) 356 else if (minSideDp <= 690f) 446 else 496
+        val insets = Rect()
+        window?.decorView?.background?.getPadding(insets)
+        val width = minOf(metrics.widthPixels - dp(56), dp(maxWidthDp)) + insets.left + insets.right
+        window?.setLayout(width, WindowManager.LayoutParams.WRAP_CONTENT)
+    }
+
+    class Builder(private val context: Context) {
+        private var title: CharSequence? = null
+        private var message: CharSequence? = null
+        private var positive: CharSequence? = null
+        private var negative: CharSequence? = null
+        private var onPositive: DialogInterface.OnClickListener? = null
+        private var onNegative: DialogInterface.OnClickListener? = null
+        private var items: Array<out CharSequence>? = null
+        private var itemIcons: IntArray? = null
+        private var selectedItemIndex: Int = -1
+        private var onItemClick: DialogInterface.OnClickListener? = null
+        private var dismissItemsOnSelection: Boolean = true
+        private var customView: View? = null
+        private var neutral: CharSequence? = null
+        private var onNeutral: DialogInterface.OnClickListener? = null
+        private val redButtons = mutableSetOf<Int>()
+        private var cancelable = true
+        private var canceledOnTouchOutside: Boolean? = null
+        private var dismissListener: DialogInterface.OnDismissListener? = null
+        private var cancelListener: DialogInterface.OnCancelListener? = null
+        private var checkBoxLabel: CharSequence? = null
+        private var checkBoxChecked: Boolean = false
+        private var onCheckBoxClick: View.OnClickListener? = null
+
+        fun setOnCancelListener(listener: DialogInterface.OnCancelListener?) = apply {
+            cancelListener = listener
+        }
+        fun setCancelable(value: Boolean) = apply { cancelable = value }
+        fun setCanceledOnTouchOutside(value: Boolean) = apply { canceledOnTouchOutside = value }
+        fun setOnDismissListener(listener: DialogInterface.OnDismissListener?) = apply {
+            dismissListener = listener
+        }
+        fun setTitle(value: CharSequence) = apply { title = value }
+        fun setMessage(value: CharSequence) = apply { message = value }
+        fun setPositiveButton(value: CharSequence, listener: DialogInterface.OnClickListener?) = apply {
+            positive = value; onPositive = listener
+        }
+        fun setNegativeButton(value: CharSequence, listener: DialogInterface.OnClickListener?) = apply {
+            negative = value; onNegative = listener
+        }
+        /** Telegram AlertDialog.Builder.setView():1845-1853, mount at 950-956. */
+        fun setView(view: View) = apply { customView = view }
+        /** Original Telegram AlertDialog.Builder.setItems():1827-1842. */
+        fun setItems(values: Array<out CharSequence>, listener: DialogInterface.OnClickListener?) = apply {
+            items = values.copyOf(); itemIcons = null; selectedItemIndex = -1; onItemClick = listener
+            dismissItemsOnSelection = true
+        }
+        /** Original Telegram AlertDialog.Builder.setItems(items, icons, listener):1834-1842. */
+        fun setItems(values: Array<out CharSequence>, icons: IntArray, listener: DialogInterface.OnClickListener?) = apply {
+            items = values.copyOf(); itemIcons = icons.copyOf(); selectedItemIndex = -1; onItemClick = listener
+            dismissItemsOnSelection = true
+        }
+        /** Telegram AlertDialog.Builder.setCheckBox():1962-1975. */
+        fun setCheckBox(label: CharSequence, checked: Boolean, onClick: View.OnClickListener? = null) = apply {
+            checkBoxLabel = label; checkBoxChecked = checked; onCheckBoxClick = onClick
+        }
+        /** EVE-only ADAPTED single-radio-choice behavior on upstream 50dp rows. */
+        fun setSingleChoiceItems(
+            values: Array<out CharSequence>,
+            checkedIndex: Int,
+            dismissOnSelection: Boolean = true,
+            listener: DialogInterface.OnClickListener?
+        ) = apply {
+            items = values.copyOf(); itemIcons = null; selectedItemIndex = checkedIndex; onItemClick = listener
+            dismissItemsOnSelection = dismissOnSelection
+        }
+        fun setNeutralButton(value: CharSequence, listener: DialogInterface.OnClickListener?) = apply {
+            neutral = value; onNeutral = listener
+        }
+        fun makeRed(which: Int) = apply {
+            require(which in setOf(
+                DialogInterface.BUTTON_POSITIVE, DialogInterface.BUTTON_NEGATIVE, DialogInterface.BUTTON_NEUTRAL
+            )) { "Unsupported destructive action" }
+            redButtons += which
+        }
+        fun create() = TelegramNativeAlertDialog(
+            context, title, message, positive, onPositive, negative, onNegative,
+            items, itemIcons, selectedItemIndex, onItemClick, dismissItemsOnSelection,
+            customView, neutral, onNeutral, redButtons.toSet(),
+            checkBoxLabel, checkBoxChecked, onCheckBoxClick
+        ).also { dialog ->
+            dialog.setCancelable(cancelable)
+            dialog.setCanceledOnTouchOutside(canceledOnTouchOutside ?: cancelable)
+            dialog.setOnCancelListener(cancelListener)
+            dialog.setOnDismissListener(dismissListener)
+        }
+        fun show() = create().also { it.show() }
+    }
+}

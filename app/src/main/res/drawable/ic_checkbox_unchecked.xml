@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Derived from Telegram Android iv_checkbox_off.xml, DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335 -->
+<!-- GNU GPL v2 or later. See THIRD_PARTY_NOTICES.md. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="@dimen/design_icon_size"
+    android:height="@dimen/design_icon_size"
+    android:viewportWidth="52"
+    android:viewportHeight="52">
+    <path
+        android:strokeColor="@color/text_secondary"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M 13 6 L 39 6 Q 46 6 46 13 L 46 39 Q 46 46 39 46 L 13 46 Q 6 46 6 39 L 6 13 Q 6 6 13 6 Z" />
+</vector>

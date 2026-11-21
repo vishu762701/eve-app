@@ -1,0 +1,97 @@
+/* Derived from Telegram RecyclerListView.java:3285-3292,3587-3615 & ShadowSectionCell.java.
+ * Copyright Nikolai Kudashov / Telegram contributors. GNU GPL v2 or later.
+ * EVE adapter: a fixed grouped section instead of RecyclerView item decoration.
+ * See THIRD_PARTY_NOTICES.md. */
+package com.eve.app.ui.profile
+
+import android.content.Context
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.RectF
+import android.util.AttributeSet
+import android.widget.LinearLayout
+import com.eve.app.theme.TelegramThemeEngine
+
+/** Original section geometry and paint pipeline; EVE owns the rows and theme binding. */
+class TelegramProfileSection @JvmOverloads constructor(
+    context: Context, attrs: AttributeSet? = null
+) : LinearLayout(context, attrs) {
+    private val density = resources.displayMetrics.density
+    var cornerRadiusDp: Float = 16f
+        set(value) { field = value; invalidate() }
+    private val rect = RectF()
+    private val clip = Path()
+    private val surfacePaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val hairlinePaint = Paint().apply { strokeWidth = 1f }
+    // SharedConfig.java:684 defaults this upstream preference to false.
+    var shadowsInSections = true
+        set(value) { field = value; invalidate() }
+    private val themeListener: (TelegramThemeEngine.ResolvedPalette) -> Unit = { invalidate() }
+
+    init {
+        orientation = VERTICAL
+        setWillNotDraw(false)
+        clipChildren = false
+        clipToPadding = false
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        TelegramThemeEngine.addThemeChangeListener(themeListener)
+    }
+
+    override fun onDetachedFromWindow() {
+        TelegramThemeEngine.removeThemeChangeListener(themeListener)
+        super.onDetachedFromWindow()
+    }
+
+    fun updatePalette(palette: TelegramThemeEngine.ResolvedPalette) {
+        hairlinePaint.color = palette.hairline
+        invalidate()
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
+        rect.set(0f, 0f, width.toFloat(), height.toFloat())
+        val palette = TelegramThemeEngine.resolveCurrentPalette(context)
+        val r = cornerRadiusDp * density
+        // RecyclerListView.drawBackgroundRect: source's optional section shadows,
+        // substantially subtler than the former global Material elevated card.
+        if (shadowsInSections && r > 0f) {
+            strokePaint.setShadowLayer(.33f * density, 0f, 0f, 0x0c000000)
+            strokePaint.color = 0
+            surfacePaint.setShadowLayer(2f * density, 0f, .33f * density, 0x0a000000)
+        } else {
+            surfacePaint.setShadowLayer(0f, 0f, 0f, 0)
+        }
+        surfacePaint.color = palette.surface
+        hairlinePaint.color = palette.hairline
+        if (r > 0f) {
+            if (shadowsInSections) canvas.drawRoundRect(rect, r, r, strokePaint)
+            canvas.drawRoundRect(rect, r, r, surfacePaint)
+        } else {
+            canvas.drawRect(rect, surfacePaint)
+            if (width > 0 && height > 1) {
+                canvas.drawLine(0f, 0.5f, width.toFloat(), 0.5f, hairlinePaint)
+                canvas.drawLine(0f, height - 0.5f, width.toFloat(), height - 0.5f, hairlinePaint)
+            }
+        }
+    }
+
+    override fun dispatchDraw(canvas: Canvas) {
+        val r = cornerRadiusDp * density
+        if (r > 0f) {
+            rect.set(0f, 0f, width.toFloat(), height.toFloat())
+            clip.rewind()
+            clip.addRoundRect(rect, r, r, Path.Direction.CW)
+            val save = canvas.save()
+            canvas.clipPath(clip)
+            super.dispatchDraw(canvas)
+            canvas.restoreToCount(save)
+        } else {
+            super.dispatchDraw(canvas)
+        }
+    }
+}

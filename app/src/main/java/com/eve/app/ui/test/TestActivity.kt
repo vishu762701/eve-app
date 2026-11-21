@@ -1,0 +1,908 @@
+package com.eve.app.ui.test
+
+import com.eve.app.ui.common.EveBaseActivity
+
+import android.content.Intent
+import android.os.Bundle
+import android.view.View
+import androidx.activity.OnBackPressedCallback
+import androidx.activity.viewModels
+import org.telegram.ui.ActionBar.AlertDialog
+import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.viewpager2.widget.ViewPager2
+import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import com.eve.app.R
+import com.eve.app.data.model.AnswerItem
+import com.eve.app.data.model.Question
+import com.eve.app.data.remote.toUserFriendlyMessage
+import com.eve.app.data.repository.AdminRepository
+import com.eve.app.data.repository.QuestionStatsRepository
+import com.eve.app.ui.common.PaletteItem
+import com.eve.app.ui.common.PaletteState
+import com.eve.app.ui.common.QuestionPaletteAdapter
+import com.eve.app.ui.common.ReportQuestionDialog
+import com.eve.app.ui.result.ResultActivity
+import com.eve.app.ui.result.ResultDataHolder
+import com.eve.app.util.AnalyticsHelper
+import com.eve.app.util.Constants
+import com.eve.app.util.LanguageManager
+import com.eve.app.util.NetworkUtil
+import com.eve.app.util.SecurityHelper
+import com.eve.app.util.SubmissionRetryPolicy
+import com.eve.app.util.UiState
+import com.google.firebase.auth.FirebaseAuth
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+
+class TestActivity : EveBaseActivity() {
+
+    private lateinit var binding: TestTelegramViewTree
+    private val viewModel: TestViewModel by viewModels()
+
+    private lateinit var examId: String
+    private var timeLimit = 30
+    private var negativeMarking = Constants.NEGATIVE_MARK
+    private var examName = ""
+    private var examCategory = ""
+    private var topic = ""
+    private var pyqYear = 0
+    private var pyqPaper = ""
+    private var totalQuestions = 0
+    private var submitted = false
+    // Confirmation windows are owned by this Activity, never by the ViewModel.
+    // Prevent rapid Back/Submit taps from stacking duplicate windows.
+    private var leaveConfirmDialog: AlertDialog? = null
+    private var submitConfirmDialog: AlertDialog? = null
+    private var statusDialog: AlertDialog? = null
+    private var completedExamDialog: com.eve.app.designsystem.TelegramBottomSheet? = null
+    private var isLeavingTest = false
+    private var adminRepository = AdminRepository()
+    private var isAdminUser = false
+    private var hasEmptyPlayed = false
+    private var fromBookmark = false
+    private var initialQuestionId: String? = null
+    private var initialNavDone = false
+
+    // The Activity host retains its launching identity. The ViewModel remains
+    // the authoritative attempt/answer owner; this is only a lifecycle guard.
+    private var testOwnerUid = ""
+    private fun isTestOwner(): Boolean = SubmissionRetryPolicy.ownsSubmission(
+        testOwnerUid, FirebaseAuth.getInstance().currentUser?.uid)
+    private val testAccountListener = FirebaseAuth.AuthStateListener { state ->
+        if (testOwnerUid.isNotBlank() &&
+            !SubmissionRetryPolicy.ownsSubmission(testOwnerUid, state.currentUser?.uid)) {
+            finish()
+        }
+    }
+
+    private lateinit var paletteAdapter: QuestionPaletteAdapter
+    private var currentQuestionPosition: Int = 0
+
+    // A custom Telegram theme preview can change while this Activity stays alive.
+    // Rebind the existing answer tiles and only the requested primary action.
+    private val questionThemeListener: (com.eve.app.theme.TelegramThemeEngine.ResolvedPalette) -> Unit = { palette ->
+        if (::binding.isInitialized && !isFinishing && !isDestroyed) {
+            runOnUiThread { refreshQuestionTheme(palette) }
+        }
+    }
+
+    private fun refreshQuestionTheme(palette: com.eve.app.theme.TelegramThemeEngine.ResolvedPalette) {
+        if (!::binding.isInitialized || isFinishing || isDestroyed) return
+        TestPrimaryActionAppearance.apply(binding.btnNext, palette.isDark)
+        binding.circularTimerView.updateThemeColors()
+        if (::paletteAdapter.isInitialized) {
+            paletteAdapter.notifyDataSetChanged()
+        }
+        val recycler = binding.viewPager.getChildAt(0) as? androidx.recyclerview.widget.RecyclerView
+        if (recycler != null) {
+            for (index in 0 until recycler.childCount) {
+                val page = recycler.getChildAt(index)
+                for (id in intArrayOf(R.id.rbA, R.id.rbB, R.id.rbC, R.id.rbD)) {
+                    page.findViewById<com.eve.app.ui.common.TelegramRadioButton>(id)?.updatePalette(palette)
+                }
+            }
+        }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        com.eve.app.typography.TypographyRepository.getInstance(this).setTestSessionActive(true)
+        hasEmptyPlayed = savedInstanceState?.getBoolean("key_empty_played", false) ?: false
+        currentQuestionPosition = savedInstanceState?.getInt("saved_question_position", 0) ?: 0
+        SecurityHelper.applyScreenProtection(this)
+        binding = TestTelegramViewTree(this)
+        setContentView(binding.root)
+        // Android can restore the previous Activity after the Firebase user has
+        // changed. Never adopt another account's existing question session.
+        val currentUid = FirebaseAuth.getInstance().currentUser?.uid
+        val originUid = if (savedInstanceState == null) currentUid
+            else savedInstanceState.getString("key_attempt_owner")
+        if (!SubmissionRetryPolicy.ownsSubmission(originUid, currentUid)) {
+            finish()
+            return
+        }
+        testOwnerUid = originUid.orEmpty()
+        com.eve.app.theme.TelegramThemeEngine.addThemeChangeListener(questionThemeListener)
+        TestPrimaryActionAppearance.apply(binding.btnNext)
+        // Source-backed hierarchy from Telegram ActionBar.java:534; EVE test
+        // heading uses the owner-requested 700 weight (ADAPTED arrangement).
+        binding.tvTestTitle.typeface = com.eve.app.util.FontManager.boldTypeface(this)
+
+        examId = intent.getStringExtra(Constants.EXTRA_EXAM_ID) ?: ""
+        examName = intent.getStringExtra(Constants.EXTRA_EXAM_NAME) ?: "Test"
+        examCategory = intent.getStringExtra(Constants.EXTRA_EXAM_CATEGORY) ?: ""
+        timeLimit = intent.getIntExtra(Constants.EXTRA_TIME_LIMIT, 30)
+        negativeMarking = intent.getDoubleExtra(Constants.EXTRA_NEGATIVE_MARKING, Constants.NEGATIVE_MARK)
+        topic = intent.getStringExtra(Constants.EXTRA_TOPIC).orEmpty()
+        pyqYear = intent.getIntExtra(Constants.EXTRA_PYQ_YEAR, 0)
+        pyqPaper = intent.getStringExtra(Constants.EXTRA_PYQ_PAPER).orEmpty()
+        fromBookmark = intent.getBooleanExtra(Constants.EXTRA_FROM_BOOKMARK, false)
+        initialQuestionId = intent.getStringExtra(Constants.EXTRA_INITIAL_QUESTION_ID)
+
+        val testId = intent.getStringExtra(Constants.EXTRA_TEST_ID).orEmpty()
+
+        if (savedInstanceState != null) {
+            viewModel.restoreFromBundle(savedInstanceState, if (testId.isNotBlank() && !examId.contains(com.eve.app.util.AttemptKey.SEP)) com.eve.app.util.AttemptKey.forTest(examId, testId) else examId)
+        }
+
+        val currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
+        lifecycleScope.launch {
+            val isAdmin = currentUser?.let { user ->
+                adminRepository.isAdmin(user.email)
+            } ?: false
+            if (!isTestOwner()) {
+                finish()
+                return@launch
+            }
+            isAdminUser = isAdmin
+
+            if (!isAdminUser && topic.isBlank() && pyqYear == 0 && examId.isNotBlank()) {
+                val canAttempt = com.eve.app.util.AttemptLimitManager.canAttempt(this@TestActivity, examId)
+                if (!isTestOwner() || isFinishing || isDestroyed) {
+                    finish()
+                    return@launch
+                }
+                if (!canAttempt) {
+                    AlertDialog.Builder(this@TestActivity)
+                        .setTitle("Attempt Limit Reached")
+                        .setMessage("You have reached the maximum limit of 3 attempts for this test. Normal users can attempt each test at most 3 times.")
+                        .setPositiveButton("OK") { _, _ -> finish() }
+                        .let { showExamNotice(it, cancelable = false) }
+                    return@launch
+                }
+            }
+
+            viewModel.start(examId, timeLimit, topic, pyqYear, pyqPaper, isAdminUser, examName, fromBookmark, testId)
+        }
+        // Phase 15: exam start event — is exam ko kitni baar attempt kiya gaya, yeh track karta hai
+        AnalyticsHelper.logExamStart(this, examId, examName, examCategory)
+
+        paletteAdapter = QuestionPaletteAdapter(approvedTestStyle = true, progressiveMotion = true) { pos ->
+            // Only revealed numbers exist in the adapter; guard programmatic calls too.
+            if (pos in 0 until totalQuestions && pos <= viewModel.furthestRevealedIndex) {
+                binding.viewPager.setCurrentItem(pos, true)
+            }
+        }
+        com.eve.app.ui.common.TelegramHorizontalScrollLayoutManager.install(binding.rvQuestionPalette)
+        binding.rvQuestionPalette.adapter = paletteAdapter
+        // The source-timed enter animation owns insertion visuals; avoid a
+        // competing RecyclerView default fade or rebinding all old circles.
+        binding.rvQuestionPalette.itemAnimator = null
+        // Future pages cannot be revealed with a swipe ahead of Save and Next.
+        // Previous and already-revealed positions remain available via the strip.
+        binding.viewPager.isUserInputEnabled = false
+        binding.viewPager.clipChildren = false
+        binding.viewPager.clipToPadding = false
+        (binding.viewPager.getChildAt(0) as? androidx.recyclerview.widget.RecyclerView)?.apply {
+            clipChildren = false
+            clipToPadding = false
+        }
+
+        val baseBottomPadding = binding.layoutBottomBar.paddingBottom
+        ViewCompat.setOnApplyWindowInsetsListener(binding.layoutBottomBar) { view, insets ->
+            val navBars = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
+            view.setPadding(
+                view.paddingLeft,
+                view.paddingTop,
+                view.paddingRight,
+                baseBottomPadding + navBars.bottom
+            )
+            insets
+        }
+
+        com.eve.app.designsystem.DesignPress.bind(binding.btnPrev)
+        binding.btnPrev.setOnClickListener {
+            val current = binding.viewPager.currentItem
+            if (current > 0) {
+                binding.viewPager.currentItem = current - 1
+            }
+        }
+        com.eve.app.designsystem.DesignPress.bind(binding.btnNext)
+        binding.btnNext.setOnClickListener {
+            if (submitted || viewModel.timeUp.value == true || totalQuestions == 0) return@setOnClickListener
+            val current = binding.viewPager.currentItem
+            if (current >= totalQuestions - 1) {
+                confirmSubmit()
+            } else {
+                val next = current + 1
+                viewModel.revealThrough(next)
+                binding.viewPager.setCurrentItem(next, true)
+                viewModel.saveCurrentSession(examId, next)
+            }
+        }
+        com.eve.app.designsystem.DesignPress.bind(binding.btnClear)
+        binding.btnClear.setOnClickListener {
+            if (submitted || viewModel.timeUp.value == true) return@setOnClickListener
+            val current = binding.viewPager.currentItem
+            viewModel.setAnswer(current, "")
+            viewModel.saveCurrentSession(examId, current)
+            updatePalette(current)
+            val rv = binding.viewPager.getChildAt(0) as? androidx.recyclerview.widget.RecyclerView
+            val vh = rv?.findViewHolderForAdapterPosition(current) as? QuestionAdapter.VH
+            vh?.clearSelection()
+        }
+        com.eve.app.designsystem.DesignPress.bind(binding.btnMarkReview)
+        binding.btnMarkReview.setOnClickListener {
+            val current = binding.viewPager.currentItem
+            viewModel.toggleMark(current)
+            updatePalette(current)
+            val isMarked = viewModel.isMarked(current)
+            binding.btnMarkReview.isSelected = isMarked
+            binding.btnMarkReview.text = if (isMarked) getString(R.string.unmark_review) else getString(R.string.mark_for_review)
+        }
+        com.eve.app.designsystem.DesignPress.bind(binding.btnRetry)
+        binding.btnRetry.setOnClickListener { viewModel.retry(examId, timeLimit, topic, pyqYear, pyqPaper, isAdminUser, examName, fromBookmark, testId) }
+
+        binding.viewPager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
+            override fun onPageSelected(position: Int) {
+                // Defensive gate for unexpected programmatic navigation.
+                if (totalQuestions > 0 && position > viewModel.furthestRevealedIndex) {
+                    binding.viewPager.setCurrentItem(
+                        viewModel.furthestRevealedIndex.coerceIn(0, totalQuestions - 1), false)
+                    return
+                }
+                currentQuestionPosition = position
+                viewModel.markVisited(position)
+                updateNav(position)
+                updatePalette(position)
+                val rv = binding.viewPager.getChildAt(0) as? androidx.recyclerview.widget.RecyclerView
+                val vh = rv?.findViewHolderForAdapterPosition(position) as? QuestionAdapter.VH
+                vh?.updateTimer(viewModel.getQuestionTime(position))
+                (binding.viewPager.adapter as? QuestionAdapter)?.notifyItemChanged(
+                    position,
+                    QuestionAdapter.PAYLOAD_TIMER
+                )
+            }
+        })
+
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                var sessionSaveTicks = 0
+                while (!submitted) {
+                    delay(1000)
+                    if (!submitted && totalQuestions > 0) {
+                        val currentPos = binding.viewPager.currentItem
+                        viewModel.addQuestionSecond(currentPos)
+                        val rv = binding.viewPager.getChildAt(0) as? androidx.recyclerview.widget.RecyclerView
+                        val vh = rv?.findViewHolderForAdapterPosition(currentPos) as? QuestionAdapter.VH
+                        if (vh != null) {
+                            vh.updateTimer(viewModel.getQuestionTime(currentPos))
+                        } else {
+                            (binding.viewPager.adapter as? QuestionAdapter)?.notifyItemChanged(
+                                currentPos,
+                                QuestionAdapter.PAYLOAD_TIMER
+                            )
+                        }
+                        sessionSaveTicks++
+                        if (sessionSaveTicks >= 5) {
+                            sessionSaveTicks = 0
+                            viewModel.saveCurrentSession(examId, currentPos)
+                        }
+                    }
+                }
+            }
+        }
+
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (isFinishing || isDestroyed || isLeavingTest ||
+                    leaveConfirmDialog?.isShowing == true) return
+                AlertDialog.Builder(this@TestActivity)
+                    .setTitle("Leave Test?")
+                    .setMessage("Your progress is saved. You can resume this test anytime.")
+                    .setPositiveButton("Leave") { _, _ ->
+                        if (!isLeavingTest) {
+                            isLeavingTest = true
+                            val currentPos = binding.viewPager.currentItem
+                            viewModel.stopTimer()
+                            lifecycleScope.launch {
+                                try { viewModel.pauseSession(examId, currentPos) }
+                                finally { finish() }
+                            }
+                        }
+                    }
+                    .setNegativeButton("Continue", null)
+                    .setOnDismissListener { leaveConfirmDialog = null }
+                    .show().also { dialog ->
+                        leaveConfirmDialog = dialog
+                    }
+            }
+        })
+
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch { viewModel.questions.collect { renderQuestions(it) } }
+                launch { viewModel.remainingSeconds.collect { renderTimer(it) } }
+                launch { viewModel.timeUp.collect { if (it) submit() } }
+                launch {
+                    viewModel.alreadyAttempted.collect { blocked ->
+                        if (blocked && !isFinishing) {
+                            lifecycleScope.launch review@{
+                                val user = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
+                                val attempts = if (user != null) com.eve.app.data.repository.HistoryRepository().getAttempts(user.uid).filter { it.examId == examId } else emptyList()
+                                val target = attempts.maxByOrNull { it.timestamp } ?: com.eve.app.ui.home.HomeViewModel.getCachedAttempt(examId, user?.uid.orEmpty())
+                                if (target != null && target.answers.isNotEmpty()) {
+                                    if (target.userId != user?.uid || !ResultDataHolder.setAnswers(target.answers,
+                                            user.uid, examId)) return@review
+                                    val dateFormat = java.text.SimpleDateFormat("dd MMM yyyy, hh:mm a", java.util.Locale.getDefault())
+                                    startActivity(
+                                        Intent(this@TestActivity, ResultActivity::class.java)
+                                            .putExtra(Constants.EXTRA_RESULT_OWNER_UID, viewModel.currentUserId)
+                                            .putExtra(Constants.EXTRA_EXAM_ID, examId)
+                                            .putExtra(Constants.EXTRA_EXAM_NAME, examName)
+                                            .putExtra(Constants.EXTRA_ATTEMPT_DATE, dateFormat.format(java.util.Date(target.timestamp)))
+                                            .putExtra(Constants.EXTRA_FROM_HISTORY, true)
+                                            .putExtra(Constants.EXTRA_CAN_REATTEMPT, true)
+                                            .putExtra(Constants.EXTRA_TIME_LIMIT, timeLimit)
+                                            .putExtra(Constants.EXTRA_NEGATIVE_MARKING, negativeMarking)
+                                            .putExtra(Constants.EXTRA_EXAM_CATEGORY, examCategory)
+                                    )
+                                    finish()
+                                } else {
+                                    completedExamDialog?.dismiss()
+                                    completedExamDialog = com.eve.app.ui.common.CompletedExamBottomSheet.show(
+                                        activity = this@TestActivity,
+                                        examId = examId,
+                                        examName = examName,
+                                        attempt = target,
+                                        onReattemptConfirmed = {
+                                            completedExamDialog = null
+                                            val restartIntent = intent
+                                            finish()
+                                            startActivity(restartIntent)
+                                        },
+                                        onDismiss = {
+                                            completedExamDialog = null
+                                            if (!isFinishing) {
+                                                finish()
+                                            }
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                launch {
+                    viewModel.bookmarksSynced.collect { synced ->
+                        if (synced) {
+                            binding.viewPager.adapter?.notifyDataSetChanged()
+                        }
+                    }
+                }
+                launch {
+                    NetworkUtil.observe(this@TestActivity).collect { online ->
+                        binding.tvOfflineBanner.visibility = if (online) View.GONE else View.VISIBLE
+                    }
+                }
+            }
+        }
+    }
+
+    private fun renderQuestions(state: UiState<List<Question>>) {
+        when (state) {
+            is UiState.Loading -> {
+                if ((binding.viewPager.adapter?.itemCount ?: 0) > 0) {
+                    binding.loadingTest.visibility = View.GONE
+                    binding.viewPager.visibility = View.VISIBLE
+                } else {
+                    binding.loadingTest.visibility = View.VISIBLE
+                    binding.viewPager.visibility = View.GONE
+                }
+                binding.progressGroup.visibility = View.GONE
+                binding.messageGroup.visibility = View.GONE
+            }
+            is UiState.Error -> {
+                binding.loadingTest.visibility = View.GONE
+                binding.progressGroup.visibility = View.GONE
+                binding.messageGroup.visibility = View.VISIBLE
+                binding.btnRetry.visibility = View.VISIBLE
+                com.eve.app.util.EmptyStateAnimationHelper.showErrorState(binding.ivMessageIcon)
+                if (NetworkUtil.isOnline(this)) {
+                    binding.tvMessage.text = "Something went wrong"
+                    binding.tvMessageSub.text = state.message
+                } else {
+                    binding.tvMessage.text = "No internet connection"
+                    binding.tvMessageSub.text =
+                        "Questions for this exam have not been cached yet. Please retry when internet connection is restored."
+                }
+            }
+            is UiState.Success -> {
+                binding.progressGroup.visibility = View.GONE
+                val list = state.data
+                totalQuestions = list.size
+                if (list.isEmpty()) {
+                    binding.loadingTest.visibility = View.GONE
+                    binding.messageGroup.visibility = View.VISIBLE
+                    binding.btnRetry.visibility = View.GONE
+                    hasEmptyPlayed = com.eve.app.util.EmptyStateAnimationHelper.showEmptyState(
+                        binding.ivMessageIcon,
+                        hasEmptyPlayed
+                    )
+                    binding.tvMessage.text = when {
+                        fromBookmark -> "Bookmarked question is no longer available"
+                        pyqYear > 0 -> "No PYQs found for this year or paper"
+                        else -> "No questions found for this exam"
+                    }
+                    binding.tvMessageSub.text = when {
+                        fromBookmark -> "This question may have been removed or updated"
+                        pyqYear > 0 -> "Upload questions tagged with PYQ and year from Admin Dashboard"
+                        else -> "Please ask an admin to add questions for this exam"
+                    }
+                    binding.tvTimer.text = "--:--"
+                    return
+                }
+                hasEmptyPlayed = false
+                binding.messageGroup.visibility = View.GONE
+                if (binding.viewPager.adapter == null) {
+                    binding.viewPager.adapter = QuestionAdapter(
+                        questions = list,
+                        getSelected = { viewModel.getAnswer(it) },
+                        canSelect = { !submitted && !viewModel.timeUp.value },
+                        onSelect = { pos, letter ->
+                            if (!submitted && !viewModel.timeUp.value) {
+                                viewModel.setAnswer(pos, letter)
+                                viewModel.markVisited(pos)
+                                viewModel.saveCurrentSession(examId, pos)
+                                updatePalette(pos)
+                            }
+                        },
+                        getBookmarked = { viewModel.isBookmarked(it) },
+                        onToggleBookmark = { viewModel.toggleBookmark(it) },
+                        isHindi = { LanguageManager.isHindi(this) },
+                        onReport = { q ->
+                            ReportQuestionDialog.show(this@TestActivity, q, com.eve.app.util.AttemptKey.sourceExamId(examId), examName)
+                        },
+                        getQuestionTime = { pos -> viewModel.getQuestionTime(pos) }
+                    )
+                }
+                com.eve.app.designsystem.DesignLoading.showContent(binding.loadingTest, binding.viewPager)
+                if (!initialNavDone) {
+                    initialNavDone = true
+                    val targetIndex = if (!initialQuestionId.isNullOrBlank()) {
+                        val idx = list.indexOfFirst { it.id == initialQuestionId }
+                        if (idx < 0) {
+                            com.eve.app.util.AppBulletin.showError(
+                                this@TestActivity,
+                                "Bookmarked question was not found in this test."
+                            )
+                            0
+                        } else idx
+                    } else {
+                        val restored = viewModel.restoredQuestionIndex
+                        if (restored in 0 until list.size) restored else 0
+                    }
+                    if (targetIndex > 0) {
+                        // Bookmarked deep links may legitimately open a later question.
+                        // A resumed session's prior reveal progress is restored separately.
+                        viewModel.revealThrough(targetIndex)
+                        binding.viewPager.post {
+                            binding.viewPager.setCurrentItem(targetIndex, false)
+                        }
+                    }
+                }
+                val currentPos = binding.viewPager.currentItem
+                viewModel.markVisited(currentPos)
+                updateNav(currentPos)
+                updatePalette(currentPos)
+                currentQuestionPosition = currentPos
+                val rv = binding.viewPager.getChildAt(0) as? androidx.recyclerview.widget.RecyclerView
+                val vh = rv?.findViewHolderForAdapterPosition(currentPos) as? QuestionAdapter.VH
+                vh?.updateTimer(viewModel.getQuestionTime(currentPos))
+                (binding.viewPager.adapter as? QuestionAdapter)?.notifyItemChanged(
+                    currentQuestionPosition,
+                    QuestionAdapter.PAYLOAD_TIMER
+                )
+            }
+        }
+    }
+
+    private fun renderTimer(seconds: Long) {
+        if (seconds < 0) return
+        val m = seconds / 60
+        val s = seconds % 60
+        binding.tvTimer.text = String.format("%02d:%02d", m, s)
+        binding.circularTimerView.setTime(seconds, total = (timeLimit * 60L).coerceAtLeast(seconds))
+    }
+
+    private fun updateNav(position: Int) {
+        if (totalQuestions == 0) return
+        val title = sessionTitle()
+        binding.tvTestTitle.text = title
+        binding.btnPrev.isEnabled = position > 0
+        if (position >= totalQuestions - 1) {
+            binding.btnNext.text = "Submit"
+            binding.btnNext.isEnabled = !submitted
+        } else {
+            binding.btnNext.text = "Save and Next"
+            binding.btnNext.isEnabled = !submitted
+        }
+        val isMarked = viewModel.isMarked(position)
+        binding.btnMarkReview.isSelected = isMarked
+        binding.btnMarkReview.text = if (isMarked) getString(R.string.unmark_review) else getString(R.string.mark_for_review)
+    }
+
+    private fun confirmSubmit() {
+        if (submitted || submitConfirmDialog?.isShowing == true ||
+            isFinishing || isDestroyed) return
+        val counts = QuestionPaletteAdapter.calculateSubmitDialogCounts(
+            totalQuestions = totalQuestions,
+            answeredIndices = viewModel.getAnsweredIndices(),
+            visitedIndices = viewModel.getVisitedIndices(),
+            markedIndices = viewModel.getMarkedIndices()
+        )
+        val message = "Answered: ${counts.answered}\n" +
+                "Not answered: ${counts.notAnswered}\n" +
+                "Marked for review: ${counts.markedForReview}\n" +
+                "Not visited: ${counts.notVisited}"
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Submit test?")
+            .setMessage(message)
+            .setPositiveButton("Submit") { _, _ -> submit() }
+            .setNegativeButton("Cancel", null)
+            .setOnDismissListener { submitConfirmDialog = null }
+            .create()
+
+        // Native source-derived dialog retains the existing server-authoritative submit callback.
+        dialog.show()
+        submitConfirmDialog = dialog
+    }
+
+    private fun submit() {
+        if (submitted) return
+        if (!isTestOwner()) {
+            finish()
+            return
+        }
+        submitted = true
+        viewModel.stopTimer()
+        binding.btnNext.isEnabled = false
+        binding.btnClear.isEnabled = false
+        viewModel.saveCurrentSession(examId, binding.viewPager.currentItem)
+        val items = viewModel.buildAnswerItems()
+        val attemptName = sessionTitle()
+        val isStandardMock = topic.isBlank() && pyqYear == 0 && !fromBookmark
+
+        if (items.isEmpty()) {
+            showSubmissionError("No questions found in this test payload.", attemptName, items)
+            return
+        }
+
+        val validItems = items.filter { it.questionId.isNotBlank() && it.number > 0 }
+        if (validItems.isEmpty()) {
+            showSubmissionError("No valid questions found in submission payload.", attemptName, items)
+            return
+        }
+
+        val rawAnswers = validItems.map {
+            mapOf(
+                "questionId" to it.questionId.trim(),
+                "number" to it.number,
+                "selected" to it.selected.trim().uppercase(),
+                "isBookmarked" to it.isBookmarked,
+                "timeTakenSeconds" to it.timeTakenSeconds
+            )
+        }
+
+        val targetExamId = if (viewModel.currentExamId.isNotBlank()) viewModel.currentExamId else examId
+
+        val body = mutableMapOf<String, Any>(
+            "examId" to targetExamId,
+            "expectedUid" to viewModel.currentUserId,
+            "examName" to attemptName,
+            "category" to examCategory,
+            "clientAttemptId" to viewModel.clientAttemptId,
+            "answers" to rawAnswers
+        )
+        if (fromBookmark) body["practice"] = true
+        if (topic.isNotBlank()) body["topic"] = topic
+        if (pyqYear > 0) body["pyqYear"] = pyqYear
+        if (pyqPaper.isNotBlank()) body["pyqPaper"] = pyqPaper
+
+        lifecycleScope.launch {
+            try {
+                val response = com.eve.app.data.remote.ApiClient.api.submitAttempt(body)
+                // Network completion can outlive the Firebase account that
+                // started the attempt. Do not mutate local caches or navigate.
+                if (!isTestOwner() || isFinishing || isDestroyed) return@launch
+                if (response.success && response.data != null) {
+                    val graded = response.data
+                    com.eve.app.data.local.PendingSubmissionStore(this@TestActivity).remove(viewModel.clientAttemptId)
+                    viewModel.clearSession(examId)
+                    viewModel.clearSession(targetExamId)
+                    com.eve.app.util.HapticHelper.performSubmitSuccess(binding.root)
+
+                    AnalyticsHelper.logExamSubmit(
+                        context = this@TestActivity,
+                        examId = targetExamId,
+                        examName = attemptName,
+                        category = examCategory,
+                        correct = graded.correct,
+                        wrong = graded.wrong,
+                        unattempted = graded.unattempted,
+                        total = graded.total
+                    )
+
+                    val questionList = (viewModel.questions.value as? com.eve.app.util.UiState.Success)?.data ?: emptyList()
+                    val enrichedAnswers = graded.answers.map { ans ->
+                        val matchingQ = questionList.find { it.id == ans.questionId || (ans.questionId.isBlank() && it.questionText == ans.questionText) }
+                        if (matchingQ != null) {
+                            ans.copy(
+                                optionA = matchingQ.optionA,
+                                optionB = matchingQ.optionB,
+                                optionC = matchingQ.optionC,
+                                optionD = matchingQ.optionD,
+                                optionAHi = matchingQ.optionAHi,
+                                optionBHi = matchingQ.optionBHi,
+                                optionCHi = matchingQ.optionCHi,
+                                optionDHi = matchingQ.optionDHi
+                            )
+                        } else {
+                            ans
+                        }
+                    }
+
+                    val localAttempt = com.eve.app.data.model.TestAttempt(
+                        id = graded.attemptId,
+                        userId = viewModel.currentUserId,
+                        examId = targetExamId,
+                        examName = attemptName,
+                        category = examCategory,
+                        score = graded.score,
+                        total = graded.total,
+                        correct = graded.correct,
+                        wrong = graded.wrong,
+                        unattempted = graded.unattempted,
+                        timeTakenSeconds = graded.timeTakenSeconds,
+                        timestamp = System.currentTimeMillis(),
+                        answers = enrichedAnswers
+                    )
+                    if (isStandardMock) {
+                        com.eve.app.ui.home.HomeViewModel.markAttemptSubmitted(targetExamId, localAttempt)
+                        com.eve.app.ui.home.HomeViewModel.markAttemptSubmitted(examId, localAttempt)
+                        com.eve.app.util.AttemptLimitManager.recordAttempt(this@TestActivity, targetExamId, graded.attemptId, viewModel.currentUserId)
+                    }
+
+                    if (!ResultDataHolder.setAnswers(enrichedAnswers, viewModel.currentUserId, targetExamId)) return@launch
+
+                    startActivity(
+                        Intent(this@TestActivity, ResultActivity::class.java)
+                            .putExtra(Constants.EXTRA_RESULT_OWNER_UID, viewModel.currentUserId)
+                            .putExtra(Constants.EXTRA_EXAM_ID, targetExamId)
+                            .putExtra(Constants.EXTRA_EXAM_NAME, attemptName)
+                            .putExtra(Constants.EXTRA_EXAM_CATEGORY, examCategory)
+                            .putExtra(Constants.EXTRA_TIME_LIMIT, timeLimit)
+                            .putExtra(Constants.EXTRA_NEGATIVE_MARKING, negativeMarking)
+                            .putExtra(Constants.EXTRA_CAN_REATTEMPT, isStandardMock)
+                            .putExtra("EXTRA_SCORE", graded.score)
+                            .putExtra("EXTRA_TOTAL", graded.total)
+                            .putExtra("EXTRA_CORRECT", graded.correct)
+                            .putExtra("EXTRA_WRONG", graded.wrong)
+                            .putExtra("EXTRA_UNATTEMPTED", graded.unattempted)
+                            .putExtra("EXTRA_COUNTED", graded.counted)
+                            .putExtra("EXTRA_TIME_TAKEN_SECONDS", graded.timeTakenSeconds)
+                    )
+                    finish()
+                } else {
+                    val errMsg = response.error ?: "Submission was rejected by the server"
+                    if (!NetworkUtil.isOnline(this@TestActivity)) {
+                        handleOfflineSubmit(attemptName, items)
+                    } else {
+                        showSubmissionError(errMsg, attemptName, items)
+                    }
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                submitted = false
+                viewModel.resumeTimerAfterFailure()
+                throw e
+            } catch (e: Exception) {
+                if (!isTestOwner() || isFinishing || isDestroyed) return@launch
+                if (e is java.io.IOException || !NetworkUtil.isOnline(this@TestActivity)) {
+                    handleOfflineSubmit(attemptName, items)
+                } else {
+                    val errMsg = e.toUserFriendlyMessage()
+                    showSubmissionError(errMsg, attemptName, items)
+                }
+            }
+        }
+    }
+
+    /**
+     * Source-isolated Telegram-native exam status window: only one live notice.
+     * All existing retry/offline callbacks remain server-authoritative.
+     */
+    private fun showExamNotice(builder: AlertDialog.Builder, cancelable: Boolean = true): AlertDialog? {
+        if (isFinishing || isDestroyed) return null
+        statusDialog?.takeIf { it.isShowing }?.dismiss()
+        val dialog = builder.create().apply { setCancelable(cancelable) }
+        dialog.setOnDismissListener { dismissed ->
+            if (statusDialog === dismissed) statusDialog = null
+        }
+        dialog.show()
+        statusDialog = dialog
+        return dialog
+    }
+
+    private fun showSubmissionError(message: String, attemptName: String, items: List<AnswerItem>) {
+        submitted = false
+        binding.btnNext.isEnabled = !submitted
+        binding.btnClear.isEnabled = true
+        viewModel.resumeTimerAfterFailure()
+        com.eve.app.util.HapticHelper.performSubmitFailure(binding.root)
+        AlertDialog.Builder(this)
+            .setTitle("Submission Failed")
+            .setMessage(message)
+            .setPositiveButton("Retry") { _, _ ->
+                submit()
+            }
+            .setNegativeButton("Save Offline") { _, _ ->
+                submitted = true
+                handleOfflineSubmit(attemptName, items)
+            }
+            .setNeutralButton("Cancel", null)
+            .let(::showExamNotice)
+    }
+
+    private fun handleOfflineSubmit(attemptName: String, items: List<AnswerItem>) {
+        val targetExamId = if (viewModel.currentExamId.isNotBlank()) viewModel.currentExamId else examId
+        viewModel.saveCurrentSession(examId, binding.viewPager.currentItem)
+        com.eve.app.util.HapticHelper.performSubmitFailure(binding.root)
+
+        val pending = com.eve.app.data.local.PendingSubmission(
+            clientAttemptId = viewModel.clientAttemptId,
+            userId = viewModel.currentUserId,
+            practice = fromBookmark,
+            examId = targetExamId,
+            examName = attemptName,
+            category = examCategory,
+            answers = items.map {
+                com.eve.app.data.local.PendingAnswer(
+                    questionId = it.questionId,
+                    number = it.number,
+                    selected = it.selected,
+                    isBookmarked = it.isBookmarked,
+                    timeTakenSeconds = it.timeTakenSeconds
+                )
+            },
+            topic = topic.ifBlank { null },
+            pyqYear = if (pyqYear > 0) pyqYear else null,
+            pyqPaper = pyqPaper.ifBlank { null }
+        )
+        try {
+            com.eve.app.data.local.PendingSubmissionStore(this).save(pending)
+        } catch (e: Exception) {
+            showSubmissionError("Could not save answers on this device. Free some storage and retry.", attemptName, items)
+            return
+        }
+        com.eve.app.worker.SubmitWorker.enqueue(this, viewModel.clientAttemptId)
+
+
+        AlertDialog.Builder(this)
+            .setTitle("Submission Saved Offline")
+            .setMessage("Your test responses have been stored securely on your device. They will be submitted automatically when network connectivity is restored.")
+            .setPositiveButton("OK") { _, _ -> finish() }
+            .let { showExamNotice(it, cancelable = false) }
+    }
+
+    private fun sessionTitle(): String = when {
+        pyqYear > 0 -> {
+            val paper = if (pyqPaper.isBlank()) "" else " • $pyqPaper"
+            "$examName • PYQ $pyqYear$paper"
+        }
+        topic.isNotBlank() -> "$examName • $topic Practice"
+        else -> examName
+    }
+
+    override fun onStart() {
+        super.onStart()
+        if (!isTestOwner()) {
+            finish()
+            return
+        }
+        FirebaseAuth.getInstance().addAuthStateListener(testAccountListener)
+    }
+
+    override fun onStop() {
+        FirebaseAuth.getInstance().removeAuthStateListener(testAccountListener)
+        leaveConfirmDialog?.dismiss()
+        leaveConfirmDialog = null
+        submitConfirmDialog?.dismiss()
+        submitConfirmDialog = null
+        statusDialog?.dismiss()
+        statusDialog = null
+        completedExamDialog?.dismiss()
+        completedExamDialog = null
+        super.onStop()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (!isTestOwner()) {
+            finish()
+            return
+        }
+        // Rebind the owner override after a Day/Night or theme-preview change.
+        if (::binding.isInitialized) refreshQuestionTheme(
+            com.eve.app.theme.TelegramThemeEngine.resolveCurrentPalette(this))
+    }
+
+    override fun onPause() {
+        super.onPause()
+        if (::binding.isInitialized && isTestOwner() && !submitted && totalQuestions > 0) {
+            viewModel.saveCurrentSession(examId, binding.viewPager.currentItem)
+        }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putBoolean("key_empty_played", hasEmptyPlayed)
+        outState.putInt("saved_question_position", currentQuestionPosition)
+        val pos = if (::binding.isInitialized) binding.viewPager.currentItem else currentQuestionPosition
+        viewModel.writeToBundle(outState, pos)
+        outState.putString("key_attempt_owner", testOwnerUid)
+    }
+
+    private fun updatePalette(activePosition: Int) {
+        if (totalQuestions <= 0) return
+        val visibleCount = ProgressiveQuestionStrip.visibleCount(
+            totalQuestions, viewModel.furthestRevealedIndex)
+        val items = (0 until visibleCount).map { i ->
+            val state = QuestionPaletteAdapter.mapPaletteState(
+                answered = viewModel.getAnswer(i).isNotEmpty(),
+                visited = viewModel.isVisited(i),
+                marked = viewModel.isMarked(i)
+            )
+            PaletteItem(
+                number = i + 1,
+                state = state,
+                isActive = (i == activePosition)
+            )
+        }
+        paletteAdapter.submit(items)
+        val targetIdx = activePosition.coerceIn(0, items.lastIndex)
+        binding.rvQuestionPalette.smoothScrollToPosition(targetIdx)
+    }
+
+    override fun onDestroy() {
+        FirebaseAuth.getInstance().removeAuthStateListener(testAccountListener)
+        com.eve.app.theme.TelegramThemeEngine.removeThemeChangeListener(questionThemeListener)
+        // Release Activity-owned windows before detaching their window tokens.
+        leaveConfirmDialog?.dismiss()
+        submitConfirmDialog?.dismiss()
+        statusDialog?.dismiss()
+        completedExamDialog?.dismiss()
+        leaveConfirmDialog = null
+        submitConfirmDialog = null
+        statusDialog = null
+        completedExamDialog = null
+        super.onDestroy()
+        com.eve.app.typography.TypographyRepository.getInstance(this).setTestSessionActive(false)
+    }
+
+}

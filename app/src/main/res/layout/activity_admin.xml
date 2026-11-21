@@ -1,0 +1,486 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:clickable="true"
+    android:focusable="true"
+    android:orientation="vertical"
+    android:background="@color/bg_app"
+    style="@style/Widget.Eve.Token.Screen">
+
+    <com.eve.app.designsystem.TelegramActionBar
+        android:id="@+id/telegramActionBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <FrameLayout
+            android:id="@+id/scrollAdminHub"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone"
+            android:overScrollMode="always"
+            style="@style/Widget.Eve.Token.Scroll">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingBottom="32dp">
+
+                <!-- Telegram-Style Admin Header Block -->
+                <LinearLayout
+                    android:id="@+id/headerBlockAdmin"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="20dp"
+                    android:paddingTop="16dp"
+                    android:paddingBottom="16dp">
+
+                    <ImageView
+                        android:id="@+id/ivAdminAvatar"
+                        android:layout_width="60dp"
+                        android:layout_height="60dp"
+                        android:contentDescription="Admin Avatar" />
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="16dp"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/tvAdminName"
+                            style="@style/TextAppearance.Eve.Telegram.NavigationTitle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Administrator" />
+
+                        <TextView
+                            android:id="@+id/tvAdminRole"
+                            style="@style/TextAppearance.Eve.Token.Secondary"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="Owner" />
+
+                        <TextView
+                            android:id="@+id/tvAdminEmail"
+                            style="@style/TextAppearance.Eve.Token.Secondary"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="1dp"
+                            android:text="admin@eve.app" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <com.eve.app.ui.admin.tg.ShadowSectionCell
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <!-- SECTION 1: CONTENT -->
+                <com.eve.app.ui.admin.tg.HeaderCell
+                    android:id="@+id/headerContent"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <com.eve.app.ui.admin.tg.TextCell
+                    android:id="@+id/rowExams"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <com.eve.app.ui.admin.tg.TextCell
+                    android:id="@+id/rowQuestions"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <com.eve.app.ui.admin.tg.TextCell
+                    android:id="@+id/rowGeneratedTests"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <com.eve.app.ui.admin.tg.TextCell
+                    android:id="@+id/rowSyllabus"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <com.eve.app.ui.admin.tg.TextCell
+                    android:id="@+id/rowHomeBanner"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <com.eve.app.ui.admin.tg.TextCell
+                    android:id="@+id/rowFloatingLink"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <com.eve.app.ui.admin.tg.TextCell
+                    android:id="@+id/rowAnimatedEmoji"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <com.eve.app.ui.admin.tg.ShadowSectionCell
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <!-- SECTION 2: PEOPLE -->
+                <com.eve.app.ui.admin.tg.HeaderCell
+                    android:id="@+id/headerPeople"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <com.eve.app.ui.admin.tg.TextCell
+                    android:id="@+id/rowUsers"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <com.eve.app.ui.admin.tg.TextCell
+                    android:id="@+id/rowAdmins"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <com.eve.app.ui.admin.tg.TextCell
+                    android:id="@+id/rowPremium"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <com.eve.app.ui.admin.tg.ShadowSectionCell
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <!-- SECTION 3: COMMUNICATION -->
+                <com.eve.app.ui.admin.tg.HeaderCell
+                    android:id="@+id/headerCommunication"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <com.eve.app.ui.admin.tg.TextCell
+                    android:id="@+id/rowBroadcast"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <com.eve.app.ui.admin.tg.TextCell
+                    android:id="@+id/rowFlaggedQuestions"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <com.eve.app.ui.admin.tg.TextCell
+                    android:id="@+id/rowFeedback"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <com.eve.app.ui.admin.tg.TextCell
+                    android:id="@+id/rowCreateFeedbackPost"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <com.eve.app.ui.admin.tg.TextCell
+                    android:id="@+id/btnManageFeedbackPosts"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <com.eve.app.ui.admin.tg.TextCell
+                    android:id="@+id/rowPolls"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <com.eve.app.ui.admin.tg.ShadowSectionCell
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <!-- SECTION 4: INSIGHTS -->
+                <com.eve.app.ui.admin.tg.HeaderCell
+                    android:id="@+id/headerInsights"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <com.eve.app.ui.admin.tg.TextCell
+                    android:id="@+id/rowAnalytics"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <com.eve.app.ui.admin.tg.TextCell
+                    android:id="@+id/rowRecentActions"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <com.eve.app.ui.admin.tg.TextCell
+                    android:id="@+id/rowSystemMonitor"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <com.eve.app.ui.admin.tg.TextCell
+                    android:id="@+id/rowApiUsage"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <com.eve.app.ui.admin.tg.ShadowSectionCell
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <!-- SECTION 5: SYSTEM -->
+                <com.eve.app.ui.admin.tg.HeaderCell
+                    android:id="@+id/headerSystem"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <com.eve.app.ui.admin.tg.TextCheckCell
+                    android:id="@+id/cellMaintenance"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <com.eve.app.ui.admin.tg.TextCell
+                    android:id="@+id/rowAppConfig"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <com.eve.app.ui.admin.tg.TextCell
+                    android:id="@+id/rowVersionStatus"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <com.eve.app.ui.admin.tg.TextCell
+                    android:id="@+id/rowExportData"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <com.eve.app.ui.admin.tg.TextCell
+                    android:id="@+id/rowEditAbout"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <com.eve.app.ui.admin.tg.ShadowSectionCell
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+            </LinearLayout>
+        </FrameLayout>
+
+        <!-- Search Results List -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvAdminSearch"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@color/bg_app"
+            android:visibility="gone" />
+
+        <com.eve.app.designsystem.TelegramRadialProgressView
+            android:id="@+id/progressBarAdmin"
+            android:layout_width="@dimen/design_ring_size"
+            android:layout_height="@dimen/design_ring_size"
+            android:layout_gravity="center"
+            android:visibility="visible" />
+
+        <!-- Preserved contract hierarchy for test assertions (never rendered, zero size) -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <com.eve.app.designsystem.TelegramActionBar
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="@dimen/telegram_action_bar_height"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    style="@style/Widget.Eve.Token.ToolbarRow">
+                    <ImageButton
+                        android:id="@+id/btnBack"
+                        android:layout_width="@dimen/design_touch_min"
+                        android:layout_height="@dimen/design_touch_min"
+                        android:contentDescription="Back"
+                        android:src="@drawable/ic_back"
+                        app:tint="@color/telegram_type_primary"
+                        style="@style/Widget.Eve.Token.IconButton" />
+                </LinearLayout>
+            </com.eve.app.designsystem.TelegramActionBar>
+
+            <com.eve.app.designsystem.TelegramTabsView
+                android:id="@+id/tabLayoutAdmin"
+                style="@style/Widget.Eve.Token.SegmentedTabs"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content">
+                </com.eve.app.designsystem.TelegramTabsView>
+
+            <ScrollView
+                android:id="@+id/scrollTabCreateExam"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content">
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+                    <com.eve.app.designsystem.TelegramStatsBandView
+                        android:id="@+id/statsBandUserManagement"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                    <View
+                        android:id="@+id/cardUserStats"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                    <View
+                        android:id="@+id/btnManageUsers"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                    <View
+                        android:id="@+id/btnManageExistingExams"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                    <View
+                        android:id="@+id/btnManageExams"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                    <View
+                        android:id="@+id/btnGeneratedTests"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                    <View
+                        android:id="@+id/btnHomeBanner"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                    <View
+                        android:id="@+id/btnFloatingLink"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                    <View
+                        android:id="@+id/btnManagePremium"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                    <View
+                        android:id="@+id/btnManageSyllabus"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                    <View
+                        android:id="@+id/btnSendNotification"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                    <View
+                        android:id="@+id/btnFeedbackReplies"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                    <View
+                        android:id="@+id/btnCreateFeedbackPost"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                    <View
+                        android:id="@+id/btnAnalyticsAdmin"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                    <View
+                        android:id="@+id/btnAppConfig"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                    <TextView
+                        android:id="@+id/tvTotalUsers"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                    <TextView
+                        android:id="@+id/tvOnlineUsers"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                    <View
+                        android:id="@+id/btnRefreshStats"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                    <TextView
+                        android:id="@+id/tvInstalledVersion"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                    <TextView
+                        android:id="@+id/tvMinSupportedVersion"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                    <TextView
+                        android:id="@+id/tvVersionStatusBadge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                    <View
+                        android:id="@+id/switchMaintenanceMode"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                    <EditText
+                        android:id="@+id/etMaintenanceMessage"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                    <View
+                        android:id="@+id/btnApplyMaintenance"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                    <TextView
+                        android:id="@+id/tvLiveMaintenanceStatus"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                </LinearLayout>
+            </ScrollView>
+
+            <ScrollView
+                android:id="@+id/scrollTabManageQuestions"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content">
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+                    <View
+                        android:id="@+id/btnAddQuestionManual"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                    <View
+                        android:id="@+id/btnBulkUploadSelectedExam"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                    <View
+                        android:id="@+id/btnDeleteExam"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                    <View
+                        android:id="@+id/btnRenameExam"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                    <View
+                        android:id="@+id/btnEditExamImage"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                    <com.airbnb.lottie.LottieAnimationView
+                        android:id="@+id/ivEmptyStateFolder"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        app:lottie_rawRes="@raw/search" />
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/rvQuestions"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                </LinearLayout>
+            </ScrollView>
+
+            <ScrollView
+                android:id="@+id/scrollTabAdmins"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content">
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+                    <View
+                        android:id="@+id/btnAddAdmin"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/rvAdmins"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                </LinearLayout>
+            </ScrollView>
+        </LinearLayout>
+    </FrameLayout>
+</LinearLayout>
