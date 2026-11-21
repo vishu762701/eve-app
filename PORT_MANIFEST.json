@@ -6,7 +6,7 @@
       "upstream_path": "TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java",
       "upstream_sha256": "8f0aebe6c4ca79d57730d5f19e8c0b6c36fb0e462c815649f0cd9427dc451c07",
       "mode": "CUT",
-      "eve_sha256": "7793d80ba490571674219579858442752b176a589e565af59f2f4d105a378396"
+      "eve_sha256": "ff1982a60e3b7a77f82ac89213184f43d3c2532f2c780d7998000fc345865200"
     },
     {
       "path": "app/src/main/java/org/telegram/messenger/ImageReceiver.java",

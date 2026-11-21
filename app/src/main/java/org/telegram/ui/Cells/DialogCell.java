@@ -46,24 +46,24 @@ import org.telegram.ui.Components.StaticLayoutEx;
 import org.telegram.ui.DialogsActivity;
 import org.telegram.ui.Stories.StoriesUtilities;
 public class DialogCell extends BaseCell { // EVE-CUT: cut stories and bio interfaces
-    public boolean drawArchive = true;
+    public boolean collapsed;
     public static final int SENT_STATE_NOTHING = -1;
     public static final int SENT_STATE_PROGRESS = 0;
     public static final int SENT_STATE_SENT = 1;
     public static final int SENT_STATE_READ = 2;
+    public boolean drawAvatar = true;
     public boolean drawMonoforumAvatar = false;
     private boolean drawCommunityAvatar;
-    private boolean isShareToStoryCell;
+    public int avatarStart = 11;
     public int messagePaddingStart = 72;
     public int heightDefault = 70;
     public int heightThreeLines = 76;
     public int addHeightForTags = 3;
     public int addForumHeightForTags = 11;
-    public TLRPC.TL_forumTopic forumTopic;
+    private boolean isTopic;
     private boolean twoLinesForName;
-    private boolean nameIsEllipsized;
-    private Paint buttonBackgroundPaint;
-    public boolean drawAvatarSelector;
+    private TextPaint currentMessagePaint;
+    public boolean isTransitionSupport;
     public static class CustomDialog {
         public String name;
         public String message;
@@ -82,7 +82,7 @@ public class DialogCell extends BaseCell { // EVE-CUT: cut stories and bio inter
     private int currentAccount;
     private CustomDialog customDialog;
     private long currentDialogId;
-    private int currentEditDate;
+    private int currentDialogFolderDialogsCount;
     public boolean isDialogCell;
     private int lastMessageDate;
     private int unreadCount;
@@ -90,7 +90,7 @@ public class DialogCell extends BaseCell { // EVE-CUT: cut stories and bio inter
     private boolean dialogMuted;
     private float dialogMutedProgress;
     private int messageId;
-    protected boolean forbidDraft;
+    protected boolean forbidVerified;
     public ImageReceiver avatarImage = new ImageReceiver(this);
     private AvatarDrawable avatarDrawable = new AvatarDrawable();
     public boolean useForceThreeLines;
@@ -113,12 +113,12 @@ public class DialogCell extends BaseCell { // EVE-CUT: cut stories and bio inter
     private int halfCheckDrawLeft;
     private int messageTop;
     private int messageLeft;
+    private int buttonLeft;
     private int typingLeft;
     private StaticLayout messageLayout;
-    private StaticLayout typingLayout;
     private int messageNameTop;
     private int messageNameLeft;
-    private int errorLeft;
+    private int errorTop;
     private boolean drawPin;
     private int pinTop;
     private int pinLeft;
@@ -129,7 +129,6 @@ public class DialogCell extends BaseCell { // EVE-CUT: cut stories and bio inter
     private int countWidth;
     private StaticLayout countLayout;
     private boolean drawVerified;
-    private RectF counterPathRect;
     public final StoriesUtilities.AvatarStoryParams storyParams = new StoriesUtilities.AvatarStoryParams(false); // EVE-CUT: minimal storyParams
     private DialogsActivity parentFragment; // EVE-CUT: parent fragment
     private final Theme.ResourcesProvider resourcesProvider; // EVE-CUT: resources provider
@@ -166,8 +165,9 @@ public class DialogCell extends BaseCell { // EVE-CUT: cut stories and bio inter
         messageId = 0;
         update(0);
     } // EVE-CUT: end setDialog
+    @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        topClip = 0;
+        setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), computeHeight());
     } // EVE-CUT: end onMeasure
     private int computeHeight() {
         int height;
