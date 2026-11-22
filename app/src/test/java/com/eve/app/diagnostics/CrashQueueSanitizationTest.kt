@@ -2,7 +2,7 @@ package com.eve.app.diagnostics
 
 import android.app.Application
 import android.content.Context
-import androidx.test.core.app.ApplicationProvider
+import org.robolectric.RuntimeEnvironment
 import com.eve.app.util.CrashlyticsHelper
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -42,7 +42,7 @@ class CrashQueueSanitizationTest {
 
     @Test
     fun testCrashQueueWorkerPersistenceAndBounding() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
+        val context = RuntimeEnvironment.getApplication()
         val queueDir = File(context.filesDir, CrashQueueWorker.QUEUE_DIR_NAME)
         queueDir.deleteRecursively()
 
@@ -80,7 +80,7 @@ class CrashQueueSanitizationTest {
 
     @Test
     fun testExitInfoReaderReturnsSummaryOrNullSafe() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
+        val context = RuntimeEnvironment.getApplication()
         // On SDK 34 without real historical exits in test environment, must return null without throwing
         val exitInfo = ApplicationExitInfoReader.getLatestExitInfo(context)
         // If not null, must have valid fields

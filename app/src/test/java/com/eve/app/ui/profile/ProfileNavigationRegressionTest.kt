@@ -5,7 +5,7 @@ import android.os.Looper
 import android.view.View
 import androidx.core.view.GravityCompat
 import androidx.drawerlayout.widget.DrawerLayout
-import androidx.test.core.app.ApplicationProvider
+import org.robolectric.RuntimeEnvironment
 import com.eve.app.EveApplication
 import com.eve.app.R
 import com.eve.app.ui.home.HomeStartupBoundaryFixture
@@ -52,11 +52,12 @@ class ProfileNavigationRegressionTest {
     fun setUp() {
         ProfileEditorAuthFixture.reset()
         ProfileEditorAuthFixture.setOwner("profile-test-uid")
+        val app = RuntimeEnvironment.getApplication()
         org.telegram.messenger.AndroidUtilities.checkDisplaySize(
-            ApplicationProvider.getApplicationContext(),
-            ApplicationProvider.getApplicationContext<EveApplication>().resources.configuration
+            app,
+            app.resources.configuration
         )
-        org.telegram.ui.ActionBar.Theme.syncFromEvePalette(ApplicationProvider.getApplicationContext())
+        org.telegram.ui.ActionBar.Theme.syncFromEvePalette(app)
     }
 
     @After
