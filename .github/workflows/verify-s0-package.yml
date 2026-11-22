@@ -1,0 +1,50 @@
+name: Validate S0 patch in a clean checkout
+on:
+  push:
+    branches: [verify/s0-byte-roundtrip-a5a22bf]
+    paths: [.github/workflows/verify-s0-package.yml]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: transport
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: a5a22bf26d2b8a5ef857dd721cb696aacc4a7125
+          path: base
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Verify transfer, apply patch, run reporter tests and export one commit
+        working-directory: base
+        shell: bash
+        run: |
+          set -euo pipefail
+          base=a5a22bf26d2b8a5ef857dd721cb696aacc4a7125
+          target=.github/workflows/build.yml
+          patch=../transport/.byte-probes/eve-s0-full-junit.patch
+          test "$(git rev-parse HEAD)" = "$base"
+          echo "83dfebe3348dca8b340ac83907da05fef0e48764d1e638d4dad9b744d35b8e3b  $patch" | sha256sum -c -
+          test "$(git rev-parse HEAD:$target)" = e3cd2435986f82e7e0ae80bfe4d8e2e584f5874a
+          git switch -c s0-full-junit
+          git apply --check --index "$patch"
+          git apply --index "$patch"
+          git diff --cached --check
+          test "$(git diff --cached --name-only)" = "$target"
+          echo "8711d0ebff93dcee58bc2903d782d81c9ccd7ba133939d47d9802b6477dd4577  $target" | sha256sum -c -
+          test "$(wc -c < "$target")" -eq 18832
+          python3 -m unittest discover -s .github/scripts -p 'test_ci_failure*.py'
+          git -c user.name='EVE CI' -c user.email='eve-ci@users.noreply.github.com' commit -m 'ci(S0): retain failed FULL JUnit evidence and report root causes'
+          git bundle create ../eve-s0.bundle s0-full-junit "^$base"
+          git bundle verify ../eve-s0.bundle
+          git rev-parse HEAD
+      - uses: actions/upload-artifact@v4
+        with:
+          name: s0-verified-git-bundle
+          path: eve-s0.bundle
+          retention-days: 7
+          if-no-files-found: error
