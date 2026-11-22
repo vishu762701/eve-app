@@ -233,7 +233,7 @@ jobs:
       - name: Verify original APK checksums
         env:
           APP_SHA256: ${{ needs.build.outputs.apk_sha256 }}
-          TEST_SHA256: ${{ needs.build.outputs.test_sha256 }}
+          TEST_SHA256: ${{ needs.build.outputs.test_apk_sha256 }}
         run: |
           set -euo pipefail
           test -n "$APP_SHA256"
@@ -326,6 +326,10 @@ jobs:
           filter: blob:none
       - uses: actions/setup-node@v4
         with:
+          distribution: temurin
+          java-version: 21
+      - uses: actions/setup-node@v4
+        with:
           node-version: 22
       - name: Validate optional Firebase Functions and question parser
         run: |
@@ -363,7 +367,7 @@ jobs:
       - name: Verify original APK checksums
         env:
           APP_SHA256: ${{ needs.build.outputs.apk_sha256 }}
-          TEST_SHA256: ${{ needs.build.outputs.test_sha256 }}
+          TEST_SHA256: ${{ needs.build.outputs.test_apk_sha256 }}
         run: |
           set -euo pipefail
           test -n "$APP_SHA256"
