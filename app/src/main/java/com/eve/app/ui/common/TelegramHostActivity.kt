@@ -26,8 +26,7 @@ abstract class TelegramHostActivity<F : BaseFragment> :
     INavigationLayout.INavigationLayoutDelegate {
 
     protected lateinit var fragment: F
-    lateinit var drawerLayoutContainer: DrawerLayoutContainer
-        private set
+    override lateinit var drawerLayoutContainer: DrawerLayoutContainer
     lateinit var actionBarLayout: ActionBarLayout
         private set
 

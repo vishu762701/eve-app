@@ -128,8 +128,7 @@ import android.view.LayoutInflater
 
 class MainActivity : EveBaseActivity(), INavigationLayout, INavigationLayout.INavigationLayoutDelegate {
 
-    lateinit var drawerLayoutContainer: DrawerLayoutContainer
-        private set
+    override lateinit var drawerLayoutContainer: DrawerLayoutContainer
     lateinit var actionBarLayout: ActionBarLayout
         private set
 
