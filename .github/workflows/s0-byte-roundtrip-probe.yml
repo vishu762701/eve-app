@@ -1,0 +1,10 @@
+name: EVE byte preservation probe
+on: workflow_dispatch
+permissions: {}
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 'Literal <xml> & # code'
+        run: |
+          printf '%s\n' 'literal: [x] `code` ${{ github.event_name }}'
