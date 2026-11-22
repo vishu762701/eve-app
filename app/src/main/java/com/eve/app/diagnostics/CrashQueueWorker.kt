@@ -72,7 +72,8 @@ class CrashQueueWorker(
 
     private fun uploadCrashReport(jsonPayload: String, idToken: String): Boolean {
         return try {
-            val url = URL("https://eve-api.mocktest.workers.dev/api/crashes")
+            val baseUrl = com.eve.app.util.Constants.WORKER_BASE_URL.trimEnd('/')
+            val url = URL("$baseUrl/api/crashes")
             val conn = (url.openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
                 connectTimeout = 10000

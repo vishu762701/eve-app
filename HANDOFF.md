@@ -2,10 +2,10 @@
 - Mission 01A: 8 placeholder exam rows rendered by official Telegram DialogCell.
 - Mission 00C (Phase 1): Port integrity gates, 324 manifest files + 12 blocks.
 - Mission 01B-R: Replaced hand-written screen scaffolding with transplanted Telegram code.
-- Mission 00B: Crash observability foundation & pipeline integration: D1 migration 0031, POST /api/crashes, admin GET /crashes, Crashlytics NDK, CrashQueueWorker atomic bounded persistence, DebugCrashReporter wiring, ApplicationExitInfoReader startup scan, and Profile navigation regression tests.
+- Mission 00B: Crash telemetry pipeline: D1 migration 0031, POST /api/crashes, admin GET /crashes, Crashlytics NDK, CrashQueueWorker with live backend URL & atomic bounded persistence, DebugCrashReporter wiring, ApplicationExitInfoReader traceInputStream reading, and authenticated Profile regression tests.
 
 ## In progress
-- Mission 00B: Closed integration gaps; remote live D1 deployment and live device trace collection pending.
+- Mission 00B: FULL CI dispatch and operational verification on main.
 
 ## Next
 - Owner review / manual dispatch of deploy-worker.yml for remote D1 migration 0031.

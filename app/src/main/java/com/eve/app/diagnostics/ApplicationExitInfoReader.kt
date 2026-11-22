@@ -9,7 +9,8 @@ import androidx.annotation.RequiresApi
 /**
  * Mission 00B: Safe reader for Android ApplicationExitInfo (API 30+).
  * Eve minSdk is 24, so every call is strictly SDK-guarded.
- * Extracts exit reason and ANR trace snippet with bounded size and PII redaction.
+ * Extracts exit reason and reads the actual traceInputStream (tombstone/ANR stream)
+ * with fallback to description, bounded size, and PII redaction.
  */
 object ApplicationExitInfoReader {
 
@@ -43,7 +44,18 @@ object ApplicationExitInfoReader {
                 ApplicationExitInfo.REASON_USER_STOPPED -> "USER_STOPPED"
                 else -> "OTHER_${latest.reason}"
             }
-            val traceText = latest.description?.take(1000)
+
+            // Mission 00B: Read actual trace stream (tombstone / ANR stack) if available from OS
+            val traceFromStream = try {
+                latest.traceInputStream?.bufferedReader(Charsets.UTF_8)?.use { reader ->
+                    reader.readText().take(2000)
+                }
+            } catch (_: Throwable) {
+                null
+            }
+
+            val traceText = (traceFromStream?.takeIf { it.isNotBlank() } ?: latest.description)?.take(2000)
+
             ExitInfoSummary(
                 reason = reasonStr,
                 description = traceText,
