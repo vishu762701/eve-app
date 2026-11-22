@@ -86,9 +86,6 @@ class ActivityLogPermissionResumeTest {
         try {
             assertEquals(1, EditExamBoundaryFixture.freshReads)
             c.pause().stop()
-            EditExamBoundaryFixture.permissions = AdminMeData(
-                email = "owner@example.test", rights = listOf("view_analytics_logs")
-            )
             c.restart().resume().visible()
             idle()
             assertFalse("Activity must remain active when rights are intact", c.get().isFinishing)
