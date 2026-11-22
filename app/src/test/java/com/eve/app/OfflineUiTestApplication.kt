@@ -13,7 +13,11 @@ import com.eve.app.util.ThemeSwitchAnimator
 class OfflineUiTestApplication : Application() {
     override fun onCreate() {
         super.onCreate()
+        // Match EveApplication UI initialization without starting any network services.
+        org.telegram.messenger.ApplicationLoader.applicationContext = this
+        org.telegram.messenger.AndroidUtilities.checkDisplaySize(this, resources.configuration)
         TelegramThemeEngine.init(this)
+        org.telegram.ui.ActionBar.Theme.syncFromEvePalette(this)
         ThemeSwitchAnimator.ensureLifecycleRegistered(this)
         SystemBarHelper.init(this)
     }
