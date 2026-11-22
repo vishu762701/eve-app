@@ -99,7 +99,7 @@ abstract class TelegramHostActivity<F : BaseFragment> :
         }
     }
 
-    override fun onUserLeaveHint() {
+    public override fun onUserLeaveHint() {
         super.onUserLeaveHint()
         if (::actionBarLayout.isInitialized) {
             actionBarLayout.onUserLeaveHint()

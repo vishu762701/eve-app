@@ -133,6 +133,24 @@ class MainActivity : EveBaseActivity(), INavigationLayout, INavigationLayout.INa
     lateinit var actionBarLayout: ActionBarLayout
         private set
 
+    private var hostWindow: Window? = null
+
+    override fun getWindow(): Window = hostWindow ?: super<EveBaseActivity>.getWindow()
+
+    public override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (::actionBarLayout.isInitialized) {
+            actionBarLayout.onUserLeaveHint()
+        }
+    }
+
+    override fun onLowMemory() {
+        super.onLowMemory()
+        if (::actionBarLayout.isInitialized) {
+            actionBarLayout.onLowMemory()
+        }
+    }
+
     class EveHomeFragment(val homeView: View) : BaseFragment() {
         init {
             hasOwnBackground = true
@@ -584,6 +602,9 @@ class MainActivity : EveBaseActivity(), INavigationLayout, INavigationLayout.INa
 
     override fun onResume() {
         super.onResume()
+        if (::actionBarLayout.isInitialized) {
+            actionBarLayout.onResume()
+        }
         com.eve.app.util.PasscodeManager.onAppResumed(this)
         if (!::binding.isInitialized) return
         checkPasscodeLock()
@@ -644,6 +665,9 @@ class MainActivity : EveBaseActivity(), INavigationLayout, INavigationLayout.INa
 
     override fun onPause() {
         com.eve.app.util.PasscodeManager.onAppPaused(this)
+        if (::actionBarLayout.isInitialized) {
+            actionBarLayout.onPause()
+        }
         configCheckGeneration++
         configCheckJob?.cancel()
         configCheckJob = null
@@ -3007,6 +3031,7 @@ class MainActivity : EveBaseActivity(), INavigationLayout, INavigationLayout.INa
     }
 
     override fun setWindow(window: Window?) {
+        hostWindow = window
         if (::actionBarLayout.isInitialized) {
             actionBarLayout.setWindow(window)
         }
