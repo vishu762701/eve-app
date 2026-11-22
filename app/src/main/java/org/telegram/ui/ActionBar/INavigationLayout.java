@@ -33,6 +33,11 @@ public interface INavigationLayout {
     List<BaseFragment> getFragmentStack();
     void setDelegate(INavigationLayoutDelegate INavigationLayoutDelegate);
     void closeLastFragment(boolean animated, boolean forceNoAnimation);
+    default DrawerLayoutContainer getDrawerLayoutContainer() {
+        return null;
+    }
+    default void setDrawerLayoutContainer(DrawerLayoutContainer drawerLayoutContainer) {
+    }
     void setRemoveActionBarExtraHeight(boolean removeExtraHeight);
     void setTitleOverlayText(String title, int titleId, Runnable action);
     void animateThemedValues(ThemeAnimationSettings settings, Runnable onDone);
@@ -70,6 +75,10 @@ public interface INavigationLayout {
     void onActionModeStarted(Object mode);
     void onActionModeFinished(Object mode);
     void startActivityForResult(Intent intent, int requestCode);
+
+    static INavigationLayout newLayout(Context context, boolean main) {
+        return new ActionBarLayout(context, main);
+    }
 
     default void removeFragmentFromStack(BaseFragment fragment) {
         removeFragmentFromStack(fragment, false);

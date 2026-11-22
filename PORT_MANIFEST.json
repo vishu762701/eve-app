@@ -624,7 +624,7 @@
       "upstream_sha256": null,
       "mode": "NEW",
       "reason": "Eve host/screen/adapter referencing Telegram components",
-      "eve_sha256": "01d440864e03a68ac5b065faaac11ec0d8fd36867c6cc686f3aae35143d96c62"
+      "eve_sha256": "530b46419ab7b803b81d02e3d399b04c15956b2996f00a92991fc7617c5d3f07"
     },
     {
       "path": "app/src/main/java/com/eve/app/ui/common/TelegramRadioButton.kt",
@@ -712,7 +712,7 @@
       "upstream_sha256": null,
       "mode": "NEW",
       "reason": "Eve host/screen/adapter referencing Telegram components",
-      "eve_sha256": "d765b433f74d58cc09fd342a4551154d8f3fa0f3a98bf83f1071412074bf5c35"
+      "eve_sha256": "c1d888728aa5c11b68488c945dcca48bafa7d51a07aefd63ce5227f7a8953e82"
     },
     {
       "path": "app/src/main/java/com/eve/app/ui/home/TargetExamsBottomSheet.kt",
@@ -1323,6 +1323,14 @@
       "eve_sha256": "b42861a0b11d1de6ac3e2af7e7e849ddd6564587013c9a9f30ca623702a1282a"
     },
     {
+      "path": "app/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java",
+      "upstream_path": "TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java",
+      "upstream_sha256": "c3aca9af98a63654a585913cac09fbdfe7f1b14038952218aa8aeea7cde06363",
+      "mode": "CUT",
+      "reason": "Deletion-only cut of StoryViewer, FloatingDebug, and unused Telegram messaging dependencies while preserving 100% of navigation stack, transitions, drawing, and gesture physics",
+      "eve_sha256": "92ad1e89c33d36f015c7477fb10c1fba8f0fc4f801ce5a038dbef42ba04c7147"
+    },
+    {
       "path": "app/src/main/java/org/telegram/ui/ActionBar/ActionBarMenu.java",
       "upstream_path": "TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenu.java",
       "upstream_sha256": "9456689e477766acb34c260271bb26b6565276ca3f9b74842eb33d5066bcb075",
@@ -1369,7 +1377,7 @@
       "upstream_path": "TMessagesProj/src/main/java/org/telegram/ui/ActionBar/BaseFragment.java",
       "upstream_sha256": "08447c8843184709b51ada62f286fdb43850f95de6e7a7f227c5562b0c9c2264",
       "mode": "CUT",
-      "eve_sha256": "436d3c31d60df4c00b670cbd2e2ad0e34f7928c877359d65f56714fc9d481655"
+      "eve_sha256": "08d4c2592c365e90427a6ad2787cb4dea2a093cbdb3daba58e300b3f4d173cb7"
     },
     {
       "path": "app/src/main/java/org/telegram/ui/ActionBar/BottomSheet.java",
@@ -1379,11 +1387,25 @@
       "eve_sha256": "4866f96154a32e136139314acc49f0ad6bf9f33fafe711283406e66c0952a7e2"
     },
     {
+      "path": "app/src/main/java/org/telegram/ui/ActionBar/DrawerLayoutContainer.java",
+      "upstream_path": "TMessagesProj/src/main/java/org/telegram/ui/ActionBar/DrawerLayoutContainer.java",
+      "upstream_sha256": "883035388ebadfaec375a5c5ca8e87183f63ac7d299b0172bb1fa63f9c3c9a5d",
+      "mode": "VERBATIM",
+      "eve_sha256": "883035388ebadfaec375a5c5ca8e87183f63ac7d299b0172bb1fa63f9c3c9a5d"
+    },
+    {
+      "path": "app/src/main/java/org/telegram/ui/ActionBar/EdgeToEdgeSupportMode.java",
+      "upstream_path": "TMessagesProj/src/main/java/org/telegram/ui/ActionBar/EdgeToEdgeSupportMode.java",
+      "upstream_sha256": "41a360aeb5f842642adead431eaad9c90f7800a826d7b12fe5af2debf0061b00",
+      "mode": "VERBATIM",
+      "eve_sha256": "41a360aeb5f842642adead431eaad9c90f7800a826d7b12fe5af2debf0061b00"
+    },
+    {
       "path": "app/src/main/java/org/telegram/ui/ActionBar/INavigationLayout.java",
       "upstream_path": "TMessagesProj/src/main/java/org/telegram/ui/ActionBar/INavigationLayout.java",
       "upstream_sha256": "ba37de521afcdedabf349ce969b0f748b9639fdfcf10660fcde76e526149212f",
       "mode": "CUT",
-      "eve_sha256": "3335bca681e800bbfc26ef5d004dd1540b7edf28ad7ecafbf03aec3ca78bba9b"
+      "eve_sha256": "b78d2c79d3975a141983f6fe588915f5fd889372e78167232a5e8446077e4f74"
     },
     {
       "path": "app/src/main/java/org/telegram/ui/ActionBar/MenuDrawable.java",

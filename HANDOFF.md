@@ -3,6 +3,7 @@
 Read `EVE_PROJECT_STATE.md` for the permanent record and NEXT ACTION. Development is on `main` only.
 
 ## Done
+- T1 (Authentic Telegram Navigation Architecture): `ActionBarLayout.java` (CUT) and `DrawerLayoutContainer.java` (VERBATIM) integrated into `TelegramHostActivity.kt` and `MainActivity.kt`. Replaced fake stubs with genuine Telegram fragment stack, gesture physics, dual-container view recycling, and `INavigationLayout` delegation. Added `TelegramNavigationIntegrationTest.kt`. Expanded `PORT_MANIFEST.json` to 327 verified files; `verify_telegram_port.py` passes with zero errors.
 - Main has a read-only, on-demand diagnostic for the entire debug JVM suite, the host startup correction for offline UI tests, and an additional sandbox-context regression. No production authorization or source pin changed.
 - `AGENTS.md` and `BUILD_FAILURE_RULES.md` now permit evidence-based repair without routine approval. Only the owner accepts a screen.
 

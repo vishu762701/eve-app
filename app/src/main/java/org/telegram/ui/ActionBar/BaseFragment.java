@@ -1036,6 +1036,28 @@ public abstract class BaseFragment {
         return false;
     }
 
+    public EdgeToEdgeSupportMode getEdgeToEdgeSupportMode() {
+        return isSupportEdgeToEdge() ?
+            EdgeToEdgeSupportMode.VERTICAL :
+            EdgeToEdgeSupportMode.NONE;
+    }
+
+    public View performCreateView(Context context) {
+        return fragmentView = createView(context);
+    }
+
+    public void attachSheets(ActionBarLayout.LayoutContainer parentLayout) {
+        if (sheetsStack != null) {
+            for (int i = 0; i < sheetsStack.size(); ++i) {
+                AttachedSheet sheet = sheetsStack.get(i);
+                if (sheet != null && sheet.attachedToParent()) {
+                    AndroidUtilities.removeFromParent(sheet.getWindowView());
+                    parentLayout.addView(sheet.getWindowView());
+                }
+            }
+        }
+    }
+
     public boolean drawEdgeNavigationBar() {
         return isSupportEdgeToEdge();
     }

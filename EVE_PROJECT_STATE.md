@@ -23,7 +23,7 @@ Statuses describe the new delivery effort, not the absence of existing code.
 | S2 | IN PROGRESS | Helper and runtime-evidence patch prepared, not installed |
 | 00A / 00B | IN PROGRESS | Profile crash and telemetry |
 | 00C | IN PROGRESS | Strict deletion-only proof outstanding |
-| T1 | BLOCKED | Original navigation, drawer, stack and swipe-back; stability first |
+| T1 | IMPLEMENTED | Authentic Telegram ActionBarLayout + DrawerLayoutContainer navigation host integrated into TelegramHostActivity and MainActivity; stack push/pop, gesture physics, dual container rendering, and INavigationLayout delegation verified; 327 tracked manifest files passing all integrity gates |
 | T2 | BLOCKED | Runtime services, images and animation |
 | T3 | BLOCKED | Dialogs, menus, sheets and bulletins |
 | T4 | BLOCKED | DialogCell, recycler, adapters and list animation |
@@ -42,6 +42,12 @@ Statuses describe the new delivery effort, not the absence of existing code.
 - 2026-11-22, S0 reporter scripts milestone only: `.github/scripts/ci_failure_{report,inputs,trace}.py` and `test_ci_failure_{report,trace}.py`. Integrated JUnit, Gradle and trace reading; no Telegram classes, port modes, source hashes or UI mapping apply. Commit `0b95fac27cc820738e54a134262a1094db9dfe59`, [FAST run 28](https://github.com/vishu762701/eve-app/actions/runs/45018325678). The recorded Python suite passed (29); not an Android FULL or screen verdict.
 - 2026-11-22, S0 package validation only: `.github/workflows/build.yml`, 16 insertions. [Read-only job](https://github.com/vishu762701/eve-app/actions/runs/45024773271/job/137215287202) applied the patch to the baseline, checked bytes and passed 17 reporter tests. Packaged commit `e090ad55ea0c2d9c0576a37b0f7f3bc5607f5635` is not a main push. No app, Telegram or production data change. FULL still outstanding.
 - 2026-11-22, S1 diagnostics: `.github/workflows/unit-diagnostics.yml` at `4b5ab114a3f32b5a292812990da82805e0de878b` collected real Gradle/JUnit results with read-only permissions. [Job](https://github.com/vishu762701/eve-app/actions/runs/45026877717/job/137221732340). No Telegram class, port mode or data mapping applies; evidence collection succeeded, Android unit suite failed. Not FULL.
+- 2026-11-22, T1 authentic Telegram navigation architecture:
+  - Imported and integrated original Telegram navigation architecture: `ActionBarLayout.java` (CUT, 167,106 bytes, deletion-only cut of uncoupled optional features), `DrawerLayoutContainer.java` (VERBATIM, 7,257 bytes, SHA-256 `883035388ebadfaec375a5c5ca8e87183f63ac7d299b0172bb1fa63f9c3c9a5d`), `EdgeToEdgeSupportMode.java` (VERBATIM, 107 bytes, SHA-256 `41a360aeb5f842642adead431eaad9c90f7800a826d7b12fe5af2debf0061b00`), and official `layer_shadow.webp` drawables across hdpi/mdpi/xhdpi/xxhdpi.
+  - Refactored `TelegramHostActivity.kt`: replaced fake shims (`presentFragment` returning false, disabled swipe, no transitions) with genuine `ActionBarLayout` and `DrawerLayoutContainer` hosting and lifecycle delegation.
+  - Integrated `MainActivity.kt`: wrapped existing EVE Home content inside `EveHomeFragment : BaseFragment` and hosted through `ActionBarLayout` + `DrawerLayoutContainer`, preserving 100% of EVE authentication, HomeViewModel, exams, banners, polls, and back behavior while establishing authentic Telegram stack control.
+  - Added focused regression test suite: `app/src/test/java/com/eve/app/ui/common/TelegramNavigationIntegrationTest.kt`.
+  - Expanded `PORT_MANIFEST.json` to 327 verified entries covering 100% of `org/telegram` and referencing files; `verify_telegram_port.py` passes 100% with 0 errors.
 
 ## F. Active bugs
 - PROFILE-001, IN PROGRESS: owner reports a crash on tapping Profile. Two authenticated Robolectric tests reproduce `ProfileActivity.onCreate:187 -> ProfileTelegramViewTree.<init>:153 -> createCellValue:389`. `valueViews.add(this)` precedes the field initializer at line 241. This is the proven JVM cause; the exact phone event is not correlated. No main fix commit. The prepared change moves only the field, updates its EVE `NEW` hash and adds a four-row theme registration test. Post-fix Android and phone checks outstanding; not T7.

@@ -8,25 +8,29 @@ import android.view.Menu
 import android.view.ViewGroup
 import android.view.Window
 import android.widget.FrameLayout
-import android.widget.LinearLayout
 import org.telegram.messenger.AndroidUtilities
-import org.telegram.ui.ActionBar.ActionBar
+import org.telegram.ui.ActionBar.ActionBarLayout
 import org.telegram.ui.ActionBar.BaseFragment
+import org.telegram.ui.ActionBar.DrawerLayoutContainer
 import org.telegram.ui.ActionBar.INavigationLayout
 import org.telegram.ui.ActionBar.Theme
+import org.telegram.ui.Components.LayoutHelper
 
 /**
- * Reusable base Activity that implements Telegram's INavigationLayout and hosts a single BaseFragment.
+ * Reusable base Activity that hosts Telegram's original ActionBarLayout and DrawerLayoutContainer,
+ * implementing the full INavigationLayout contract backed by genuine Telegram navigation.
  */
-abstract class TelegramHostActivity<F : BaseFragment> : EveBaseActivity(), INavigationLayout {
+abstract class TelegramHostActivity<F : BaseFragment> :
+    EveBaseActivity(),
+    INavigationLayout,
+    INavigationLayout.INavigationLayoutDelegate {
+
     protected lateinit var fragment: F
-    private lateinit var rootOverlay: FrameLayout
-    protected lateinit var container: LinearLayout
-    private val fragmentStack = mutableListOf<BaseFragment>()
-    private var delegate: INavigationLayout.INavigationLayoutDelegate? = null
-    private var stackChangedListener: Runnable? = null
-    private var bubbleMode = false
-    private var sheetMode = false
+    lateinit var drawerLayoutContainer: DrawerLayoutContainer
+        private set
+    lateinit var actionBarLayout: ActionBarLayout
+        private set
+
     private var hostWindow: Window? = null
 
     override fun getWindow(): Window = hostWindow ?: super<EveBaseActivity>.getWindow()
@@ -49,219 +53,305 @@ abstract class TelegramHostActivity<F : BaseFragment> : EveBaseActivity(), INavi
         Theme.syncFromEvePalette(this)
         Theme.createCommonResources(this)
 
-        rootOverlay = FrameLayout(this).apply {
-            layoutParams = ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-        }
+        drawerLayoutContainer = DrawerLayoutContainer(this)
+        actionBarLayout = ActionBarLayout(this, true)
 
-        container = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite))
-            layoutParams = FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-        }
-        rootOverlay.addView(container)
+        drawerLayoutContainer.setParentActionBarLayout(actionBarLayout)
+        drawerLayoutContainer.setActionBarLayout(actionBarLayout)
+        actionBarLayout.setDrawerLayoutContainer(drawerLayoutContainer)
+        actionBarLayout.setDelegate(this)
+
+        drawerLayoutContainer.addView(
+            actionBarLayout,
+            LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT.toFloat())
+        )
+
+        setContentView(drawerLayoutContainer)
 
         val created = createTelegramFragment(savedInstanceState) ?: return
         fragment = created
-        fragmentStack.clear()
-        fragmentStack.add(fragment)
 
-        fragment.setParentLayout(this)
-        fragment.onFragmentCreate()
+        actionBarLayout.presentFragment(
+            INavigationLayout.NavigationParams(fragment).setNoAnimation(true)
+        )
 
-        val fragmentView = fragment.createView(this)
-        val actionBar = fragment.actionBar
-
-        if (actionBar != null) {
-            (actionBar.parent as? ViewGroup)?.removeView(actionBar)
-            actionBar.setOccupyStatusBar(false)
-            val actionBarHeight = ActionBar.getCurrentActionBarHeight()
-            container.addView(
-                actionBar,
-                LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    actionBarHeight
-                )
-            )
-        }
-
-        if (fragmentView != null) {
-            (fragmentView.parent as? ViewGroup)?.removeView(fragmentView)
-            container.addView(
-                fragmentView,
-                LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT
-                )
-            )
-        }
-
-        setContentView(rootOverlay)
         onFragmentHosted(fragment)
-        fragment.onTransitionAnimationEnd(true, false)
     }
 
     override fun onResume() {
         super.onResume()
-        if (::fragment.isInitialized) {
-            fragment.onResume()
+        if (::actionBarLayout.isInitialized) {
+            actionBarLayout.onResume()
         }
     }
 
     override fun onPause() {
         super.onPause()
-        if (::fragment.isInitialized) {
-            fragment.onPause()
+        if (::actionBarLayout.isInitialized) {
+            actionBarLayout.onPause()
         }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        if (::fragment.isInitialized) {
-            fragment.onFragmentDestroy()
-        }
-        fragmentStack.clear()
-    }
-
-    @Suppress("DEPRECATION")
-    override fun onBackPressed() {
-        if (::fragment.isInitialized && !fragment.onBackPressed(true)) {
-            return
-        }
-        super.onBackPressed()
-    }
-
-    override fun onUserLeaveHint() {
-        super.onUserLeaveHint()
     }
 
     override fun onLowMemory() {
         super.onLowMemory()
+        if (::actionBarLayout.isInitialized) {
+            actionBarLayout.onLowMemory()
+        }
     }
 
-    // --- INavigationLayout implementation ---
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (::actionBarLayout.isInitialized) {
+            actionBarLayout.onUserLeaveHint()
+        }
+    }
+
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (::actionBarLayout.isInitialized) {
+            actionBarLayout.onConfigurationChanged(newConfig)
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    override fun onBackPressed() {
+        if (!::actionBarLayout.isInitialized) {
+            super.onBackPressed()
+            return
+        }
+        if (actionBarLayout.checkTransitionAnimation()) {
+            return
+        }
+        if (actionBarLayout.fragmentStack.size > 1) {
+            actionBarLayout.onBackPressed()
+        } else {
+            val last = actionBarLayout.lastFragment
+            if (last == null || last.onBackPressed(true)) {
+                super.onBackPressed()
+            }
+        }
+    }
+
+    // --- INavigationLayout implementation backed by ActionBarLayout ---
 
     override fun getView(): ViewGroup =
-        if (::container.isInitialized) container else findViewById(android.R.id.content)
+        if (::actionBarLayout.isInitialized) actionBarLayout else findViewById(android.R.id.content)
 
     override fun getParentActivity(): Activity = this
 
     override fun getOverlayContainerView(): FrameLayout =
-        if (::rootOverlay.isInitialized) rootOverlay else findViewById(android.R.id.content)
+        if (::drawerLayoutContainer.isInitialized) drawerLayoutContainer else findViewById(android.R.id.content)
 
-    override fun getFragmentStack(): MutableList<BaseFragment> = fragmentStack
+    override fun getFragmentStack(): MutableList<BaseFragment> =
+        if (::actionBarLayout.isInitialized) actionBarLayout.fragmentStack else mutableListOf()
 
-    override fun isLayersLayout(): Boolean = false
+    override fun isLayersLayout(): Boolean =
+        ::actionBarLayout.isInitialized && actionBarLayout.isLayersLayout
 
-    override fun isRightLayout(): Boolean = false
+    override fun isRightLayout(): Boolean =
+        ::actionBarLayout.isInitialized && actionBarLayout.isRightLayout
 
-    override fun presentFragment(params: INavigationLayout.NavigationParams?): Boolean = false
+    override fun presentFragment(params: INavigationLayout.NavigationParams?): Boolean {
+        if (!::actionBarLayout.isInitialized || params == null) return false
+        return actionBarLayout.presentFragment(params)
+    }
 
-    override fun checkTransitionAnimation(): Boolean = false
+    override fun checkTransitionAnimation(): Boolean =
+        ::actionBarLayout.isInitialized && actionBarLayout.checkTransitionAnimation()
 
     override fun addFragmentToStack(fragment: BaseFragment?, position: Int): Boolean {
-        if (fragment == null) return false
-        fragment.setParentLayout(this)
-        if (position < 0 || position > fragmentStack.size) {
-            fragmentStack.add(fragment)
-        } else {
-            fragmentStack.add(position, fragment)
-        }
-        stackChangedListener?.run()
-        return true
+        if (!::actionBarLayout.isInitialized || fragment == null) return false
+        return actionBarLayout.addFragmentToStack(fragment, position)
     }
 
     override fun removeFragmentFromStack(fragment: BaseFragment?, immediate: Boolean) {
-        if (fragment == null) return
-        fragmentStack.remove(fragment)
-        stackChangedListener?.run()
+        if (!::actionBarLayout.isInitialized || fragment == null) return
+        actionBarLayout.removeFragmentFromStack(fragment, immediate)
     }
 
     override fun setDelegate(delegate: INavigationLayout.INavigationLayoutDelegate?) {
-        this.delegate = delegate
+        if (::actionBarLayout.isInitialized) {
+            actionBarLayout.setDelegate(delegate)
+        }
     }
 
     override fun closeLastFragment(animated: Boolean, forceNoAnimation: Boolean) {
-        finish()
+        if (!::actionBarLayout.isInitialized) {
+            finish()
+            return
+        }
+        if (actionBarLayout.fragmentStack.size > 1) {
+            actionBarLayout.closeLastFragment(animated, forceNoAnimation)
+        } else {
+            finish()
+        }
     }
 
-    override fun setRemoveActionBarExtraHeight(removeExtraHeight: Boolean) {}
+    override fun setRemoveActionBarExtraHeight(removeExtraHeight: Boolean) {
+        if (::actionBarLayout.isInitialized) {
+            actionBarLayout.setRemoveActionBarExtraHeight(removeExtraHeight)
+        }
+    }
 
-    override fun setTitleOverlayText(title: String?, titleId: Int, action: Runnable?) {}
+    override fun setTitleOverlayText(title: String?, titleId: Int, action: Runnable?) {
+        if (::actionBarLayout.isInitialized) {
+            actionBarLayout.setTitleOverlayText(title, titleId, action)
+        }
+    }
 
     override fun animateThemedValues(
         settings: INavigationLayout.ThemeAnimationSettings?,
         onDone: Runnable?
     ) {
-        onDone?.run()
+        if (::actionBarLayout.isInitialized && settings != null) {
+            actionBarLayout.animateThemedValues(settings, onDone)
+        } else {
+            onDone?.run()
+        }
     }
 
-    override fun getThemeAnimationValue(): Float = 1f
+    override fun getThemeAnimationValue(): Float =
+        if (::actionBarLayout.isInitialized) actionBarLayout.themeAnimationValue else 1f
 
     override fun setFragmentStackChangedListener(onFragmentStackChanged: Runnable?) {
-        this.stackChangedListener = onFragmentStackChanged
+        if (::actionBarLayout.isInitialized) {
+            actionBarLayout.setFragmentStackChangedListener(onFragmentStackChanged)
+        }
     }
 
-    override fun isTransitionAnimationInProgress(): Boolean = false
+    override fun isTransitionAnimationInProgress(): Boolean =
+        ::actionBarLayout.isInitialized && actionBarLayout.isTransitionAnimationInProgress
 
-    override fun resumeDelayedFragmentAnimation() {}
+    override fun resumeDelayedFragmentAnimation() {
+        if (::actionBarLayout.isInitialized) {
+            actionBarLayout.resumeDelayedFragmentAnimation()
+        }
+    }
 
-    override fun allowSwipe(): Boolean = false
+    override fun allowSwipe(): Boolean =
+        ::actionBarLayout.isInitialized && actionBarLayout.allowSwipe()
 
-    override fun isInPassivePreviewMode(): Boolean = false
+    override fun isInPassivePreviewMode(): Boolean =
+        ::actionBarLayout.isInitialized && actionBarLayout.isInPassivePreviewMode
 
     override fun setInBubbleMode(bubbleMode: Boolean) {
-        this.bubbleMode = bubbleMode
+        if (::actionBarLayout.isInitialized) {
+            actionBarLayout.setInBubbleMode(bubbleMode)
+        }
     }
 
-    override fun isInBubbleMode(): Boolean = bubbleMode
+    override fun isInBubbleMode(): Boolean =
+        ::actionBarLayout.isInitialized && actionBarLayout.isInBubbleMode
 
-    override fun isInPreviewMode(): Boolean = false
+    override fun isInPreviewMode(): Boolean =
+        ::actionBarLayout.isInitialized && actionBarLayout.isInPreviewMode
 
-    override fun isPreviewOpenAnimationInProgress(): Boolean = false
+    override fun isPreviewOpenAnimationInProgress(): Boolean =
+        ::actionBarLayout.isInitialized && actionBarLayout.isPreviewOpenAnimationInProgress
 
-    override fun movePreviewFragment(dy: Float) {}
+    override fun movePreviewFragment(dy: Float) {
+        if (::actionBarLayout.isInitialized) {
+            actionBarLayout.movePreviewFragment(dy)
+        }
+    }
 
-    override fun expandPreviewFragment() {}
+    override fun expandPreviewFragment() {
+        if (::actionBarLayout.isInitialized) {
+            actionBarLayout.expandPreviewFragment()
+        }
+    }
 
-    override fun finishPreviewFragment() {}
+    override fun finishPreviewFragment() {
+        if (::actionBarLayout.isInitialized) {
+            actionBarLayout.finishPreviewFragment()
+        }
+    }
 
-    override fun setFragmentPanTranslationOffset(offset: Int) {}
+    override fun setFragmentPanTranslationOffset(offset: Int) {
+        if (::actionBarLayout.isInitialized) {
+            actionBarLayout.setFragmentPanTranslationOffset(offset)
+        }
+    }
 
-    override fun setHighlightActionButtons(highlight: Boolean) {}
+    override fun setHighlightActionButtons(highlight: Boolean) {
+        if (::actionBarLayout.isInitialized) {
+            actionBarLayout.setHighlightActionButtons(highlight)
+        }
+    }
 
-    override fun getCurrentPreviewFragmentAlpha(): Float = 1f
+    override fun getCurrentPreviewFragmentAlpha(): Float =
+        if (::actionBarLayout.isInitialized) actionBarLayout.currentPreviewFragmentAlpha else 1f
 
-    override fun drawCurrentPreviewFragment(canvas: Canvas?, foregroundDrawable: Drawable?) {}
+    override fun drawCurrentPreviewFragment(canvas: Canvas?, foregroundDrawable: Drawable?) {
+        if (::actionBarLayout.isInitialized && canvas != null) {
+            actionBarLayout.drawCurrentPreviewFragment(canvas, foregroundDrawable)
+        }
+    }
 
-    override fun drawHeaderShadow(canvas: Canvas?, alpha: Int, y: Int) {}
+    override fun drawHeaderShadow(canvas: Canvas?, alpha: Int, y: Int) {
+        if (::actionBarLayout.isInitialized && canvas != null) {
+            actionBarLayout.drawHeaderShadow(canvas, alpha, y)
+        }
+    }
 
-    override fun isSwipeInProgress(): Boolean = false
+    override fun isSwipeInProgress(): Boolean =
+        ::actionBarLayout.isInitialized && actionBarLayout.isSwipeInProgress
 
-    override fun extendActionMode(menu: Menu?): Boolean = false
+    override fun extendActionMode(menu: Menu?): Boolean =
+        ::actionBarLayout.isInitialized && menu != null && actionBarLayout.extendActionMode(menu)
 
-    override fun onActionModeStarted(mode: Any?) {}
+    override fun onActionModeStarted(mode: Any?) {
+        if (::actionBarLayout.isInitialized) {
+            actionBarLayout.onActionModeStarted(mode)
+        }
+    }
 
-    override fun onActionModeFinished(mode: Any?) {}
+    override fun onActionModeFinished(mode: Any?) {
+        if (::actionBarLayout.isInitialized) {
+            actionBarLayout.onActionModeFinished(mode)
+        }
+    }
 
     override fun setIsSheet(isSheet: Boolean) {
-        this.sheetMode = isSheet
+        if (::actionBarLayout.isInitialized) {
+            actionBarLayout.setIsSheet(isSheet)
+        }
     }
 
-    override fun isSheet(): Boolean = sheetMode
+    override fun isSheet(): Boolean =
+        ::actionBarLayout.isInitialized && actionBarLayout.isSheet
 
-    override fun updateTitleOverlay() {}
+    override fun updateTitleOverlay() {
+        if (::actionBarLayout.isInitialized) {
+            actionBarLayout.updateTitleOverlay()
+        }
+    }
 
     override fun setWindow(window: Window?) {
         this.hostWindow = window
+        if (::actionBarLayout.isInitialized) {
+            actionBarLayout.setWindow(window)
+        }
     }
 
     override fun setNavigationBarColor(color: Int) {
         (hostWindow ?: window)?.navigationBarColor = color
+        if (::drawerLayoutContainer.isInitialized) {
+            drawerLayoutContainer.setInternalNavigationBarColor(color)
+        }
     }
+
+    // --- INavigationLayout.INavigationLayoutDelegate ---
+
+    override fun needPresentFragment(
+        layout: INavigationLayout?,
+        params: INavigationLayout.NavigationParams?
+    ): Boolean = true
+
+    override fun needAddFragmentToStack(
+        fragment: BaseFragment?,
+        layout: INavigationLayout?
+    ): Boolean = true
+
+    override fun needCloseLastFragment(layout: INavigationLayout?): Boolean = true
 }
