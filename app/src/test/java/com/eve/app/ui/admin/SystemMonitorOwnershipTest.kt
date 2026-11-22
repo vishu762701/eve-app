@@ -67,7 +67,7 @@ class SystemMonitorOwnershipTest {
         button(a,"Retry Exam").performClick(); idle()
         val dialog = ShadowDialog.getLatestDialog() as AlertDialog
         assertTrue(dialog.isShowing)
-        return requireNotNull(dialog.getActionButton(DialogInterface.BUTTON_POSITIVE))
+        return requireNotNull(dialog.getButton(DialogInterface.BUTTON_POSITIVE))
     }
     private fun exercise(block: (SystemMonitorActivity, org.robolectric.android.controller.ActivityController<SystemMonitorActivity>) -> Unit) {
         val c=Robolectric.buildActivity(SystemMonitorActivity::class.java)
@@ -106,7 +106,7 @@ class SystemMonitorOwnershipTest {
     @Test fun cancelledConfirmationDoesNotDispatch() = exercise { a,_ ->
         confirm(a)
         val dialog=ShadowDialog.getLatestDialog() as AlertDialog
-        dialog.getActionButton(DialogInterface.BUTTON_NEGATIVE)?.performClick(); idle()
+        dialog.getButton(DialogInterface.BUTTON_NEGATIVE)?.performClick(); idle()
         assertEquals(0,SystemMonitorBoundaryFixture.retries.size)
     }
     @Test fun transportFailureKeepsRetryAvailableWithoutFakeRefresh() = exercise { a,_ ->
