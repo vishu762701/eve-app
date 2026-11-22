@@ -150,10 +150,26 @@ jobs:
           retention-days: 14
 
       - name: FULL test lint and compile AndroidTest sources
+        id: full_gradle
         if: ${{ steps.verification_profile.outputs.full == 'true' }}
         run: |
           set -euo pipefail
           gradle :app:compileDebugUnitTestKotlin :app:compileDebugAndroidTestKotlin :app:assembleDebugAndroidTest :app:lintDebug :app:testDebugUnitTest --continue --stacktrace --console=plain 2>&1 | tee ci-full-gradle.log
+
+      - name: Archive failed FULL unit test evidence
+        if: ${{ failure() && steps.full_gradle.outcome == 'failure' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-unit-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ci-full-gradle.log
+            app/build/test-results/testDebugUnitTest/**/*.xml
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Summarize failed FULL unit tests
+        if: ${{ failure() && steps.full_gradle.outcome == 'failure' }}
+        run: python3 .github/scripts/ci_failure_report.py --unit app/build/test-results/testDebugUnitTest --gradle-log ci-full-gradle.log
 
       - name: Verify missing release credentials are rejected
         if: ${{ steps.verification_profile.outputs.full == 'true' }}
@@ -217,7 +233,7 @@ jobs:
       - name: Verify original APK checksums
         env:
           APP_SHA256: ${{ needs.build.outputs.apk_sha256 }}
-          TEST_SHA256: ${{ needs.build.outputs.test_apk_sha256 }}
+          TEST_SHA256: ${{ needs.build.outputs.test_sha256 }}
         run: |
           set -euo pipefail
           test -n "$APP_SHA256"
@@ -347,7 +363,7 @@ jobs:
       - name: Verify original APK checksums
         env:
           APP_SHA256: ${{ needs.build.outputs.apk_sha256 }}
-          TEST_SHA256: ${{ needs.build.outputs.test_apk_sha256 }}
+          TEST_SHA256: ${{ needs.build.outputs.test_sha256 }}
         run: |
           set -euo pipefail
           test -n "$APP_SHA256"
