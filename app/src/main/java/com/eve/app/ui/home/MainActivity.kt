@@ -128,7 +128,9 @@ import android.view.LayoutInflater
 
 class MainActivity : EveBaseActivity(), INavigationLayout, INavigationLayout.INavigationLayoutDelegate {
 
-    override lateinit var drawerLayoutContainer: DrawerLayoutContainer
+    @get:JvmName("getDrawerContainer")
+    @set:JvmName("setDrawerContainer")
+    lateinit var drawerLayoutContainer: DrawerLayoutContainer
     lateinit var actionBarLayout: ActionBarLayout
         private set
 
@@ -2843,6 +2845,15 @@ class MainActivity : EveBaseActivity(), INavigationLayout, INavigationLayout.INa
 
     override fun getOverlayContainerView(): FrameLayout =
         if (::drawerLayoutContainer.isInitialized) drawerLayoutContainer else findViewById(android.R.id.content)
+
+    override fun getDrawerLayoutContainer(): DrawerLayoutContainer? =
+        if (::drawerLayoutContainer.isInitialized) drawerLayoutContainer else null
+
+    override fun setDrawerLayoutContainer(drawerLayoutContainer: DrawerLayoutContainer?) {
+        if (drawerLayoutContainer != null) {
+            this.drawerLayoutContainer = drawerLayoutContainer
+        }
+    }
 
     override fun getFragmentStack(): MutableList<BaseFragment> =
         if (::actionBarLayout.isInitialized) actionBarLayout.fragmentStack else mutableListOf()
