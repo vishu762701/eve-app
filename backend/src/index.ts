@@ -29,6 +29,7 @@ import { reportRoutes, adminReportRoutes, adminAuditLogRoutes } from "./routes/r
 import { typographyRoutes } from "./routes/typographyPublished";
 import { emojiRoutes, emojiAdminRoutes } from "./routes/emoji";
 import { questionRoutes } from "./routes/questions";
+import { crashIngestRoutes } from "./routes/crashes";
 import { SupabaseStorage } from "./supabase";
 import { AuthUser, Env } from "./types";
 import { getAdminPermissions, verifyFirebaseIdToken } from "./auth";
@@ -292,6 +293,7 @@ app.route("/api/admin/reports", adminReportRoutes);
 app.route("/api/admin/audit-log", adminAuditLogRoutes);
 app.route("/api/admin/emoji", emojiAdminRoutes);
 app.route("/api/emoji", emojiRoutes);
+app.route("/api/crashes", crashIngestRoutes);
 app.route("/api/typography", typographyRoutes);
 
 // 6. Global Error Handling & 404

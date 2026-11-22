@@ -163,9 +163,9 @@ dependencies {
     implementation("com.google.firebase:firebase-messaging")
     implementation("com.google.android.gms:play-services-auth:21.2.0")
 
-    // Phase 15: Crashlytics (crash reports) + Analytics (kaunsa exam sabse zyada attempt
-    // ho raha, kahan drop-off ho raha — dono Firebase Console me dikhte hain)
+    // Phase 15 & Mission 00B: Crashlytics (Java/Kotlin + NDK native crashes) + Analytics
     implementation("com.google.firebase:firebase-crashlytics")
+    implementation("com.google.firebase:firebase-crashlytics-ndk")
     implementation("com.google.firebase:firebase-analytics")
 
     // Push notifications (Phase 12): naya-exam alerts (FCM topic) + daily reminder (WorkManager)

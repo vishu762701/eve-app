@@ -86,3 +86,44 @@ monitoringRoutes.post('/jobs/:id/retry', requirePermission("manage_generated_tes
     return c.json({ success: false, error: err instanceof GenerationBusyError ? err.message : 'Generation retry failed; refresh operations for the safe category' }, err instanceof GenerationBusyError ? 409 : 502);
   }
 });
+
+// ----------------------------------------------------------------------------
+// Crash Center Admin Endpoints (Mission 00B)
+// Protected by router-wide requirePermission("view_analytics_logs")
+// ----------------------------------------------------------------------------
+monitoringRoutes.get('/crashes', async (c) => {
+  if (!c.env.DB) {
+    return c.json({ success: false, error: "Database unavailable" }, 503);
+  }
+  const { results } = await c.env.DB.prepare(`
+    SELECT signature, exception_class, top_frame, sanitized_message, first_seen, last_seen, occurrence_count, status, suggested_cause
+    FROM crash_signatures
+    ORDER BY last_seen DESC LIMIT 100
+  `).all();
+  return c.json({ success: true, data: results || [] });
+});
+
+monitoringRoutes.get('/crashes/:signature', async (c) => {
+  if (!c.env.DB) {
+    return c.json({ success: false, error: "Database unavailable" }, 503);
+  }
+  const signature = c.req.param("signature");
+  const sigRow = await c.env.DB.prepare(`
+    SELECT signature, exception_class, top_frame, sanitized_message, first_seen, last_seen, occurrence_count, status, suggested_cause
+    FROM crash_signatures
+    WHERE signature = ?
+  `).bind(signature).first();
+
+  if (!sigRow) {
+    return c.json({ success: false, error: "Crash signature not found" }, 404);
+  }
+
+  const { results: incidents } = await c.env.DB.prepare(`
+    SELECT id, app_version_name, app_version_code, android_sdk, device_model, anr_or_exit_reason, sanitized_frames_json, timestamp, is_synthetic
+    FROM crash_incidents
+    WHERE signature = ?
+    ORDER BY timestamp DESC LIMIT 20
+  `).bind(signature).all();
+
+  return c.json({ success: true, data: { signature: sigRow, incidents: incidents || [] } });
+});
