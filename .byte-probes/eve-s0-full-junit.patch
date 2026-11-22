@@ -1,0 +1,31 @@
+diff --git a/.github/workflows/build.yml b/.github/workflows/build.yml
+index e3cd2435986f82e7e0ae80bfe4d8e2e584f5874a..4577ad431452418869987a08934b4f8ff9e2f774 100644
+--- a/.github/workflows/build.yml
++++ b/.github/workflows/build.yml
+@@ -150,10 +150,26 @@
+           retention-days: 14
+ 
+       - name: FULL test lint and compile AndroidTest sources
++        id: full_gradle
+         if: ${{ steps.verification_profile.outputs.full == 'true' }}
+         run: |
+           set -euo pipefail
+           gradle :app:compileDebugUnitTestKotlin :app:compileDebugAndroidTestKotlin :app:assembleDebugAndroidTest :app:lintDebug :app:testDebugUnitTest --continue --stacktrace --console=plain 2>&1 | tee ci-full-gradle.log
++
++      - name: Archive failed FULL unit test evidence
++        if: ${{ failure() && steps.full_gradle.outcome == 'failure' }}
++        uses: actions/upload-artifact@v4
++        with:
++          name: full-unit-evidence-${{ github.run_id }}-${{ github.run_attempt }}
++          path: |
++            ci-full-gradle.log
++            app/build/test-results/testDebugUnitTest/**/*.xml
++          if-no-files-found: error
++          retention-days: 7
++
++      - name: Summarize failed FULL unit tests
++        if: ${{ failure() && steps.full_gradle.outcome == 'failure' }}
++        run: python3 .github/scripts/ci_failure_report.py --unit app/build/test-results/testDebugUnitTest --gradle-log ci-full-gradle.log
+ 
+       - name: Verify missing release credentials are rejected
+         if: ${{ steps.verification_profile.outputs.full == 'true' }}
