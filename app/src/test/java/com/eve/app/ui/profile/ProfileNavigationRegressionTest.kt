@@ -53,6 +53,7 @@ class ProfileNavigationRegressionTest {
         ProfileEditorAuthFixture.reset()
         ProfileEditorAuthFixture.setOwner("profile-test-uid")
         val app = RuntimeEnvironment.getApplication()
+        org.telegram.messenger.ApplicationLoader.applicationContext = app
         org.telegram.messenger.AndroidUtilities.checkDisplaySize(
             app,
             app.resources.configuration

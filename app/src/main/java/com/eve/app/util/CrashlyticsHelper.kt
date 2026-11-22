@@ -27,19 +27,31 @@ object CrashlyticsHelper {
      */
     fun identify(uid: String, isAdmin: Boolean) {
         val pseudonymousId = if (uid.isNotBlank()) "pseudo_" + hashPseudonymousId(uid) else ""
-        FirebaseCrashlytics.getInstance().apply {
-            setUserId(pseudonymousId)
-            setCustomKey("is_admin", isAdmin)
+        try {
+            FirebaseCrashlytics.getInstance().apply {
+                setUserId(pseudonymousId)
+                setCustomKey("is_admin", isAdmin)
+            }
+        } catch (_: Throwable) {
+            // Firebase not initialized in test/isolated environments
         }
     }
 
     fun clearIdentity() {
-        FirebaseCrashlytics.getInstance().setUserId("")
+        try {
+            FirebaseCrashlytics.getInstance().setUserId("")
+        } catch (_: Throwable) {
+            // Firebase not initialized
+        }
     }
 
     /** Non-fatal error log with PII redaction */
     fun logNonFatal(throwable: Throwable) {
-        FirebaseCrashlytics.getInstance().recordException(throwable)
+        try {
+            FirebaseCrashlytics.getInstance().recordException(throwable)
+        } catch (_: Throwable) {
+            // Firebase not initialized
+        }
     }
 
     /** Redacts sensitive PII from diagnostic strings */
