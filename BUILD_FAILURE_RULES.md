@@ -48,8 +48,8 @@ Never change Telegram layout, measure, draw, dimension, color or logic to make a
 - `PORT_MANIFEST.json` records the file with `mode` and the new `eve_sha256`.
 - The report lists every changed file and line.
 
-## Rule 7 — Limits
-At most 3 push-and-fix cycles per failure (or fewer if the mission says so). If a cycle makes things worse (a new category or more errors), revert that commit before trying anything else. After 3 cycles stop and report: category, root error, the last 40 lines of the failing step, and what was tried. A fourth cycle needs the owner's decision.
+## Rule 7 — Continue on evidence, not on a retry count
+Record the failing run and SHA, first causal error or frame, attempted fix and verification result in EVE_PROJECT_STATE.md. A further routine attempt needs new evidence or a discriminating regression test, not owner approval. Do not retry the same hypothesis blindly. If a change causes a new regression, isolate it and revert only that change with a new commit; never reset or rewrite main. When evidence, access or production authorization is missing, record that blocker and continue independent eligible work. Keep all existing tests, integrity gates, toolchain pins and production safeguards.
 
 ## Rule 8 — Report format
 Category, root error (file:line), fix applied or none, files changed, CI run URL and status for every cycle, and everything UNVERIFIED. "Fixed" means a green CI run URL is in the report. Without it write `NOT FIXED`.
