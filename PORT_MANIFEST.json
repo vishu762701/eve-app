@@ -18,8 +18,8 @@
     {
       "path": "app/src/main/java/com/eve/app/telegram/exams/ExamListFragment.java",
       "upstream_path": null,
-      "mode": "NEW",
-      "eve_sha256": "d76b484b478c296b45f5f6375cf30f5caf6d9839ff46579032f2ce7eb369a4fc",
+      "mode": "COMPOSED",
+      "eve_sha256": "111669bb0d21298aa351bf95b99ab384303db806681fd57e0cdcfbf0dab92b90",
       "upstream_sha256": null
     },
     {
@@ -104,7 +104,7 @@
       "upstream_path": "TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java",
       "upstream_sha256": "4bd6dd8bf595fb1b5c0a88fd3c83b00d728d546e9977f878771049fa865d224d",
       "mode": "SHIM",
-      "eve_sha256": "71a4a3be6e4ca2e35e62d9b6807e4e07f78b259e8fea1676244bcbee85ba4797"
+      "eve_sha256": "74c665eb9446e8892b4e7c9c1d330130cd7b0815b0155170c1be41f0e6bd9342"
     },
     {
       "path": "app/src/main/java/org/telegram/ui/MainTabsLayout.java",
@@ -245,6 +245,80 @@
       "mode": "VERBATIM",
       "eve_sha256": "f26655db5c1452a96a9147e22199b7d440d57a576cc115c1f0f969c7bdd5c8a1",
       "upstream_sha256": "f26655db5c1452a96a9147e22199b7d440d57a576cc115c1f0f969c7bdd5c8a1"
+    }
+  ],
+  "blocks": [
+    {
+      "target_path": "app/src/main/java/com/eve/app/telegram/exams/ExamListFragment.java",
+      "upstream_path": "TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java",
+      "upstream_lines": "293-298",
+      "sha256": "f360d3db9e1c426d06b304d73d5ae0d40e45e571ff35053e33173211a0b09899"
+    },
+    {
+      "target_path": "app/src/main/java/com/eve/app/telegram/exams/ExamListFragment.java",
+      "upstream_path": "TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java",
+      "upstream_lines": "300-304",
+      "sha256": "5e1afe66ca6090d6ade74bfc2dd0c448be4f9f18546c362f74cd3ddc648bb923"
+    },
+    {
+      "target_path": "app/src/main/java/com/eve/app/telegram/exams/ExamListFragment.java",
+      "upstream_path": "TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java",
+      "upstream_lines": "310-311",
+      "sha256": "d881bf0711d68a7d1f9998aac1b1924e15083e7e2f1c5da27e7036b77dce1069"
+    },
+    {
+      "target_path": "app/src/main/java/com/eve/app/telegram/exams/ExamListFragment.java",
+      "upstream_path": "TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java",
+      "upstream_lines": "318-319",
+      "sha256": "0b0387967d872e1eed33dbfc2fd3d4bf9ab0e55f0ff689d7a52d88042dc9125c"
+    },
+    {
+      "target_path": "app/src/main/java/com/eve/app/telegram/exams/ExamListFragment.java",
+      "upstream_path": "TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java",
+      "upstream_lines": "1626-1628",
+      "sha256": "8e816a088b315fb4db7f394edba641b0735f00f2af4c75750219250d55975f12"
+    },
+    {
+      "target_path": "app/src/main/java/com/eve/app/telegram/exams/ExamListFragment.java",
+      "upstream_path": "TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java",
+      "upstream_lines": "3139-3141",
+      "sha256": "c5de9120342fdaae8f54afb3fdd0d2fcc3a0fb8c3348f8508f357fda4ca8580d"
+    },
+    {
+      "target_path": "app/src/main/java/com/eve/app/telegram/exams/ExamListFragment.java",
+      "upstream_path": "TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java",
+      "upstream_lines": "3365-3365",
+      "sha256": "4aec7a5b4d60afcff56fa53f054fa847f5303dc2a17e19d362fae48596336280"
+    },
+    {
+      "target_path": "app/src/main/java/com/eve/app/telegram/exams/ExamListFragment.java",
+      "upstream_path": "TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java",
+      "upstream_lines": "5255-5255",
+      "sha256": "9f1c881461066366fb1d3896088d5d132b0cce1fff9379866d84dfd6070f1cbb"
+    },
+    {
+      "target_path": "app/src/main/java/com/eve/app/telegram/exams/ExamListFragment.java",
+      "upstream_path": "TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java",
+      "upstream_lines": "4658-4658",
+      "sha256": "07be4a42fe643a2ae63bcb110f7b7051f761f80891fbae185b449bec5688e8d5"
+    },
+    {
+      "target_path": "app/src/main/java/com/eve/app/telegram/exams/ExamListFragment.java",
+      "upstream_path": "TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java",
+      "upstream_lines": "2901-2901",
+      "sha256": "9e139525573fc950960f801814c090056a65f0e88869a49cea338cb2da3a0024"
+    },
+    {
+      "target_path": "app/src/main/java/com/eve/app/telegram/exams/ExamListFragment.java",
+      "upstream_path": "TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java",
+      "upstream_lines": "326-327",
+      "sha256": "098ab6ae84164839bb70b185a3c3e81a63e267d2dfe912d55914daea3a03a4c1"
+    },
+    {
+      "target_path": "app/src/main/java/com/eve/app/telegram/exams/ExamListFragment.java",
+      "upstream_path": "TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java",
+      "upstream_lines": "401-401",
+      "sha256": "122ea23949e76db2978fa126660529d97f19011836694cb17b7ffeb4bf89adc1"
     }
   ]
 }

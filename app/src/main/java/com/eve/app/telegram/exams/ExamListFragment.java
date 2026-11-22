@@ -1,8 +1,8 @@
 package com.eve.app.telegram.exams;
 
-import android.animation.Animator;
-import android.animation.AnimatorListenerAdapter;
-import android.animation.ValueAnimator;
+import static org.telegram.messenger.AndroidUtilities.dp;
+import static org.telegram.messenger.AndroidUtilities.lerp;
+
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Paint;
@@ -24,12 +24,13 @@ import com.eve.app.ui.leaderboard.LeaderboardActivity;
 import com.eve.app.ui.practice.PracticeActivity;
 import com.eve.app.ui.profile.ProfileActivity;
 import com.eve.app.ui.settings.SettingsActivity;
+import me.vkryl.android.animator.BoolAnimator;
+import me.vkryl.android.animator.FactorAnimator;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.LocaleController;
 import org.telegram.ui.ActionBar.ActionBar;
 import org.telegram.ui.ActionBar.ActionBarMenu;
 import org.telegram.ui.ActionBar.ActionBarMenuItem;
-import org.telegram.ui.ActionBar.ActionBarPopupWindow;
 import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Adapters.DialogsSearchAdapter;
@@ -40,13 +41,35 @@ import org.telegram.ui.Components.FragmentSearchField;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.RecyclerListView;
 import org.telegram.ui.Components.glass.GlassTabView;
+import org.telegram.ui.DialogsActivity;
 import org.telegram.ui.MainTabsLayout;
 
 import java.util.List;
 
-public class ExamListFragment extends BaseFragment {
+public class ExamListFragment extends BaseFragment implements FactorAnimator.Target {
 
-    private static final int SEARCH_FIELD_HEIGHT_DP = 48; // EVE-REF: ui/DialogsActivity.java:5255
+    // EVE-COPY: ui/DialogsActivity.java:293-298 sha256:f360d3db9e1c426d06b304d73d5ae0d40e45e571ff35053e33173211a0b09899
+    public static final int MAIN_TABS_HEIGHT = 56;
+    public static final int MAIN_TABS_MARGIN = 8;
+    public static final int MAIN_TABS_HEIGHT_WITH_MARGINS = MAIN_TABS_HEIGHT + MAIN_TABS_MARGIN * 2;
+    public static final int FILTER_TABS_HEIGHT = 36;
+    public static final int SEARCH_TABS_HEIGHT = 36 + 7 + 7;
+    public static final int SEARCH_FIELD_HEIGHT = 48;
+
+    // EVE-COPY: ui/DialogsActivity.java:300-304 sha256:5e1afe66ca6090d6ade74bfc2dd0c448be4f9f18546c362f74cd3ddc648bb923
+    private static final int ANIMATOR_ID_SEARCH_VISIBLE = 1;
+    private static final int ANIMATOR_ID_DONE_BUTTON_VISIBLE = 2;
+    private static final int ANIMATOR_ID_SPEED_BUTTON_VISIBLE = 3;
+    private static final int ANIMATOR_ID_SHADOW_VISIBLE = 4;
+    private static final int ANIMATOR_ID_SEARCH_BUTTON_VISIBLE = 5;
+
+    // EVE-COPY: ui/DialogsActivity.java:310-311 sha256:d881bf0711d68a7d1f9998aac1b1924e15083e7e2f1c5da27e7036b77dce1069
+    private final BoolAnimator animatorSearchVisible = new BoolAnimator(ANIMATOR_ID_SEARCH_VISIBLE,
+            this, CubicBezierInterpolator.EASE_OUT_QUINT, 350);
+
+    // EVE-COPY: ui/DialogsActivity.java:318-319 sha256:0b0387967d872e1eed33dbfc2fd3d4bf9ab0e55f0ff689d7a52d88042dc9125c
+    private final BoolAnimator animatorSearchButtonVisible = new BoolAnimator(ANIMATOR_ID_SEARCH_BUTTON_VISIBLE,
+            this, CubicBezierInterpolator.EASE_OUT_QUINT, 350);
 
     private RecyclerListView listView;
     private ExamListAdapter adapter;
@@ -54,12 +77,15 @@ public class ExamListFragment extends BaseFragment {
 
     private FragmentSearchField searchField;
     private MainTabsLayout tabsView;
+    private FrameLayout tabsViewWrapper;
     private GlassTabView[] tabs;
     private FragmentFloatingButton floatingButton;
+    private ActionBarMenuItem searchItem;
+    private ActionBarMenuItem optionsItem;
 
     private boolean isSearchVisible = false;
-    private ValueAnimator searchAnimator;
-    private float searchAnimationProgress = 0f;
+    private float scrollYOffset = 0f;
+    private int additionFloatingButtonOffset;
 
     @Override
     public View createView(Context context) {
@@ -79,20 +105,25 @@ public class ExamListFragment extends BaseFragment {
                     } else {
                         finishFragment();
                     }
-                } else if (id == 1) { // search icon
-                    showSearch(!isSearchVisible, true);
-                } else if (id == 2) { // 3-dot menu (visual only)
-                    // Visual popup or action
+                } else if (id == 0) {
+                    showSearch(true, true);
+                } else if (id == 10) {
+                    Intent intent = new Intent(context, SettingsActivity.class);
+                    context.startActivity(intent);
                 }
             }
         });
 
+        // EVE-COPY: ui/DialogsActivity.java:3139-3141 sha256:c5de9120342fdaae8f54afb3fdd0d2fcc3a0fb8c3348f8508f357fda4ca8580d
         ActionBarMenu menu = actionBar.createMenu();
-        // EVE-REF: ui/DialogsActivity.java:3141
-        menu.addItem(1, R.drawable.outline_header_search);
-        // EVE-REF: ui/DialogsActivity.java:3174 (3-dot visual menu)
-        ActionBarMenuItem otherItem = menu.addItem(2, R.drawable.ic_ab_other);
-        otherItem.addSubItem(10, R.drawable.msg_settings, "Settings");
+        menu.setTranslationX(-dp(5));
+        searchItem = menu.addItem(0, R.drawable.outline_header_search).setIsSearchField(true, false);
+
+        searchItem.setOnClickListener(v -> showSearch(true, true));
+
+        // EVE-COPY: ui/DialogsActivity.java:3365-3365 sha256:4aec7a5b4d60afcff56fa53f054fa847f5303dc2a17e19d362fae48596336280
+            optionsItem = menu.addItem(4, R.drawable.ic_ab_other);
+        optionsItem.addSubItem(10, R.drawable.msg_settings, "Settings");
 
         FrameLayout frameLayout = new FrameLayout(context) {
             @Override
@@ -108,8 +139,8 @@ public class ExamListFragment extends BaseFragment {
         listView.setVerticalScrollBarEnabled(true);
         listView.setLayoutManager(new LinearLayoutManager(context, LinearLayoutManager.VERTICAL, false));
         listView.setClipToPadding(false);
-        // EVE-REF: ui/MainTabsActivity.java:143 (bottom offset for floating tabs)
-        listView.setPadding(0, AndroidUtilities.dp(SEARCH_FIELD_HEIGHT_DP), 0, AndroidUtilities.dp(84));
+        // EVE-REF: ui/DialogsActivity.java:2066 (top padding) & ui/MainTabsActivity.java:143 (bottom offset for floating tabs)
+        listView.setPadding(0, dp(SEARCH_FIELD_HEIGHT), 0, dp(DialogsActivity.MAIN_TABS_HEIGHT + DialogsActivity.MAIN_TABS_MARGIN));
         adapter = new ExamListAdapter(context);
         searchAdapter = new DialogsSearchAdapter(context);
         listView.setAdapter(adapter);
@@ -125,45 +156,41 @@ public class ExamListFragment extends BaseFragment {
                         View firstView = lm.findViewByPosition(0);
                         if (firstView != null) {
                             // EVE-REF: ui/DialogsActivity.java:1019
-                            int top = firstView.getTop() - AndroidUtilities.dp(SEARCH_FIELD_HEIGHT_DP);
+                            int top = firstView.getTop() - dp(SEARCH_FIELD_HEIGHT);
                             if (top > 0) {
-                                // EVE-REF: ui/DialogsActivity.java:1019
-                                float progress = Math.min(1f, top / (float) AndroidUtilities.dp(SEARCH_FIELD_HEIGHT_DP));
-                                updateSearchFieldTranslation(progress);
+                                scrollYOffset = top;
+                                // EVE-REF: ui/DialogsActivity.java:13708
+                                float progress = Math.min(1f, top / (float) dp(SEARCH_FIELD_HEIGHT));
+                                searchField.setTranslationY(scrollYOffset + getSearchFieldAdditionOffset());
+                                searchField.setAlpha(progress);
+                                searchField.setVisibility(View.VISIBLE);
+                                animatorSearchButtonVisible.setValue(progress <= 0.01f, true);
                             } else {
-                                updateSearchFieldTranslation(0f);
+                                scrollYOffset = 0;
+                                searchField.setTranslationY(getSearchFieldAdditionOffset());
+                                searchField.setAlpha(0f);
+                                searchField.setVisibility(View.GONE);
+                                animatorSearchButtonVisible.setValue(true, true);
                             }
                         }
                     } else {
-                        updateSearchFieldTranslation(0f);
-                    }
-                }
-            }
-
-            @Override
-            public void onScrollStateChanged(@NonNull RecyclerView recyclerView, int newState) {
-                super.onScrollStateChanged(recyclerView, newState);
-                if (newState == RecyclerView.SCROLL_STATE_IDLE && !isSearchVisible) {
-                    LinearLayoutManager lm = (LinearLayoutManager) recyclerView.getLayoutManager();
-                    if (lm != null && lm.findFirstVisibleItemPosition() == 0) {
-                        View firstView = lm.findViewByPosition(0);
-                        // EVE-REF: ui/DialogsActivity.java:1019
-                        if (firstView != null && firstView.getTop() > AndroidUtilities.dp(SEARCH_FIELD_HEIGHT_DP + 24)) {
-                            showSearch(true, true);
-                        }
+                        scrollYOffset = 0;
+                        searchField.setTranslationY(getSearchFieldAdditionOffset());
+                        searchField.setAlpha(0f);
+                        searchField.setVisibility(View.GONE);
+                        animatorSearchButtonVisible.setValue(true, true);
                     }
                 }
             }
         });
-
         frameLayout.addView(listView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
 
         // 2. Search Field (Pull-down & Collapsing Header)
-        // EVE-REF: ui/DialogsActivity.java:3204
         searchField = new FragmentSearchField(context, null);
-        // EVE-REF: ui/DialogsActivity.java:5255
-        searchField.setTranslationY(-AndroidUtilities.dp(SEARCH_FIELD_HEIGHT_DP));
+        searchField.setHintText("Search exams", false);
+        searchField.setTranslationY(getSearchFieldAdditionOffset());
         searchField.setAlpha(0f);
+        searchField.setVisibility(View.GONE);
         searchField.setCloseButtonOnClickListener(() -> {
             showSearch(false, true);
         });
@@ -189,34 +216,36 @@ public class ExamListFragment extends BaseFragment {
                 }
             }
         });
-        frameLayout.addView(searchField, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, SEARCH_FIELD_HEIGHT_DP, Gravity.TOP | Gravity.LEFT));
+
+        FrameLayout contentView = frameLayout;
+        FragmentSearchField fragmentSearchField = searchField;
+        // EVE-COPY: ui/DialogsActivity.java:5255-5255 sha256:9f1c881461066366fb1d3896088d5d132b0cce1fff9379866d84dfd6070f1cbb
+            contentView.addView(fragmentSearchField, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 48, Gravity.TOP, 7, -2, 7, 0));
 
         // 3. Floating Action Button (Compose Button)
-        // EVE-REF: ui/DialogsActivity.java:4657
         floatingButton = new FragmentFloatingButton(context, null);
         floatingButton.setImageResource(R.drawable.filled_fab_compose_32);
         floatingButton.setContentDescription("New Exam");
         floatingButton.setOnClickListener(v -> {
-            try {
-                Intent intent = new Intent(context, PracticeActivity.class);
-                context.startActivity(intent);
-            } catch (Exception e) {
-                // Ignore if not exported or registered
-            }
+            Intent intent = new Intent(context, PracticeActivity.class);
+            context.startActivity(intent);
         });
-        // EVE-REF: ui/Components/FragmentFloatingButton.java:227-230
-        frameLayout.addView(floatingButton, LayoutHelper.createFrame(48, 48,
-                (LocaleController.isRTL ? Gravity.LEFT : Gravity.RIGHT) | Gravity.BOTTOM,
-                20, 0, 20, 72));
+        FragmentFloatingButton floatingButton3 = floatingButton;
+        // EVE-COPY: ui/DialogsActivity.java:4658-4658 sha256:07be4a42fe643a2ae63bcb110f7b7051f761f80891fbae185b449bec5688e8d5
+        contentView.addView(floatingButton3, FragmentFloatingButton.createDefaultLayoutParams());
+
+        boolean hasMainTabs = true;
+        // EVE-COPY: ui/DialogsActivity.java:2901-2901 sha256:9e139525573fc950960f801814c090056a65f0e88869a49cea338cb2da3a0024
+        additionFloatingButtonOffset = hasMainTabs ? dp(DialogsActivity.MAIN_TABS_HEIGHT + DialogsActivity.MAIN_TABS_MARGIN) : 0;
+        // EVE-REF: ui/DialogsActivity.java:8801
+        floatingButton.setTranslationY(-additionFloatingButtonOffset);
 
         // 4. Bottom Tabs (MainTabsLayout)
-        // EVE-REF: ui/MainTabsActivity.java:324
         tabsView = new MainTabsLayout(context, null);
         tabsView.setClipChildren(false);
-        // EVE-REF: ui/MainTabsActivity.java:326
-        tabsView.setPadding(AndroidUtilities.dp(8), AndroidUtilities.dp(8), AndroidUtilities.dp(8), AndroidUtilities.dp(8));
-        // EVE-REF: ui/MainTabsActivity.java:327
-        tabsView.setMaxWidth(AndroidUtilities.dp(344));
+        // EVE-COPY: ui/MainTabsActivity.java:326-327 sha256:098ab6ae84164839bb70b185a3c3e81a63e267d2dfe912d55914daea3a03a4c1
+        tabsView.setPadding(dp(DialogsActivity.MAIN_TABS_MARGIN + 4), dp(DialogsActivity.MAIN_TABS_MARGIN + 4), dp(DialogsActivity.MAIN_TABS_MARGIN + 4), dp(DialogsActivity.MAIN_TABS_MARGIN + 4));
+        tabsView.setMaxWidth(dp(328 + DialogsActivity.MAIN_TABS_MARGIN * 2));
 
         tabs = new GlassTabView[4];
         // Exams tab
@@ -229,12 +258,8 @@ public class ExamListFragment extends BaseFragment {
         tabs[1] = GlassTabView.createTab(context, null, R.drawable.msg_stats, "Leaderboard");
         tabs[1].setOnClickListener(v -> {
             selectTab(1);
-            try {
-                Intent intent = new Intent(context, LeaderboardActivity.class);
-                context.startActivity(intent);
-            } catch (Exception e) {
-                // Handled gracefully
-            }
+            Intent intent = new Intent(context, LeaderboardActivity.class);
+            context.startActivity(intent);
         });
         tabsView.addView(tabs[1]);
 
@@ -242,12 +267,8 @@ public class ExamListFragment extends BaseFragment {
         tabs[2] = GlassTabView.createTab(context, null, R.drawable.msg_settings, "Settings");
         tabs[2].setOnClickListener(v -> {
             selectTab(2);
-            try {
-                Intent intent = new Intent(context, SettingsActivity.class);
-                context.startActivity(intent);
-            } catch (Exception e) {
-                // Handled gracefully
-            }
+            Intent intent = new Intent(context, SettingsActivity.class);
+            context.startActivity(intent);
         });
         tabsView.addView(tabs[2]);
 
@@ -255,18 +276,17 @@ public class ExamListFragment extends BaseFragment {
         tabs[3] = GlassTabView.createTab(context, null, R.drawable.msg_contacts, "Profile");
         tabs[3].setOnClickListener(v -> {
             selectTab(3);
-            try {
-                Intent intent = new Intent(context, ProfileActivity.class);
-                context.startActivity(intent);
-            } catch (Exception e) {
-                // Handled gracefully
-            }
+            Intent intent = new Intent(context, ProfileActivity.class);
+            context.startActivity(intent);
         });
         tabsView.addView(tabs[3]);
 
-        // EVE-REF: ui/MainTabsActivity.java:143
-        frameLayout.addView(tabsView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT,
-                Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL, 0, 0, 0, 14));
+        tabsViewWrapper = new FrameLayout(context);
+        tabsViewWrapper.setClipToPadding(false);
+        // EVE-COPY: ui/MainTabsActivity.java:401-401 sha256:122ea23949e76db2978fa126660529d97f19011836694cb17b7ffeb4bf89adc1
+        tabsViewWrapper.addView(tabsView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, DialogsActivity.MAIN_TABS_HEIGHT_WITH_MARGINS, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL));
+
+        frameLayout.addView(tabsViewWrapper, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.BOTTOM));
 
         return fragmentView;
     }
@@ -277,60 +297,46 @@ public class ExamListFragment extends BaseFragment {
         }
     }
 
-    private void updateSearchFieldTranslation(float progress) {
-        searchAnimationProgress = progress;
-        // EVE-REF: ui/DialogsActivity.java:1627
-        float ty = -AndroidUtilities.dp(SEARCH_FIELD_HEIGHT_DP) * (1f - progress);
-        searchField.setTranslationY(ty);
-        searchField.setAlpha(progress);
+    @Override
+    public void onFactorChanged(int id, float factor, float fraction, FactorAnimator callee) {
+        if (id == ANIMATOR_ID_SEARCH_VISIBLE) {
+            checkUi_searchFieldVisibility();
+        } else if (id == ANIMATOR_ID_SEARCH_BUTTON_VISIBLE) {
+            FragmentFloatingButton.setAnimatedVisibility(searchItem, factor);
+        }
+    }
+
+    private void checkUi_searchFieldVisibility() {
+        if (searchField == null) {
+            return;
+        }
+        float alpha = animatorSearchVisible.getFloatValue();
+        searchField.setAlpha(alpha);
+        searchField.setVisibility(alpha > 0 ? View.VISIBLE : View.GONE);
+        searchField.setTranslationY(scrollYOffset + getSearchFieldAdditionOffset());
+        animatorSearchButtonVisible.setValue(alpha <= 0.01f, true);
+    }
+
+    // EVE-COPY: ui/DialogsActivity.java:1626-1628 sha256:8e816a088b315fb4db7f394edba641b0735f00f2af4c75750219250d55975f12
+    private float getSearchFieldAdditionOffset() {
+        return -lerp(dp(4), dp(SEARCH_FIELD_HEIGHT), animatorSearchVisible.getFloatValue());
     }
 
     private void showSearch(boolean show, boolean animated) {
         if (isSearchVisible == show) return;
         isSearchVisible = show;
 
-        if (searchAnimator != null) {
-            searchAnimator.cancel();
-            searchAnimator = null;
-        }
+        animatorSearchVisible.setValue(show, animated);
 
-        if (animated) {
-            // EVE-REF: ui/DialogsActivity.java:310 (animatorSearchVisible)
-            searchAnimator = ValueAnimator.ofFloat(searchAnimationProgress, show ? 1f : 0f);
-            searchAnimator.setDuration(250);
-            searchAnimator.setInterpolator(CubicBezierInterpolator.EASE_OUT_QUINT);
-            searchAnimator.addUpdateListener(animation -> {
-                updateSearchFieldTranslation((Float) animation.getAnimatedValue());
-            });
-            searchAnimator.addListener(new AnimatorListenerAdapter() {
-                @Override
-                public void onAnimationEnd(Animator animation) {
-                    if (show) {
-                        searchField.editText.requestFocus();
-                        AndroidUtilities.showKeyboard(searchField.editText);
-                    } else {
-                        searchField.editText.setText("");
-                        AndroidUtilities.hideKeyboard(searchField.editText);
-                        searchField.editText.clearFocus();
-                        if (listView.getAdapter() != adapter) {
-                            listView.setAdapter(adapter);
-                        }
-                    }
-                }
-            });
-            searchAnimator.start();
+        if (show) {
+            searchField.editText.requestFocus();
+            AndroidUtilities.showKeyboard(searchField.editText);
         } else {
-            updateSearchFieldTranslation(show ? 1f : 0f);
-            if (show) {
-                searchField.editText.requestFocus();
-                AndroidUtilities.showKeyboard(searchField.editText);
-            } else {
-                searchField.editText.setText("");
-                AndroidUtilities.hideKeyboard(searchField.editText);
-                searchField.editText.clearFocus();
-                if (listView.getAdapter() != adapter) {
-                    listView.setAdapter(adapter);
-                }
+            searchField.editText.setText("");
+            AndroidUtilities.hideKeyboard(searchField.editText);
+            searchField.editText.clearFocus();
+            if (listView.getAdapter() != adapter) {
+                listView.setAdapter(adapter);
             }
         }
     }
@@ -357,7 +363,7 @@ public class ExamListFragment extends BaseFragment {
                 Theme.dialogs_messagePaint[a].setColor(Theme.getColor(Theme.key_chats_message));
             }
             Theme.dialogs_timePaint = new TextPaint(TextPaint.ANTI_ALIAS_FLAG);
-            // EVE-REF: ui/Cells/DialogCell.java:623
+            // EVE-REF: ui/ActionBar/Theme.java:7995
             Theme.dialogs_timePaint.setTextSize(AndroidUtilities.dp(12));
             Theme.dialogs_timePaint.setColor(Theme.getColor(Theme.key_chats_date));
 
@@ -369,13 +375,13 @@ public class ExamListFragment extends BaseFragment {
 
             Theme.dialogs_countTextPaint = new TextPaint(TextPaint.ANTI_ALIAS_FLAG);
             Theme.dialogs_countTextPaint.setTypeface(AndroidUtilities.bold());
-            // EVE-REF: ui/Cells/DialogCell.java:635
+            // EVE-REF: ui/ActionBar/Theme.java:7894
             Theme.dialogs_countTextPaint.setTextSize(AndroidUtilities.dp(12));
             Theme.dialogs_countTextPaint.setColor(Theme.getColor(Theme.key_chats_unreadCounterText));
 
             Theme.dialogs_countTextPaint2 = new TextPaint(TextPaint.ANTI_ALIAS_FLAG);
             Theme.dialogs_countTextPaint2.setTypeface(AndroidUtilities.bold());
-            // EVE-REF: ui/Cells/DialogCell.java:640
+            // EVE-REF: ui/ActionBar/Theme.java:7895
             Theme.dialogs_countTextPaint2.setTextSize(AndroidUtilities.dp(13));
             Theme.dialogs_countTextPaint2.setColor(Theme.getColor(Theme.key_chats_unreadCounterText));
 
