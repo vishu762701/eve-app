@@ -818,6 +818,8 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout {
             bottomSheetTabs = null;
         }
 
+        LayoutParams layoutParams;
+
         if (containerViewBack != null) {
             AndroidUtilities.removeFromParent(containerViewBack);
         }
@@ -1625,9 +1627,6 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout {
         if (!currentFragment.onBackPressed(false)) {
             return false;
         }
-        if (currentFragment.simpleActionBar != null && currentFragment.simpleActionBar.hasBackAction()) {
-            return false; // the back closes the menu or the search of the header, see onBackInvoked
-        }
         if (currentFragment.hasShownSheet() || !currentFragment.canBeginSlide()) {
             return false;
         }
@@ -1755,10 +1754,6 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout {
         // EVE-CUT: GroupCallPip.onBackPressed
         if (!storyViewerAttached() && currentActionBar != null && !currentActionBar.isActionModeShowed() && currentActionBar.isSearchFieldVisible) {
             currentActionBar.closeSearchField();
-            return;
-        }
-        final BaseFragment lastFragmentForBar = fragmentsStack.get(fragmentsStack.size() - 1);
-        if (!storyViewerAttached() && lastFragmentForBar.simpleActionBar != null && lastFragmentForBar.simpleActionBar.onBackPressed()) {
             return;
         }
         if (sheetFragment != null && !sheetFragment.onBackPressed(true)) {
