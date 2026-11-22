@@ -26,43 +26,24 @@ Usage:
 For every failing test it prints the root-cause exception (the last
 "Caused by:"), the first causal app frame and a condensed stack trace. Tests
 that share a root cause and frame are grouped. Annotations are printed last.
+
+Modules: ci_failure_trace.py (stack trace analysis) and ci_failure_inputs.py
+(JUnit XML and logs) sit next to this file.
 """
 
 import argparse
-import glob
 import os
-import re
 import sys
 import traceback
-import xml.etree.ElementTree as ET
 
-APP_PREFIXES = ("com.eve.", "org.telegram.", "me.vkryl.")
-CAUSED_BY = "Caused by: "
-DOLLAR = chr(36)
+from ci_failure_inputs import collect_results, gradle_excerpt, log_excerpts
+from ci_failure_trace import clip, condense_trace
+
 FENCE = chr(96) * 3
-FRAME_RE = re.compile(r"^\s*at\s+([^\s(]+)[(]([^)]*)[)]")
-CLASS_NAME_RE = re.compile(r"^[A-Za-z_\x24][\w.\x24]*\Z")
-STREAM_RE = re.compile(r"<system-(out|err)>.*?</system-\1>", re.S)
-LOG_MARKERS = (
-    "FAILURES!!!",
-    "INSTRUMENTATION_FAILED",
-    "INSTRUMENTATION_RESULT: shortMsg",
-    "Process crashed",
-    "FATAL EXCEPTION",
-    "Error in ",
-    "Failure in ",
-)
-
-MAX_LINE = 300
 MAX_COMPACT_GROUPS = 30
 MAX_ROOT_CAUSES = 10
 MAX_ANNOTATIONS = 10
 MAX_HEADER_CHARS = 20000
-
-
-def clip(text, limit=MAX_LINE):
-    text = text.rstrip()
-    return text if len(text) <= limit else text[: limit - 3] + "..."
 
 
 def neutralize(line):
@@ -86,217 +67,6 @@ def annotation(level, title, body):
     return "::%s title=%s::%s" % (level, escape_property(title), escape_data(clip(body, 900)))
 
 
-# --------------------------------------------------------------------------
-# Stack trace analysis
-# --------------------------------------------------------------------------
-
-def parse_frame(line):
-    """Return (qualified method, source location) for a stack frame line."""
-    match = FRAME_RE.match(line)
-    if not match:
-        return None
-    # Java 9+ prefixes frames with "loader//" or "module/".
-    return match.group(1).rsplit("/", 1)[-1], match.group(2)
-
-
-def is_app_frame(line):
-    frame = parse_frame(line)
-    return bool(frame) and frame[0].startswith(APP_PREFIXES)
-
-
-class SourceIndex:
-    """Tells test code from production code.
-
-    A frame is test code when its source file lives in a test source set, or
-    when its class is one of the test classes named by the reports. Names are
-    not guessed from "Test" or "Shadow": Eve has production classes such as
-    TestActivity and ShadowSectionCell.
-    """
-
-    def __init__(self, source_root=None, test_classes=()):
-        self.source_root = source_root if source_root and os.path.isdir(source_root) else None
-        self.test_classes = set(test_classes)
-        self._cache = {}
-
-    def is_test_frame(self, line):
-        frame = parse_frame(line)
-        if not frame:
-            return False
-        outer = frame[0].rsplit(".", 1)[0].split(DOLLAR, 1)[0]
-        key = (outer, frame[1].split(":", 1)[0])
-        if key not in self._cache:
-            self._cache[key] = self._lookup(*key)
-        return self._cache[key]
-
-    def _lookup(self, outer, file_name):
-        if outer in self.test_classes:
-            return True
-        package_dir = outer.rsplit(".", 1)[0].replace(".", os.sep) if "." in outer else ""
-        if self.source_root and file_name.endswith((".kt", ".java")):
-            for source_set in sorted(os.listdir(self.source_root)):
-                for language in ("java", "kotlin"):
-                    path = os.path.join(self.source_root, source_set, language, package_dir, file_name)
-                    if os.path.isfile(path):
-                        return source_set.startswith(("test", "androidTest"))
-        return outer.endswith(("Fixture", "Fixtures"))
-
-
-def split_exception(line):
-    """Split 'pkg.SomeException: message' into (class, message)."""
-    line = line.strip()
-    if line.startswith(CAUSED_BY):
-        line = line[len(CAUSED_BY):]
-    head, sep, tail = line.partition(": ")
-    if CLASS_NAME_RE.match(head) and "." in head:
-        return head, tail if sep else ""
-    if CLASS_NAME_RE.match(line.rstrip(":")) and "." in line:
-        return line.rstrip(":"), ""
-    return "", line
-
-
-def trace_blocks(lines):
-    """Split a trace into the outer exception and its 'Caused by:' blocks."""
-    starts = [0] + [i for i, line in enumerate(lines) if i and line.startswith(CAUSED_BY)]
-    return [lines[start:end] for start, end in zip(starts, starts[1:] + [len(lines)])]
-
-
-def analyze_trace(text, index=None):
-    """Root-cause exception and first causal app frame of a Java stack trace."""
-    index = index or SourceIndex()
-    lines = [line.rstrip() for line in (text or "").splitlines() if line.strip()]
-    info = {
-        "exception": "", "message": "", "root_exception": "", "root_message": "",
-        "app_frame": "", "test_frame": "", "top_frame": "",
-    }
-    if not lines:
-        return info
-    blocks = trace_blocks(lines)
-    info["exception"], info["message"] = split_exception(blocks[0][0])
-    info["root_exception"], info["root_message"] = split_exception(blocks[-1][0])
-    # Walk from the root cause outwards: the root block is often abbreviated
-    # with "... N more", so the nearest enclosing block supplies the frame.
-    for block in reversed(blocks):
-        frames = [line for line in block[1:] if parse_frame(line)]
-        if not info["top_frame"] and frames:
-            info["top_frame"] = frames[0].strip()
-        for line in frames:
-            if not is_app_frame(line):
-                continue
-            if index.is_test_frame(line):
-                if not info["test_frame"]:
-                    info["test_frame"] = line.strip()
-            elif not info["app_frame"]:
-                info["app_frame"] = line.strip()
-        if info["app_frame"]:
-            break
-    return info
-
-
-def condense_trace(text, max_lines, index=None):
-    """Keep the head of the trace, every 'Caused by:' and the first app frames."""
-    index = index or SourceIndex()
-    lines = [line.rstrip() for line in (text or "").splitlines() if line.strip()]
-    if len(lines) <= max_lines:
-        return [clip(line) for line in lines]
-    blocks = trace_blocks(lines)
-    if len(blocks) == 1:
-        budgets = [max_lines]
-    else:
-        budgets = [2] * len(blocks)
-        budgets[0] = max(3, max_lines // 3)
-        budgets[-1] = max(4, max_lines // 2)
-    out = []
-    for block, budget in zip(blocks, budgets):
-        keep = list(range(min(budget, len(block))))
-        for position, line in enumerate(block):
-            if is_app_frame(line) and not index.is_test_frame(line):
-                if position not in keep:
-                    keep.append(position)
-                break
-        previous = -1
-        for position in keep:
-            if position != previous + 1:
-                out.append("\t... %d line(s) omitted" % (position - previous - 1))
-            out.append(clip(block[position]))
-            previous = position
-        if previous + 1 < len(block):
-            out.append("\t... %d line(s) omitted" % (len(block) - previous - 1))
-    return out
-
-
-# --------------------------------------------------------------------------
-# JUnit XML
-# --------------------------------------------------------------------------
-
-def find_xml_files(directories):
-    files = []
-    for directory in directories:
-        if os.path.isdir(directory):
-            files.extend(glob.glob(os.path.join(directory, "**", "*.xml"), recursive=True))
-    return sorted(set(files))
-
-
-def parse_xml(path):
-    """Parse one report. Falls back to dropping the captured output streams."""
-    try:
-        return ET.parse(path).getroot(), None
-    except ET.ParseError as first_error:
-        try:
-            with open(path, "r", encoding="utf-8", errors="replace") as handle:
-                text = handle.read()
-            return ET.fromstring(STREAM_RE.sub("", text)), None
-        except (ET.ParseError, OSError):
-            return None, str(first_error)
-    except OSError as error:
-        return None, str(error)
-
-
-def collect_results(directories, source_root=None):
-    """Read every JUnit XML report below the given directories."""
-    result = {
-        "directories": list(directories),
-        "missing": [d for d in directories if not os.path.isdir(d)],
-        "files": 0, "unparseable": [], "tests": 0, "skipped": 0, "failures": [],
-        "index": SourceIndex(source_root),
-    }
-    for path in find_xml_files(directories):
-        root, error = parse_xml(path)
-        if root is None:
-            result["unparseable"].append((path, error))
-            continue
-        if root.tag not in ("testsuite", "testsuites"):
-            continue
-        result["files"] += 1
-        for case in root.iter("testcase"):
-            result["tests"] += 1
-            if case.get("classname"):
-                result["index"].test_classes.add(case.get("classname"))
-            if case.find("skipped") is not None:
-                result["skipped"] += 1
-                continue
-            for kind in ("failure", "error"):
-                node = case.find(kind)
-                if node is None:
-                    continue
-                trace = node.text or ""
-                if not trace.strip():
-                    trace = ": ".join(p for p in (node.get("type"), node.get("message")) if p)
-                result["failures"].append({
-                    "class": case.get("classname") or "",
-                    "name": case.get("name") or "",
-                    "kind": kind,
-                    "type": node.get("type") or "",
-                    "trace": trace,
-                })
-                break
-    # Analysed after reading everything, so every test class is known.
-    for failure in result["failures"]:
-        failure.update(analyze_trace(failure["trace"], result["index"]))
-        if not failure["root_exception"]:
-            failure["root_exception"] = failure["type"]
-    return result
-
-
 def group_failures(failures):
     """Group failing tests that share a root cause and a causal frame."""
     groups = {}
@@ -316,65 +86,6 @@ def root_causes(failures):
         counts[key] = counts.get(key, 0) + 1
     return sorted(counts.items(), key=lambda item: (-item[1], item[0]))
 
-
-# --------------------------------------------------------------------------
-# Plain-text logs
-# --------------------------------------------------------------------------
-
-def gradle_excerpt(path, max_lines=30):
-    """'* What went wrong:' blocks, failed tasks and compiler errors."""
-    try:
-        with open(path, "r", encoding="utf-8", errors="replace") as handle:
-            lines = [line.rstrip("\n") for line in handle]
-    except OSError:
-        return None
-    out, seen, capturing = [], set(), False
-    for line in lines:
-        text = line.rstrip()
-        if text.startswith("* What went wrong:"):
-            capturing = True
-        elif capturing and text.startswith("* "):
-            capturing = False
-        keep = capturing and text
-        keep = keep or text.startswith("e: ") or ": error:" in text
-        keep = keep or (text.startswith("> Task ") and text.endswith(" FAILED"))
-        if keep and text not in seen:
-            seen.add(text)
-            out.append(clip(text))
-    if len(out) > max_lines:
-        out = out[:max_lines] + ["... %d more line(s) omitted" % (len(out) - max_lines)]
-    return out
-
-
-def log_excerpts(directories, context=12, max_hits=3):
-    """Failure markers found in instrumentation logs, with a little context."""
-    out = []
-    for directory in directories:
-        if not os.path.isdir(directory):
-            out.append("log directory not found: %s" % directory)
-            continue
-        for path in sorted(glob.glob(os.path.join(directory, "*.log"))):
-            try:
-                with open(path, "r", encoding="utf-8", errors="replace") as handle:
-                    lines = [line.rstrip("\n") for line in handle]
-            except OSError as error:
-                out.append("%s: unreadable (%s)" % (path, error))
-                continue
-            hits, position = 0, 0
-            while position < len(lines) and hits < max_hits:
-                if any(marker in lines[position] for marker in LOG_MARKERS):
-                    hits += 1
-                    out.append("%s:%d" % (path, position + 1))
-                    out.extend("    " + clip(line) for line in lines[position:position + context])
-                    position += context
-                else:
-                    position += 1
-    return out
-
-
-# --------------------------------------------------------------------------
-# Report
-# --------------------------------------------------------------------------
 
 def test_id(failure):
     return "%s.%s" % (failure["class"], failure["name"])
@@ -506,4 +217,78 @@ def write_summary(path, mode, body_lines):
     text = "\n".join(body_lines).replace(FENCE, "'''")
     try:
         with open(path, "a", encoding="utf-8") as handle:
-            handle.write("### CI failure report (%s)\n\n%stext\n%s\n%s\n" % (mode, FENCE, text[:60000],
+            handle.write("### CI failure report (%s)\n\n%stext\n%s\n%s\n" % (mode, FENCE, text[:60000], FENCE))
+    except OSError as error:
+        print("could not write step summary: %s" % error)
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="Restate failing tests at the end of a CI job log.")
+    parser.add_argument("--unit", nargs="+", metavar="DIR", help="JUnit XML directories of JVM unit tests")
+    parser.add_argument("--native", nargs="+", metavar="DIR",
+                        help="instrumentation results directory, then optional log directories")
+    parser.add_argument("--gradle-log", metavar="FILE", help="Gradle console log to excerpt")
+    parser.add_argument("--source-root", default=os.path.join("app", "src"),
+                        help="source sets used to tell test code from production code")
+    parser.add_argument("--summary-file", default=os.environ.get("GITHUB_STEP_SUMMARY"))
+    parser.add_argument("--max-groups", type=int, default=10)
+    parser.add_argument("--max-tests", type=int, default=12)
+    parser.add_argument("--max-stack-lines", type=int, default=30)
+    parser.add_argument("--max-chars", type=int, default=40000)
+    parser.add_argument("--no-annotations", action="store_true")
+    options = parser.parse_args(argv)
+    if not options.unit and not options.native:
+        parser.error("one of --unit or --native is required")
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(errors="replace")
+
+    sections = []
+    if options.unit:
+        sections.append(("unit", options.unit, []))
+    if options.native:
+        sections.append(("native", options.native[:1], options.native[1:]))
+
+    annotations = []
+    for mode, directories, log_directories in sections:
+        result = collect_results(directories, options.source_root)
+        groups = group_failures(result["failures"])
+        gradle_lines = None
+        if mode == "unit" and options.gradle_log:
+            gradle_lines = gradle_excerpt(options.gradle_log)
+            if gradle_lines is None:
+                gradle_lines = ["(Gradle log not readable: %s)" % options.gradle_log]
+        log_lines = log_excerpts(log_directories) if log_directories else None
+        header, detail, compact, section_annotations = build_report(
+            mode, result, groups, options, gradle_lines, log_lines)
+        body = (limit_lines(header, MAX_HEADER_CHARS, "header")
+                + limit_lines(detail, options.max_chars) + [""] + compact)
+        body = [neutralize(clip(line, 600)) for line in body]
+        print("\n".join(body))
+        write_summary(options.summary_file, mode, body)
+        annotations.extend(section_annotations)
+
+    if not options.no_annotations:
+        # Printed last, so the annotations and the lines above them end the log.
+        print("\n".join(annotations[:MAX_ANNOTATIONS]))
+    sys.stdout.flush()
+    return 0
+
+
+def run(argv=None):
+    """Run main(). A bug in this reporter is reported, never turned into an exit status."""
+    try:
+        return main(argv)
+    except Exception:  # pylint: disable=broad-except
+        print("ci_failure_report.py crashed; read the archived test reports or the Gradle log instead:")
+        print("\n".join(neutralize(line) for line in traceback.format_exc().splitlines()))
+        print(annotation("error", "CI failure reporter crashed",
+                         "The failing tests were not summarised. See the traceback in the job log."))
+        return 0
+
+
+if __name__ == "__main__":
+    sys.exit(run())
+"""
+```
+
+"""
