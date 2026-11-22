@@ -1,6 +1,6 @@
 package com.eve.app.ui.admin
 
-import android.app.Application
+import com.eve.app.OfflineUiTestApplication
 import android.os.Looper
 import com.eve.app.R
 import com.eve.app.data.remote.AdminMeData
@@ -22,7 +22,7 @@ import java.io.File
 /** ActivityLog Activity re-validates fresh server rights on resume without duplicating UI wiring. */
 @RunWith(RobolectricTestRunner::class)
 @Config(
-    sdk = [35], application = Application::class,
+    sdk = [35], application = OfflineUiTestApplication::class,
     shadows = [
         ProfileEditorAuthFixture.ShadowAuth::class,
         EditExamBoundaryFixture.AdminBoundary::class,
@@ -46,6 +46,13 @@ class ActivityLogPermissionResumeTest {
         ShadowDialog.getLatestDialog()?.dismiss()
         ProfileEditorAuthFixture.reset()
         EditExamBoundaryFixture.reset()
+    }
+
+    @Test fun telegramUiUsesThisSandboxApplication() {
+        org.junit.Assert.assertSame(
+            org.robolectric.RuntimeEnvironment.getApplication(),
+            org.telegram.messenger.ApplicationLoader.applicationContext
+        )
     }
 
     private fun idle() = shadowOf(Looper.getMainLooper()).idle()
@@ -79,6 +86,9 @@ class ActivityLogPermissionResumeTest {
         try {
             assertEquals(1, EditExamBoundaryFixture.freshReads)
             c.pause().stop()
+            EditExamBoundaryFixture.permissions = AdminMeData(
+                email = "owner@example.test", rights = listOf("view_analytics_logs")
+            )
             c.restart().resume().visible()
             idle()
             assertFalse("Activity must remain active when rights are intact", c.get().isFinishing)
