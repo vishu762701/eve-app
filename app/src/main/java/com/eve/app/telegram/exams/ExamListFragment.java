@@ -187,7 +187,6 @@ public class ExamListFragment extends BaseFragment implements FactorAnimator.Tar
 
         // 2. Search Field (Pull-down & Collapsing Header)
         searchField = new FragmentSearchField(context, null);
-        searchField.editText.setHint("Search exams");
         searchField.setTranslationY(getSearchFieldAdditionOffset());
         searchField.setAlpha(0f);
         searchField.setVisibility(View.GONE);

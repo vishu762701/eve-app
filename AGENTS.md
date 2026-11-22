@@ -30,3 +30,11 @@ Eve: free mock test / exam prep Android app (Indian govt & entrance exams). Andr
 ## Licensing
 16. Eve is open source (GPL). Telegram-derived files keep their original authorship and license headers. Do not use the Telegram name, logo or branding in the app.
 17. On any CI failure follow BUILD_FAILURE_RULES.md. A mission may make it stricter, never looser.
+
+## Telegram fidelity and port verification
+18. Telegram UI fidelity is enforced by the pinned source verifier (`.github/scripts/verify_telegram_port.py`), not by comments or agent claims.
+19. `VERBATIM`, `CUT`, `SHIM`, `COMPOSED`, `TRANSPLANT`, and `NEW` have precise meanings. Only byte-identical blocks may be called `TRANSPLANT`/`EVE-COPY`; adapted code is `COMPOSED`/`EVE-REF` and must be separately reviewed.
+20. A `COMPOSED` screen may bind Eve data, lifecycle, navigation and events to original Telegram UI components, but must not recreate Telegram rendering, sizing, gesture physics, or animation with custom views/handwritten approximations. Any exception must be explicit, narrowly scoped, hash-bound, and remain `OPEN` until reviewed.
+21. A copied class that is not actually reached/launched is not a port. Every screen mission must identify its runtime entry point and prove the original Telegram component classes are present in the running view hierarchy; later screen missions must add appropriate runtime instrumentation and manual device evidence.
+22. Green compilation means only build success, not Telegram fidelity or screen acceptance.
+23. Mission 01B-R remains OPEN until the owner supplies device comparison evidence and crash-free logcat. Do not start 01C.

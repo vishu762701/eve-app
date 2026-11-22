@@ -5,6 +5,10 @@ Binding rules for any agent (Antigravity, Codex, or any other) when a CI build f
 ## Rule 0 — Precedence
 A mission file may make these rules stricter (for example fewer fix cycles). It may never loosen them or widen its own scope to get a build green.
 
+
+## Rule 0.5 — Source integrity verifier is mandatory first gate
+Before Android compilation, the `telegram-port-integrity` CI job runs `.github/scripts/verify_telegram_port.py`. A failure of the verifier is a PORT_INTEGRITY failure, not an INFRA failure unless network/runner evidence proves that classification. Fixes must restore manifest and source integrity; weakening the verifier is forbidden.
+
 ## Rule 1 — Find the root error, then classify
 Read the log from the FIRST `error`, `FAILED`, `E0xxx` or `fatal` line. The Gradle stack trace at the end is usually only a symptom. Quote the root error with file and line, then put the failure in exactly one category. No fix starts before this is written down.
 - `NATIVE_TELEGRAM`: Telegram's jni/C++ code.

@@ -4,22 +4,8 @@ name: Build Eve APK
 on:
   push:
     branches: [ main ]
-    paths-ignore:
-      - '**.md'
-      - '.github/scripts/**'
-      - '.github/workflows/docs.yml'
-      - '.github/workflows/android-dependency-evidence.yml'
-      - '.github/workflows/verify-official-telegram-imports.yml'
-      - '.github/workflows/build-universal-dev-apk.yml'
   pull_request:
     branches: [ main ]
-    paths-ignore:
-      - '**.md'
-      - '.github/scripts/**'
-      - '.github/workflows/docs.yml'
-      - '.github/workflows/android-dependency-evidence.yml'
-      - '.github/workflows/verify-official-telegram-imports.yml'
-      - '.github/workflows/build-universal-dev-apk.yml'
   workflow_dispatch:
     inputs:
       publish_verified_apk:
@@ -37,7 +23,37 @@ env:
   APP_VERSION_CODE: ${{ github.run_number }}
 
 jobs:
+  telegram-port-integrity:
+    name: Telegram Port Integrity
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout EVE repository
+        uses: actions/checkout@v4
+        with:
+          path: eve-repo
+
+      - name: Checkout pinned Telegram repository
+        uses: actions/checkout@v4
+        with:
+          repository: DrKLO/Telegram
+          ref: 21f7d109da6ab3506c9e9577f98c6a38771ab335
+          path: telegram-upstream
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run verifier unit tests
+        run: |
+          python3 -m unittest discover -s eve-repo/.github/scripts -p "test_*.py"
+
+      - name: Run Telegram port integrity verifier
+        run: |
+          python3 eve-repo/.github/scripts/verify_telegram_port.py --repo-root eve-repo --upstream-root telegram-upstream
+
   build:
+    needs: [telegram-port-integrity]
     runs-on: ubuntu-latest
     outputs:
       apk_sha256: ${{ steps.apk_digest.outputs.sha256 }}
