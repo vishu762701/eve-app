@@ -1328,7 +1328,7 @@
       "upstream_sha256": "c3aca9af98a63654a585913cac09fbdfe7f1b14038952218aa8aeea7cde06363",
       "mode": "CUT",
       "reason": "Deletion-only cut of StoryViewer, FloatingDebug, and unused Telegram messaging dependencies while preserving 100% of navigation stack, transitions, drawing, and gesture physics",
-      "eve_sha256": "92ad1e89c33d36f015c7477fb10c1fba8f0fc4f801ce5a038dbef42ba04c7147"
+      "eve_sha256": "9e99e58845d003bff8e8d252212fe9ad97f0ef08ec1c1d360d6be865b296d6d0"
     },
     {
       "path": "app/src/main/java/org/telegram/ui/ActionBar/ActionBarMenu.java",
@@ -1377,7 +1377,7 @@
       "upstream_path": "TMessagesProj/src/main/java/org/telegram/ui/ActionBar/BaseFragment.java",
       "upstream_sha256": "08447c8843184709b51ada62f286fdb43850f95de6e7a7f227c5562b0c9c2264",
       "mode": "CUT",
-      "eve_sha256": "08d4c2592c365e90427a6ad2787cb4dea2a093cbdb3daba58e300b3f4d173cb7"
+      "eve_sha256": "987fd7e14954e9aa56f54859ee7cff76559c6bb5eea9eee9dd30ab5bc953c08e"
     },
     {
       "path": "app/src/main/java/org/telegram/ui/ActionBar/BottomSheet.java",

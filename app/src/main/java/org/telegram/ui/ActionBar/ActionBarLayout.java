@@ -63,9 +63,10 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
 import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.BuildVars;
 import org.telegram.messenger.FileLog;
-import org.telegram.messenger.R;
+import com.eve.app.R;
 import org.telegram.messenger.SharedConfig;
 import org.telegram.messenger.Utilities;
 import org.telegram.messenger.utils.ViewOutlineProviderImpl;
@@ -90,11 +91,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout {
     }
 
     public boolean storyViewerAttached() {
-        BaseFragment lastFragment = null;
-        if (!fragmentsStack.isEmpty()) {
-            lastFragment = fragmentsStack.get(fragmentsStack.size() - 1);
-        }
-        return lastFragment != null && lastFragment.getLastStoryViewer() != null && lastFragment.getLastStoryViewer().attachedToParent();
+        return false;
     }
 
     public class LayoutContainer extends FrameLayout {
@@ -334,7 +331,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout {
                 if (!(child instanceof ActionBar)) {
                     if (child instanceof BaseFragment.AttachedSheetWindow) {
                         measureChildWithMargins(child, widthMeasureSpec, 0, heightMeasureSpec, getBottomTabsHeight(false) > 0 || !isSupportEdgeToEdge ? 0 : systemAndDisplayInsets.bottom);
-                    } else if (child.getTag(R.id.sheet_attached_to_fragment_tag) != null || child.getFitsSystemWindows()) {
+                    } else if (child.getFitsSystemWindows()) {
                         int addHeight = isSupportEdgeToEdge ? systemAndDisplayInsets.bottom : 0;
                         measureChildWithMargins(child, widthMeasureSpec, 0, heightMeasureSpec, addHeight);
                     } else {
@@ -363,7 +360,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout {
                 View child = getChildAt(a);
                 if (!(child instanceof ActionBar)) {
                     FrameLayout.LayoutParams layoutParams = (FrameLayout.LayoutParams) child.getLayoutParams();
-                    if (child.getTag(R.id.sheet_attached_to_fragment_tag) != null || child.getFitsSystemWindows() || child instanceof BaseFragment.AttachedSheetWindow) {
+                    if (child.getFitsSystemWindows() || child instanceof BaseFragment.AttachedSheetWindow) {
                         child.layout(
                             paddingLeft + layoutParams.leftMargin,
                             layoutParams.topMargin,
@@ -497,7 +494,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout {
                     if (!allowToPressByHover && Math.sqrt(Math.pow(pressX - event.getX(), 2) + Math.pow(pressY - event.getY(), 2)) > dp(30)) {
                         allowToPressByHover = true;
                     }
-                    if (allowToPressByHover && (previewMenu.getSwipeBack() == null || !previewMenu.getSwipeBack().isForegroundOpen())) {
+                    if (allowToPressByHover) {
                         for (int i = 0; i < previewMenu.getItemsCount(); ++i) {
                             ActionBarMenuSubItem button = (ActionBarMenuSubItem) previewMenu.getItemAt(i);
                             if (button != null) {
@@ -639,8 +636,6 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout {
     private ArrayList<int[]> animateEndColors = new ArrayList<>();
 
     StartColorsProvider startColorsProvider = new StartColorsProvider();
-    public MessageDrawable messageDrawableOutStart;
-    public MessageDrawable messageDrawableOutMediaStart;
     public ThemeAnimationSettings.onAnimationProgress animationProgressListener;
 
     private ArrayList<ArrayList<ThemeDescription>> themeAnimatorDescriptions = new ArrayList<>();
@@ -772,7 +767,6 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout {
     private boolean isRightLayout;
 
     private List<BaseFragment> fragmentsStack;
-    private List<BackButtonMenu.PulledDialog> pulledDialogs;
     private Rect rect = new Rect();
     private boolean delayedAnimationResumed;
     private Runnable onFragmentStackChangedListener;
@@ -820,23 +814,8 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout {
         this.fragmentsStack = stack;
 
         if (bottomSheetTabs != null) {
-            bottomSheetTabs.stopListening(this::invalidate, this::relayout);
             AndroidUtilities.removeFromParent(bottomSheetTabs);
             bottomSheetTabs = null;
-        }
-
-        LayoutParams layoutParams;
-        if (main) {
-            bottomSheetTabs = new BottomSheetTabs(parentActivity, this);
-            bottomSheetTabsClip = new BottomSheetTabs.ClipTools(bottomSheetTabs);
-            bottomSheetTabs.listen(this::invalidate, this::relayout);
-            layoutParams = new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(68 + 8));
-            layoutParams.gravity = Gravity.BOTTOM | Gravity.FILL_HORIZONTAL;
-            addView(bottomSheetTabs, layoutParams);
-
-            if (LaunchActivity.instance.getBottomSheetTabsOverlay() != null) {
-                LaunchActivity.instance.getBottomSheetTabsOverlay().setTabsView(bottomSheetTabs);
-            }
         }
 
         if (containerViewBack != null) {
@@ -1042,7 +1021,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout {
 
     @Override
     public void drawHeaderShadow(Canvas canvas, int alpha, int y) {
-        if (headerShadowDrawable != null && SharedConfig.drawActionBarShadow) {
+        if (headerShadowDrawable != null) {
             alpha = alpha / 2;
             if (headerShadowDrawable.getAlpha() != alpha) {
                 headerShadowDrawable.setAlpha(alpha);
@@ -2059,13 +2038,6 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout {
         BaseFragment lastFragment = getLastFragment();
         Dialog dialog = lastFragment != null ? lastFragment.getVisibleDialog() : null;
         // EVE-CUT: LaunchActivity.instance dialog
-        if (lastFragment != null && shouldOpenFragmentOverlay(dialog)) {
-            BaseFragment.BottomSheetParams bottomSheetParams = new BaseFragment.BottomSheetParams();
-            bottomSheetParams.transitionFromLeft = true;
-            bottomSheetParams.allowNestedScroll = false;
-            lastFragment.showAsSheet(fragment, bottomSheetParams);
-            return true;
-        }
         if (BuildVars.LOGS_ENABLED) {
             FileLog.d("present fragment " + fragment.getClass().getSimpleName() + " args=" + fragment.getArguments());
         }
@@ -3000,8 +2972,6 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout {
         if (delegate != null) {
             delegate.onThemeProgress(value);
         }
-        // Colorable views and ThemeBind bindings in every window (this layout, sheets, dialogs, popups, overlays)
-        ThemeBind.updateAllForFrame(value, this);
         notifyFragmentsThemeColorsChanged();
     }
 
@@ -3085,12 +3055,6 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout {
                 if (fragment != null) {
                     startAnimation = true;
                     if (settings.resourcesProvider != null) {
-                        if (messageDrawableOutStart == null) {
-                            messageDrawableOutStart = new MessageDrawable(MessageDrawable.TYPE_TEXT, true, false, startColorsProvider);
-                            messageDrawableOutStart.isCrossfadeBackground = true;
-                            messageDrawableOutMediaStart = new MessageDrawable(MessageDrawable.TYPE_MEDIA, true, false, startColorsProvider);
-                            messageDrawableOutMediaStart.isCrossfadeBackground = true;
-                        }
                         startColorsProvider.saveColors(settings.resourcesProvider);
                     }
                     ArrayList<ThemeDescription> descriptions = fragment.getThemeDescriptions();
@@ -3214,10 +3178,9 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout {
                 // Theme.saveThemeAccents
             }
             if (onDone == null) {
-                Theme.applyTheme(settings.theme, settings.nightTheme);
                 next.run();
             } else {
-                Theme.applyTheme(settings.theme, settings.nightTheme); AndroidUtilities.runOnUIThread(next);
+                AndroidUtilities.runOnUIThread(next);
             }
         } else {
             next.run();
@@ -3360,26 +3323,6 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout {
     }
 
     @Override
-    public MessageDrawable getMessageDrawableOutStart() {
-        return messageDrawableOutStart;
-    }
-
-    @Override
-    public MessageDrawable getMessageDrawableOutMediaStart() {
-        return messageDrawableOutMediaStart;
-    }
-
-    @Override
-    public List<BackButtonMenu.PulledDialog> getPulledDialogs() {
-        return pulledDialogs;
-    }
-
-    @Override
-    public void setPulledDialogs(List<BackButtonMenu.PulledDialog> pulledDialogs) {
-        this.pulledDialogs = pulledDialogs;
-    }
-
-    @Override
     public void setUseAlphaAnimations(boolean value) {
         useAlphaAnimations = value;
     }
@@ -3433,32 +3376,6 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout {
     @Override
     public FrameLayout getOverlayContainerView() {
         return this;
-    }
-
-    @Override
-    public List<FloatingDebugController.DebugItem> onGetDebugItems() {
-        BaseFragment fragment = getLastFragment();
-        if (fragment != null) {
-            List<FloatingDebugController.DebugItem> items = new ArrayList<>();
-            if (fragment instanceof FloatingDebugProvider) {
-                items.addAll(((FloatingDebugProvider) fragment).onGetDebugItems());
-            }
-            observeDebugItemsFromView(items, fragment.getFragmentView());
-            return items;
-        }
-        return Collections.emptyList();
-    }
-
-    private void observeDebugItemsFromView(List<FloatingDebugController.DebugItem> items, View v) {
-        if (v instanceof FloatingDebugProvider) {
-            items.addAll(((FloatingDebugProvider) v).onGetDebugItems());
-        }
-        if (v instanceof ViewGroup) {
-            ViewGroup vg = (ViewGroup) v;
-            for (int i = 0; i < vg.getChildCount(); i++) {
-                observeDebugItemsFromView(items, vg.getChildAt(i));
-            }
-        }
     }
 
     public static View findScrollingChild(ViewGroup parent, float x, float y) {
@@ -3580,7 +3497,6 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout {
         return null;
     }
 
-    @Override
     public View getBottomSheetTabs() {
         return bottomSheetTabs;
     }
@@ -3655,7 +3571,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout {
         final Insets systemInsets = systemAndDisplayInsets;
         final Insets systemWithImeInsets = systemAndDisplayAndImeInsets;
 
-        if (child instanceof BottomSheetTabs) {
+        if (child == bottomSheetTabs) {
             AndroidUtilities.setViewLayoutMargins(child,
                 isRightLayout ? 0 : systemInsets.left, 0,
                 isLeftLayout ? 0 : systemInsets.right,

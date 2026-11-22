@@ -52,6 +52,9 @@ public abstract class BaseFragment {
     public View fragmentView;
     protected INavigationLayout parentLayout;
     protected ActionBar actionBar;
+    public ActionBar simpleActionBar;
+    protected androidx.core.graphics.Insets mSystemInsets = androidx.core.graphics.Insets.NONE;
+    private int bottomInset;
     protected boolean inPreviewMode;
     protected boolean inMenuMode;
     protected boolean inBubbleMode;
@@ -887,6 +890,34 @@ public abstract class BaseFragment {
             }
         }
         return color;
+    }
+
+    public void setNavigationBarColor(int color) {
+        if (parentLayout != null) {
+            parentLayout.setNavigationBarColor(color);
+        }
+    }
+
+    public int getBottomInset() {
+        return bottomInset;
+    }
+
+    public void onInsets(int left, int top, int right, int bottom) {
+    }
+
+    public boolean drawEdgeNavigationBar() {
+        return isSupportEdgeToEdge();
+    }
+
+    public androidx.core.view.WindowInsetsCompat onInsetsInternal(@androidx.annotation.NonNull View view, @androidx.annotation.NonNull androidx.core.view.WindowInsetsCompat windowInsets) {
+        final androidx.core.graphics.Insets insets = AndroidUtilities.getDefaultWindowInsets(windowInsets, false);
+        mSystemInsets = insets;
+        onInsets(insets.left, insets.top, insets.right, bottomInset = insets.bottom);
+        return androidx.core.view.WindowInsetsCompat.CONSUMED;
+    }
+
+    public org.telegram.ui.Components.RecyclerListView getListViewForSimpleGlass() {
+        return null;
     }
 
     public boolean isBeginToShow() {
