@@ -4,29 +4,23 @@ import android.app.Activity
 import android.app.Application
 import android.content.ClipData
 import android.content.ClipboardManager
-import android.content.ContentValues
 import android.content.Context
 import android.content.DialogInterface
-import android.os.Build
 import android.os.Bundle
-import android.os.Environment
-import android.provider.MediaStore
 import android.util.Log
 import android.widget.ScrollView
 import android.widget.TextView
 import com.eve.app.BuildConfig
 import com.eve.app.designsystem.TelegramNativeAlertDialog
+import com.eve.app.diagnostics.CrashQueueWorker
 import java.io.File
 import java.io.PrintWriter
 import java.io.StringWriter
 
 /**
- * Debug-only uncaught exception reporter.
- * Saves crash stack traces only in private filesDir on unhandled exceptions and displays a copyable
- * dialog on the subsequent app launch.
- *
- * NOTE: Native crashes (e.g. SIGSEGV / Fatal signal 11) terminate the process at the OS/Bionic
- * level and are not caught by JVM uncaught exception handlers.
+ * Mission 00B: Uncaught exception reporter and diagnostic bridge.
+ * Saves crash stack traces privately and transfers structured, sanitized records to the CrashQueueWorker.
+ * In debug builds, displays a copyable dialog on subsequent app launch without losing the trace on dismissal.
  */
 object DebugCrashReporter {
 
@@ -34,8 +28,24 @@ object DebugCrashReporter {
     private var hasCheckedCrash = false
 
     fun init(application: Application) {
-        if (!BuildConfig.DEBUG) return
+        // 1. If a crash trace exists from a previous launch, ensure it has been queued
+        try {
+            val pending = getCrashTrace(application)
+            if (!pending.isNullOrBlank()) {
+                val lines = pending.lines()
+                val exceptionLine = lines.firstOrNull { it.contains("Exception") || it.contains("Error") } ?: "UncaughtException"
+                val topFrame = lines.firstOrNull { it.trim().startsWith("at ") } ?: exceptionLine
+                CrashQueueWorker.persistCrash(
+                    context = application,
+                    exceptionClass = exceptionLine.trim(),
+                    topFrame = topFrame.trim(),
+                    message = pending.take(1000),
+                    stackFrames = lines.filter { it.trim().startsWith("at ") }
+                )
+            }
+        } catch (_: Throwable) {}
 
+        // 2. Install global uncaught exception handler
         val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             try {
@@ -46,15 +56,22 @@ object DebugCrashReporter {
                 val stackTrace = sw.toString()
                 val crashPayload = "Time: ${System.currentTimeMillis()}\nThread: ${thread.name}\n\n$stackTrace"
 
-                Log.e("CRITICAL_STARTUP", "Debug crash trace saved privately (${throwable.javaClass.simpleName})")
+                Log.e("CRITICAL_STARTUP", "Unhandled exception captured (${throwable.javaClass.simpleName})")
 
-                saveCrashPayload(application, crashPayload)
+                if (BuildConfig.DEBUG) {
+                    saveCrashPayload(application, crashPayload)
+                }
+
+                // Mission 00B: Persist to bounded diagnostic queue atomically
+                CrashQueueWorker.persistFromThrowable(application, throwable)
             } catch (t: Throwable) {
                 t.printStackTrace()
             } finally {
                 defaultHandler?.uncaughtException(thread, throwable)
             }
         }
+
+        if (!BuildConfig.DEBUG) return
 
         application.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
             override fun onActivityStarted(activity: Activity) {
@@ -78,7 +95,6 @@ object DebugCrashReporter {
     }
 
     private fun saveCrashPayload(context: Context, crashPayload: String) {
-        // 1. Private internal storage (always works)
         try {
             val crashFile = File(context.filesDir, CRASH_FILE_NAME)
             crashFile.writeText(crashPayload)
@@ -86,13 +102,11 @@ object DebugCrashReporter {
     }
 
     fun hasCrash(context: Context): Boolean {
-        if (!BuildConfig.DEBUG) return false
         val crashFile = File(context.filesDir, CRASH_FILE_NAME)
         return crashFile.exists() && crashFile.length() > 0
     }
 
     fun getCrashTrace(context: Context): String? {
-        if (!BuildConfig.DEBUG) return null
         val crashFile = File(context.filesDir, CRASH_FILE_NAME)
         if (!crashFile.exists()) return null
         return try {
@@ -120,7 +134,6 @@ object DebugCrashReporter {
             return
         }
 
-        clearCrash(activity)
         hasCheckedCrash = true
 
         val textView = TextView(activity).apply {
@@ -138,9 +151,11 @@ object DebugCrashReporter {
             .setView(scrollView)
             .setPositiveButton("Copy Trace", null)
             .setNegativeButton("Dismiss") { d, _ ->
+                clearCrash(activity)
                 d.dismiss()
             }
             .setOnDismissListener {
+                clearCrash(activity)
                 onDismiss()
             }
             .create()
@@ -151,10 +166,10 @@ object DebugCrashReporter {
                 val clip = ClipData.newPlainText("Crash Trace", crashContent)
                 clipboard?.setPrimaryClip(clip)
                 AppBulletin.show(activity, "Crash trace copied to clipboard")
+                clearCrash(activity)
             }
         }
 
-        // The debug trace remains private until an explicit Copy Trace action.
         dialog.show()
     }
 

@@ -8,7 +8,7 @@
       "upstream_sha256": null,
       "mode": "NEW",
       "reason": "Eve host/screen/adapter referencing Telegram components",
-      "eve_sha256": "71153f28f8bebb9232c6b5731684d5de5bb09c59d9459581098a21204339c06f"
+      "eve_sha256": "79f6d91ad714e9c71f739876f06a311030169bc036c93c10d8d248ed2c96c925"
     },
     {
       "path": "app/src/main/java/com/eve/app/designsystem/ButtonBounce.kt",
