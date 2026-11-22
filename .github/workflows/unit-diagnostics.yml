@@ -1,0 +1,59 @@
+name: Android unit failure diagnostics
+on: workflow_dispatch
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: eve
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: eve
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: DrKLO/Telegram
+          ref: 21f7d109da6ab3506c9e9577f98c6a38771ab335
+          path: tg
+          persist-credentials: false
+      - name: Check pinned source before compiling
+        run: |
+          python3 -m unittest discover -s .github/scripts -p 'test_*.py'
+          python3 .github/scripts/verify_telegram_port.py --repo-root . --upstream-root ../tg
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.7
+      - name: Prepare Android toolchains
+        env:
+          EVE_ALL_ABIS: 'true'
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-36' 'build-tools;36.0.0'
+          bash .github/scripts/prepare-qr-native.sh
+      - name: Run all debug JVM tests (diagnostic, not FULL)
+        id: unit
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle :app:testDebugUnitTest --continue --stacktrace --console=plain 2>&1 | tee unit.log
+      - name: Archive original JVM evidence
+        if: ${{ !cancelled() && (steps.unit.outcome == 'success' || steps.unit.outcome == 'failure') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            eve/unit.log
+            eve/app/build/test-results/testDebugUnitTest/**/*.xml
+          retention-days: 7
+          if-no-files-found: error
+      - name: Report first causal frames
+        if: ${{ failure() && steps.unit.outcome == 'failure' }}
+        run: python3 .github/scripts/ci_failure_report.py --unit app/build/test-results/testDebugUnitTest --gradle-log unit.log
