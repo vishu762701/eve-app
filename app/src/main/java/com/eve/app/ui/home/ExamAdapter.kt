@@ -131,10 +131,11 @@ class ExamAdapter(
                 ctx.getString(R.string.exam_time_category, exam.timeLimitMinutes, exam.categoryOrOther)
             }
 
-            tvExamName.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText))
+            val palette = com.eve.app.theme.TelegramThemeEngine.resolveCurrentPalette(ctx)
+            tvExamName.setTextColor(palette.textPrimary)
             tvExamTime.setTextColor(
                 if (attempted) Theme.getColor(Theme.key_windowBackgroundWhiteGreenText2)
-                else Theme.getColor(Theme.key_windowBackgroundWhiteGrayText)
+                else palette.textSecondary
             )
             divider.setBackgroundColor(Theme.getColor(Theme.key_divider))
             ivPinned.imageTintList = ColorStateList.valueOf(Theme.getColor(Theme.key_chats_pinnedIcon))
@@ -319,6 +320,7 @@ class ExamAdapter(
     private fun createExamVH(ctx: Context): ExamVH {
         val root = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
+            minimumHeight = dp(72f)
             layoutParams = RecyclerView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
@@ -333,6 +335,7 @@ class ExamAdapter(
         }
         val iconFrame = FrameLayout(ctx)
         val ivExam = ImageView(ctx).apply {
+            id = R.id.ivExam
             scaleType = ImageView.ScaleType.CENTER_CROP
         }
         val lottie = LottieAnimationView(ctx).apply {
@@ -346,12 +349,14 @@ class ExamAdapter(
             setPadding(dp(12f), 0, dp(8f), 0)
         }
         val tvName = TextView(ctx).apply {
+            id = R.id.tvExamName
             setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16f)
             typeface = mediumFont()
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
         }
         val tvTime = TextView(ctx).apply {
+            id = R.id.tvExamTime
             setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14f)
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END

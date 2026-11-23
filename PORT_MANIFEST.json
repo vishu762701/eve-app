@@ -664,7 +664,7 @@
       "upstream_sha256": null,
       "mode": "NEW",
       "reason": "Eve host/screen/adapter referencing Telegram components",
-      "eve_sha256": "d6d633110ff788402af90f40da6c1cf3e6943bedad82fa7d66d14fe44e697b1e"
+      "eve_sha256": "48647e5f21b55225dc285225418780aca4be97ccb96115dff8a32c1ac8e427bf"
     },
     {
       "path": "app/src/main/java/com/eve/app/ui/home/ExamTestsActivity.kt",

@@ -164,7 +164,7 @@ class ApprovedUiRenderingTest {
         b.rvExams.adapter = adapter
         val holder = adapter.onCreateViewHolder(FrameLayout(context), adapter.getItemViewType(0))
         adapter.onBindViewHolder(holder, 0)
-        assertTrue(ItemExamBinding.bind(holder.itemView).root.minimumHeight >= dp(72))
+        assertTrue(holder.itemView.minimumHeight >= dp(72))
         measure(b.root)
         val outline = Outline()
         b.panelHomeBanner.outlineProvider.getOutline(b.panelHomeBanner, outline)
@@ -289,7 +289,7 @@ class ApprovedUiRenderingTest {
             val surface = (option.background as StateListDrawable).current as GradientDrawable
             assertEquals(16f * density, surface.cornerRadius, 0.01f)
             assertEquals(context.getColor(if (option.isChecked) R.color.system_green_container else R.color.surface_inset), surface.color!!.defaultColor)
-            assertEquals(context.getColor(R.color.text_primary), option.currentTextColor)
+            assertEquals(com.eve.app.theme.TelegramThemeEngine.resolveCurrentPalette(context).textPrimary, option.currentTextColor)
             assertNotNull(option.buttonDrawable)
         }
         assertEquals(60, palette.itemCount)

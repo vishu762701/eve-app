@@ -165,8 +165,10 @@ adb shell input keyevent KEYCODE_BACK
 adb shell input keyevent KEYCODE_HOME
 adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS || true
 # Install precompiled, checksum-verified binaries; do not run Gradle per emulator.
-adb install -r app/build/outputs/apk/debug/app-debug.apk
+adb install -r -g app/build/outputs/apk/debug/app-debug.apk
 adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+adb shell pm grant com.eve.app android.permission.CAMERA || true
+adb shell pm grant com.eve.app android.permission.POST_NOTIFICATIONS || true
 # A bounded live recorder is indispensable when the emulator, rather than just
 # the app process, dies and postmortem adb pull is impossible. The disposable
 # emulator contains only test fixtures; no production accounts are exercised.
