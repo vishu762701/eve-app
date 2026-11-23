@@ -335,7 +335,6 @@ class ExamAdapter(
         }
         val iconFrame = FrameLayout(ctx)
         val ivExam = ImageView(ctx).apply {
-            id = R.id.ivExam
             scaleType = ImageView.ScaleType.CENTER_CROP
         }
         val lottie = LottieAnimationView(ctx).apply {

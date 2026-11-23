@@ -73,7 +73,7 @@ object TestInstructionsSheet {
         }
         scroll.addView(
             container,
-            LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT)
+            LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT.toFloat())
         )
 
         val header = HeaderCell(context).apply {
