@@ -394,7 +394,7 @@ class MainActivity : EveBaseActivity(), INavigationLayout, INavigationLayout.INa
 
         drawerLayoutContainer = DrawerLayoutContainer(this)
         actionBarLayout = ActionBarLayout(this, true)
-        actionBarLayout.init(ArrayList())
+        actionBarLayout.setFragmentStack(ArrayList())
 
         drawerLayoutContainer.setParentActionBarLayout(actionBarLayout)
         drawerLayoutContainer.setActionBarLayout(actionBarLayout)
@@ -2926,6 +2926,16 @@ class MainActivity : EveBaseActivity(), INavigationLayout, INavigationLayout.INa
 
     override fun getThemeAnimationValue(): Float =
         if (::actionBarLayout.isInitialized) actionBarLayout.themeAnimationValue else 1f
+
+    override fun setFragmentStack(stack: MutableList<BaseFragment>?) {
+        if (::actionBarLayout.isInitialized && stack != null) {
+            actionBarLayout.setFragmentStack(stack)
+        }
+    }
+
+    override fun init(stack: MutableList<BaseFragment>?) {
+        setFragmentStack(stack)
+    }
 
     override fun setFragmentStackChangedListener(onFragmentStackChanged: Runnable?) {
         if (::actionBarLayout.isInitialized) {

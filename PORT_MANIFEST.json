@@ -624,7 +624,7 @@
       "upstream_sha256": null,
       "mode": "NEW",
       "reason": "Eve host/screen/adapter referencing Telegram components",
-      "eve_sha256": "61fead855053076d224a174e879f940d12e55f47999b40a5ab52bc2490c15a5b"
+      "eve_sha256": "1f108b10322e9e2deb3183416f4ef6c67cc64647264f27e573e53f92a80b576b"
     },
     {
       "path": "app/src/main/java/com/eve/app/ui/common/TelegramRadioButton.kt",
@@ -712,7 +712,7 @@
       "upstream_sha256": null,
       "mode": "NEW",
       "reason": "Eve host/screen/adapter referencing Telegram components",
-      "eve_sha256": "a81f77dd13975b103887617f267dc027d3906b8244dc02bbf0f4cf9ea96b382a"
+      "eve_sha256": "0eb81694b0cbd8341938a60bd49cae842ffa96a658233e0edd857e656d2e85a4"
     },
     {
       "path": "app/src/main/java/com/eve/app/ui/home/TargetExamsBottomSheet.kt",
