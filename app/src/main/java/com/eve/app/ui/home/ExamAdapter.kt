@@ -129,7 +129,16 @@ class ExamAdapter(
         fun bind(exam: Exam, attempted: Boolean, isPinned: Boolean, attempt: TestAttempt?, position: Int) {
             currentExamId = exam.id
             val ctx = container.context
-            container.background = Theme.getSelectorDrawable(true)
+            val palette = com.eve.app.theme.TelegramThemeEngine.resolveCurrentPalette(ctx)
+            container.background = Theme.getSelectorDrawable(
+                true,
+                object : Theme.ResourcesProvider {
+                    override fun getColor(key: Int): Int = when (key) {
+                        Theme.key_windowBackgroundWhite -> palette.surface
+                        else -> Theme.getColor(key)
+                    }
+                }
+            )
 
             com.eve.app.ui.admin.emoji.EmojiRenderer.attachEmoji(tvExamName, exam.examName, exam.emoji)
             tvExamTime.text = if (attempted) {
@@ -138,10 +147,12 @@ class ExamAdapter(
                 ctx.getString(R.string.exam_time_category, exam.timeLimitMinutes, exam.categoryOrOther)
             }
 
-            val palette = com.eve.app.theme.TelegramThemeEngine.resolveCurrentPalette(ctx)
             tvExamName.setTextColor(palette.textPrimary)
             tvExamTime.setTextColor(
-                if (attempted) Theme.getColor(Theme.key_windowBackgroundWhiteGreenText2)
+                if (attempted) com.eve.app.theme.TelegramColorRoles.accessibleForeground(
+                    Theme.getColor(Theme.key_windowBackgroundWhiteGreenText2),
+                    listOf(palette.surface)
+                )
                 else palette.textSecondary
             )
             divider.setBackgroundColor(Theme.getColor(Theme.key_divider))
