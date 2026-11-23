@@ -43,6 +43,7 @@ public final class ProfileEditorAuthFixture {
         @Override public String getDisplayName() { return "Owner"; }
         @Override public android.net.Uri getPhotoUrl() { return null; }
         @Override public String getEmail() { return "owner@example.test"; }
+        @Override public String getPhoneNumber() { return "+15551234567"; }
     }
     /** Ordinary test overrides avoid running SDK instance methods on an uninitialized shell. */
     public static final class TestAuth extends FirebaseAuth {
