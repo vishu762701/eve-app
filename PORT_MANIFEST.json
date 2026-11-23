@@ -984,7 +984,7 @@
       "upstream_sha256": null,
       "mode": "NEW",
       "reason": "Eve host/screen/adapter referencing Telegram components",
-      "eve_sha256": "18787691e79ea8018af86752a1bea29afa165ebca9fcfb98e96599aef9a1d900"
+      "eve_sha256": "e3335a805fd8ae0e7dd39069aae5647eb7edfd176f5d4c1c5b9785cc20a252ee"
     },
     {
       "path": "app/src/main/java/com/eve/app/ui/settings/SharedConfig.kt",
@@ -2444,6 +2444,22 @@
       "mode": "NEW",
       "reason": "Eve host/screen/adapter referencing Telegram components",
       "eve_sha256": "e321eb5c476c8aaf9489fffa96c8fef883789ad7a50fa0b8b167f534dbac2a62"
+    },
+    {
+      "path": "app/src/main/java/com/eve/app/ui/settings/PowerSavingActivity.kt",
+      "upstream_path": null,
+      "upstream_sha256": null,
+      "mode": "NEW",
+      "reason": "Eve host/screen/adapter referencing Telegram components",
+      "eve_sha256": "7df4de069b7cc90f3b495bc9b071429a3c4f9aa6265fbf4aa27deedc9660a3c2"
+    },
+    {
+      "path": "app/src/main/java/com/eve/app/ui/settings/SettingsSearchIndex.kt",
+      "upstream_path": null,
+      "upstream_sha256": null,
+      "mode": "NEW",
+      "reason": "Eve host/screen/adapter referencing Telegram components",
+      "eve_sha256": "b28524c55093dacc20eb323c4d7ffd3fb0f4263268316201685eae27fa29972e"
     }
   ],
   "blocks": [

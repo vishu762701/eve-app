@@ -11,9 +11,13 @@ import com.eve.app.R
 object DesignMotion {
     fun interpolator(context: Context) = AnimationUtils.loadInterpolator(context, R.interpolator.design_screen_curve)
 
-    fun enabled(context: Context): Boolean = if (Build.VERSION.SDK_INT >= 26) {
-        ValueAnimator.areAnimatorsEnabled()
-    } else {
-        Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) > 0f
+    fun enabled(context: Context): Boolean {
+        val systemEnabled = if (Build.VERSION.SDK_INT >= 26) {
+            ValueAnimator.areAnimatorsEnabled()
+        } else {
+            Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) > 0f
+        }
+        if (!systemEnabled) return false
+        return !com.eve.app.ui.settings.PowerSavingPreferences.isPowerSavingActive(context)
     }
 }

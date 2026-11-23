@@ -200,7 +200,7 @@ class SettingsActivity : TelegramHostActivity<TelegramSettingsActivity>(), Teleg
                 startActivity(Intent(this, PasscodeActivity::class.java))
             }
             TelegramSettingsActivity.ROW_POWER -> {
-                startActivity(Intent(this, ThemeActivity::class.java))
+                startActivity(Intent(this, PowerSavingActivity::class.java))
             }
             TelegramSettingsActivity.ROW_LANGUAGE -> {
                 startActivity(Intent(this, LanguageSelectActivity::class.java))
@@ -209,7 +209,7 @@ class SettingsActivity : TelegramHostActivity<TelegramSettingsActivity>(), Teleg
                 showTargetExams()
             }
             TelegramSettingsActivity.ROW_ASK -> {
-                startActivity(Intent(this, com.eve.app.ui.feedback.FeedbackActivity::class.java))
+                showAskQuestionDialog()
             }
             TelegramSettingsActivity.ROW_FAQ -> {
                 startActivity(Intent(this, AboutActivity::class.java))
@@ -231,6 +231,117 @@ class SettingsActivity : TelegramHostActivity<TelegramSettingsActivity>(), Teleg
     }
 
     override fun onSearchClicked() {
+        if (isFinishing || isDestroyed) return
+        val container = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(0, org.telegram.messenger.AndroidUtilities.dp(8f), 0, org.telegram.messenger.AndroidUtilities.dp(12f))
+        }
+        val header = org.telegram.ui.Cells.HeaderCell(this).apply {
+            setText("Search Settings")
+        }
+        container.addView(
+            header,
+            org.telegram.ui.Components.LayoutHelper.createLinear(
+                org.telegram.ui.Components.LayoutHelper.MATCH_PARENT,
+                org.telegram.ui.Components.LayoutHelper.WRAP_CONTENT
+            )
+        )
+        val input = android.widget.EditText(this).apply {
+            hint = "Search settings (e.g., Power, Theme, Passcode)"
+            isSingleLine = true
+            setPadding(
+                org.telegram.messenger.AndroidUtilities.dp(20f),
+                org.telegram.messenger.AndroidUtilities.dp(10f),
+                org.telegram.messenger.AndroidUtilities.dp(20f),
+                org.telegram.messenger.AndroidUtilities.dp(10f)
+            )
+            setTextColor(org.telegram.ui.ActionBar.Theme.getColor(org.telegram.ui.ActionBar.Theme.key_dialogTextBlack))
+            setHintTextColor(org.telegram.ui.ActionBar.Theme.getColor(org.telegram.ui.ActionBar.Theme.key_dialogTextHint))
+        }
+        container.addView(
+            input,
+            org.telegram.ui.Components.LayoutHelper.createLinear(
+                org.telegram.ui.Components.LayoutHelper.MATCH_PARENT,
+                org.telegram.ui.Components.LayoutHelper.WRAP_CONTENT
+            )
+        )
+        val resultsScroll = android.widget.ScrollView(this)
+        val resultsList = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+        }
+        resultsScroll.addView(
+            resultsList,
+            org.telegram.ui.Components.LayoutHelper.createFrame(
+                org.telegram.ui.Components.LayoutHelper.MATCH_PARENT,
+                org.telegram.ui.Components.LayoutHelper.WRAP_CONTENT.toFloat()
+            )
+        )
+        container.addView(
+            resultsScroll,
+            org.telegram.ui.Components.LayoutHelper.createLinear(
+                org.telegram.ui.Components.LayoutHelper.MATCH_PARENT,
+                320
+            )
+        )
+        val sheet = com.eve.app.designsystem.TelegramBottomSheet.Builder(this)
+            .setCustomView(container)
+            .create()
+
+        fun renderResults(query: String) {
+            resultsList.removeAllViews()
+            val matches = SettingsSearchIndex.filter(query)
+            if (matches.isEmpty()) {
+                val empty = org.telegram.ui.Cells.TextInfoPrivacyCell(this).apply {
+                    setText("No matching settings found.")
+                }
+                resultsList.addView(empty)
+                return
+            }
+            matches.forEachIndexed { idx, entry ->
+                val cell = org.telegram.ui.Cells.TextDetailSettingsCell(this).apply {
+                    setTextAndValue(entry.title, entry.subtitle, idx != matches.lastIndex)
+                    background = org.telegram.ui.ActionBar.Theme.getSelectorDrawable(false)
+                    setOnClickListener {
+                        sheet.dismiss()
+                        onRowClicked(entry.rowId)
+                    }
+                }
+                resultsList.addView(
+                    cell,
+                    org.telegram.ui.Components.LayoutHelper.createLinear(
+                        org.telegram.ui.Components.LayoutHelper.MATCH_PARENT,
+                        org.telegram.ui.Components.LayoutHelper.WRAP_CONTENT
+                    )
+                )
+            }
+        }
+
+        renderResults("")
+        input.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                renderResults(s?.toString().orEmpty())
+            }
+            override fun afterTextChanged(s: android.text.Editable?) = Unit
+        })
+        sheet.show()
+    }
+
+    private fun showAskQuestionDialog() {
+        TelegramNativeAlertDialog.Builder(this)
+            .setTitle("Ask a Question")
+            .setMessage(
+                "Please note that EVE Support replies are handled by our team. We try to respond as quickly as possible, but it may take a while.\n\n" +
+                    "You can also check the EVE FAQ for answers to common exam and account questions."
+            )
+            .setNegativeButton("Cancel", null)
+            .setNeutralButton("EVE FAQ") { _, _ ->
+                startActivity(Intent(this, AboutActivity::class.java))
+            }
+            .setPositiveButton("Ask Support") { _, _ ->
+                startActivity(Intent(this, com.eve.app.ui.feedback.FeedbackActivity::class.java))
+            }
+            .show()
     }
 
     override fun onLogOutClicked() {
