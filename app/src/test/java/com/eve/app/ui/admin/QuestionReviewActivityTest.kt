@@ -27,7 +27,7 @@ import org.robolectric.shadows.ShadowDialog
 
 /** Real review Activities, fresh gate, row callbacks and native editor fields. */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk=[35],application=Application::class,
+@Config(sdk=[35],
  shadows=[ProfileEditorAuthFixture.ShadowAuth::class,EditExamBoundaryFixture.AdminBoundary::class,
  EditExamBoundaryFixture.ExamBoundary::class,QuestionReviewBoundaryFixture.AnalyticsBoundary::class,
  QuestionReviewBoundaryFixture.ReportsBoundary::class],instrumentedPackages=["com.eve.app.data.repository"])

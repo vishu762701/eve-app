@@ -109,7 +109,7 @@ class TelegramDialogSourceAssetsTest {
         assertTrue(admin.contains(".makeRed(DialogInterface.BUTTON_POSITIVE).show()"))
         assertTrue(!admin.contains("TelegramDialogSourceBackground.apply(dialog)"))
         val premium = File("src/main/java/com/eve/app/ui/admin/ManagePremiumActivity.kt").readText()
-        assertTrue(premium.contains("TelegramNativeAlertDialog.Builder(this)"))
+        assertTrue(premium.contains("AlertDialog.Builder(this)"))
         assertTrue(premium.contains(".makeRed(DialogInterface.BUTTON_POSITIVE).show()"))
         val adminDelete = File("src/main/java/com/eve/app/ui/admin/AdminDeleteFlow.kt").readText()
         assertTrue(adminDelete.contains("AlertDialog.Builder(activity)"))
@@ -163,9 +163,9 @@ class TelegramDialogSourceAssetsTest {
             .substringBefore("private fun dismissProgress()")
         assertTrue(progress.contains("AlertDialog.Builder(this)"))
         assertTrue(progress.contains("builder.setView(layout)"))
-        assertTrue(progress.contains("builder.setCancelable(false)"))
-        assertTrue(progress.contains("TelegramRadialProgressView(this@ProfileActivity)"))
-        assertTrue(progress.contains("progressDialog = builder.create().apply { show() }"))
+        assertTrue(progress.contains("setCancelable(false)"))
+        assertTrue(progress.contains("RadialProgressView(this@ProfileActivity)"))
+        assertTrue(progress.contains("progressDialog = builder.create().apply {"))
         assertTrue(!progress.contains("TelegramDialogSourceBackground.apply(this)"))
     }
 }

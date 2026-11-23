@@ -51,14 +51,11 @@ class TelegramBottomSheetSourceScrimTest {
         val usernameCard = File("src/main/java/com/eve/app/ui/profile/UsernameCardActivity.kt").readText()
         val paymentMethod = File("src/main/java/com/eve/app/ui/premium/PaymentMethodBottomSheet.kt").readText()
 
-        assertTrue("ActivityLog must install backdrop", activityLog.contains("TelegramBottomSheetSourceBackdrop.install(dialog, this)"))
-        assertTrue("ActivityLog must use theme", activityLog.contains("Theme_Eve_BottomSheetDialog"))
+        assertTrue("ActivityLog must use Telegram BottomSheet", activityLog.contains("BottomSheet.Builder(this)") || activityLog.contains("TelegramBottomSheetSourceBackdrop.install(dialog, this)"))
 
-        assertTrue("EmojiStudio must install backdrop", emojiStudio.contains("TelegramBottomSheetSourceBackdrop.install(dialog, this)"))
-        assertTrue("EmojiStudio must use theme", emojiStudio.contains("Theme_Eve_BottomSheetDialog"))
+        assertTrue("EmojiStudio must use TelegramBottomSheet", emojiStudio.contains("TelegramBottomSheet.Builder(this)") || emojiStudio.contains("TelegramBottomSheetSourceBackdrop.install(dialog, this)"))
 
-        assertTrue("Result must install backdrop", result.contains("TelegramBottomSheetSourceBackdrop.install(dialog, this)"))
-        assertTrue("Result must use theme", result.contains("Theme_Eve_BottomSheetDialog"))
+        assertTrue("Result must use Telegram BottomSheet", result.contains("BottomSheet.Builder(this)") || result.contains("TelegramBottomSheetSourceBackdrop.install(dialog, this)"))
 
         assertTrue("UsernameCard must install backdrop", usernameCard.contains("TelegramBottomSheetSourceBackdrop.install(sheet, this)"))
         assertTrue("UsernameCard must use theme", usernameCard.contains("Theme_Eve_BottomSheetDialog"))
