@@ -37,7 +37,7 @@ import org.robolectric.shadows.ShadowDialog
 
 /** Actual registered result callback, fresh gate, provider, parser and native preview. */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk=[35],application=Application::class,
+@Config(sdk=[35],
  shadows=[ProfileEditorAuthFixture.ShadowAuth::class,EditExamBoundaryFixture.AdminBoundary::class,
  EditExamBoundaryFixture.ExamBoundary::class],instrumentedPackages=["com.eve.app.data.repository"])
 class ExamPickerResultTest {
@@ -210,8 +210,8 @@ class ExamPickerResultTest {
         val c=open(); val code=launch(c)
         try {
             deliver(c,code); awaitPreview()
-            val dialog=ShadowDialog.getLatestDialog() as com.eve.app.designsystem.TelegramNativeAlertDialog
-            val button=dialog.getActionButton(android.content.DialogInterface.BUTTON_POSITIVE)!!
+            val dialog=ShadowDialog.getLatestDialog() as org.telegram.ui.ActionBar.AlertDialog
+            val button=dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE)!!
             button.performClick(); idle(); button.performClick(); idle()
             assertEquals(1,EditExamBoundaryFixture.batchWrites)
             assertEquals(1,EditExamBoundaryFixture.lastBatch.size)
@@ -225,8 +225,8 @@ class ExamPickerResultTest {
     @Test fun interruptedImportIsNotAutomaticallyReplayedOnRecreation() {
         val old=open(); val code=launch(old); val state=Bundle()
         deliver(old,code); awaitPreview()
-        val previousPreview=ShadowDialog.getLatestDialog() as com.eve.app.designsystem.TelegramNativeAlertDialog
-        previousPreview.getActionButton(android.content.DialogInterface.BUTTON_POSITIVE)!!.performClick(); idle()
+        val previousPreview=ShadowDialog.getLatestDialog() as org.telegram.ui.ActionBar.AlertDialog
+        previousPreview.getButton(android.content.DialogInterface.BUTTON_POSITIVE)!!.performClick(); idle()
         assertEquals(1,EditExamBoundaryFixture.batchWrites)
         val reply=requireNotNull(EditExamBoundaryFixture.pendingBatch)
         old.saveInstanceState(state); close(old)
@@ -273,8 +273,8 @@ class ExamPickerResultTest {
         val c=open(); val code=launch(c)
         try {
             deliver(c,code); awaitPreview()
-            val dialog=ShadowDialog.getLatestDialog() as com.eve.app.designsystem.TelegramNativeAlertDialog
-            assertEquals("OK",dialog.getActionButton(android.content.DialogInterface.BUTTON_POSITIVE)!!.text.toString())
+            val dialog=ShadowDialog.getLatestDialog() as org.telegram.ui.ActionBar.AlertDialog
+            assertEquals("OK",(dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE) as android.widget.TextView).text.toString())
             assertEquals(0,EditExamBoundaryFixture.batchWrites)
             assertTrue(c.get().getString(R.string.question_import_limit_batch).contains("प्रश्न"))
         } finally { close(c) }

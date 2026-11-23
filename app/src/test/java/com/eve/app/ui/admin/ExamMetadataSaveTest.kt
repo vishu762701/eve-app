@@ -25,7 +25,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.android.controller.ActivityController
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk=[35],application=Application::class,
+@Config(sdk=[35],
  shadows=[ProfileEditorAuthFixture.ShadowAuth::class,EditExamBoundaryFixture.AdminBoundary::class,
  EditExamBoundaryFixture.ExamBoundary::class],instrumentedPackages=["com.eve.app.data.repository"])
 class ExamMetadataSaveTest {
@@ -191,9 +191,9 @@ class ExamMetadataSaveTest {
             val adapter=rv.adapter as QuestionManageAdapter
             val holder=adapter.onCreateViewHolder(rv,0); adapter.onBindViewHolder(holder,0)
             holder.itemView.findViewById<View>(R.id.btnDelete).performClick(); idle()
-            val dialog=org.robolectric.shadows.ShadowDialog.getLatestDialog() as com.eve.app.designsystem.TelegramNativeAlertDialog
+            val dialog=org.robolectric.shadows.ShadowDialog.getLatestDialog() as org.telegram.ui.ActionBar.AlertDialog
             replaceOwnerBeforeListenerDelivery()
-            dialog.getActionButton(android.content.DialogInterface.BUTTON_POSITIVE)!!.performClick(); idle()
+            dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE)!!.performClick(); idle()
             assertEquals(0,EditExamBoundaryFixture.writes)
             dialog.dismiss()
         }
@@ -207,9 +207,9 @@ class ExamMetadataSaveTest {
             val adapter=rv.adapter as QuestionManageAdapter
             val old=adapter.onCreateViewHolder(rv,0); adapter.onBindViewHolder(old,0)
             old.itemView.findViewById<View>(R.id.btnEdit).performClick(); idle()
-            val dialog=org.robolectric.shadows.ShadowDialog.getLatestDialog() as com.eve.app.designsystem.TelegramNativeAlertDialog
+            val dialog=org.robolectric.shadows.ShadowDialog.getLatestDialog() as org.telegram.ui.ActionBar.AlertDialog
             dialog.findViewById<EditText>(R.id.etQuestionText).setText("Edited Q")
-            dialog.getActionButton(android.content.DialogInterface.BUTTON_POSITIVE)!!.performClick(); idle()
+            dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE)!!.performClick(); idle()
             assertEquals(1,EditExamBoundaryFixture.writes)
             replaceOwnerBeforeListenerDelivery()
             requireNotNull(EditExamBoundaryFixture.pendingWrite).resume(Unit); idle()

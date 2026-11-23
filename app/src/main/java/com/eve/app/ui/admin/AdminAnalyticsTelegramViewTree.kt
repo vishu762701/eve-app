@@ -100,6 +100,19 @@ class AdminAnalyticsTelegramViewTree(context: Context) {
         isNestedScrollingEnabled = false
     }
 
+    val tvCrashFreePercentage: TextView = TextView(context).apply {
+        id = R.id.tvCrashFreePercentage
+        text = context.getString(R.string.analytics_telemetry_unavailable)
+        setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15f)
+        typeface = mediumFont()
+    }
+
+    val tvTopCrashIssues: TextView = TextView(context).apply {
+        id = R.id.tvTopCrashIssues
+        text = context.getString(R.string.analytics_telemetry_unavailable_detail)
+        setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13f)
+    }
+
     val btnOpenCrashlyticsConsole: TelegramButton = TelegramButton(context).apply {
         id = R.id.btnOpenCrashlyticsConsole
         text = "Open Crashlytics Console"
@@ -152,6 +165,8 @@ class AdminAnalyticsTelegramViewTree(context: Context) {
         body.addView(rvExams, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0f, 0f, 0f, 12f))
         body.addView(headerQuestions, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT))
         body.addView(rvQuestions, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0f, 0f, 0f, 14f))
+        body.addView(tvCrashFreePercentage, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0f, 0f, 0f, 4f))
+        body.addView(tvTopCrashIssues, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0f, 0f, 0f, 10f))
         body.addView(btnOpenCrashlyticsConsole, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 44))
 
         content.addView(body, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
@@ -207,6 +222,8 @@ class AdminAnalyticsTelegramViewTree(context: Context) {
         }
         tvSummary.setTextColor(textPrimary)
         tvMostAttempted.setTextColor(textSecondary)
+        tvCrashFreePercentage.setTextColor(textPrimary)
+        tvTopCrashIssues.setTextColor(textSecondary)
         tvEmpty.setTextColor(textSecondary)
         headerExams.setBackgroundColor(bgWhite)
         headerQuestions.setBackgroundColor(bgWhite)

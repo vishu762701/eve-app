@@ -24,7 +24,7 @@ import java.io.File
 /** ManagePremium Activity re-validates fresh server rights on resume without duplicating UI wiring. */
 @RunWith(RobolectricTestRunner::class)
 @Config(
-    sdk = [35], application = Application::class,
+    sdk = [35],
     shadows = [
         ProfileEditorAuthFixture.ShadowAuth::class,
         EditExamBoundaryFixture.AdminBoundary::class,

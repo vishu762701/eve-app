@@ -2,7 +2,11 @@ package com.eve.app.ui.profile
 
 import android.app.Activity
 import android.os.Bundle
+import android.view.View
+import android.view.ViewGroup
+import android.widget.EditText
 import androidx.lifecycle.lifecycleScope
+import com.eve.app.R
 import com.eve.app.data.remote.ApiClient
 import com.eve.app.data.remote.ProfileRequestOwner
 import com.eve.app.ui.common.TelegramHostActivity
@@ -32,6 +36,20 @@ class ChangeNameActivity : TelegramHostActivity<TelegramChangeNameActivity>(), T
         return TelegramChangeNameActivity(null).apply {
             setEveDelegate(this@ChangeNameActivity)
         }
+    }
+
+    override fun onFragmentHosted(fragment: TelegramChangeNameActivity) {
+        findFirstEditText(fragment.fragmentView)?.id = R.id.etName
+    }
+
+    private fun findFirstEditText(view: View?): EditText? {
+        if (view is EditText) return view
+        if (view is ViewGroup) {
+            for (i in 0 until view.childCount) {
+                findFirstEditText(view.getChildAt(i))?.let { return it }
+            }
+        }
+        return null
     }
 
     // --- ChangeNameDelegate implementation (Eve save flow & account guard) ---

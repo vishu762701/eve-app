@@ -27,7 +27,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowDialog
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk=[35], application=Application::class,
+@Config(sdk=[35],
     shadows=[ProfileEditorAuthFixture.ShadowAuth::class, EditExamBoundaryFixture.AdminBoundary::class,
         AdminApiTransportFixture.Transport::class],
     instrumentedPackages=["com.eve.app.data.repository", "com.eve.app.data.remote"])

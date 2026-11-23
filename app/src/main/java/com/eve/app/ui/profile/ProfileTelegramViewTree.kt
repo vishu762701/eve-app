@@ -149,6 +149,9 @@ class ProfileTelegramViewTree(context: Context) {
         setPadding(dp(20f), dp(14f), dp(20f), dp(6f))
     }
 
+    private val subtitleViews = mutableListOf<TextView>()
+    private val valueViews = mutableListOf<TextView>()
+
     val cellMobile: LinearLayout
     val tvMobileValue: TextView = createCellValue(context, R.id.tvMobileValue)
     val dividerMobile: View = View(context).apply { id = R.id.dividerMobile }
@@ -236,9 +239,6 @@ class ProfileTelegramViewTree(context: Context) {
     }
     val btnProfileQr: ImageButton = createTopIcon(context, R.id.btnProfileQr, R.drawable.telegram_profile_qr, "QR Code")
     val btnProfileMenu: ImageButton = createTopIcon(context, R.id.btnProfileMenu, R.drawable.ic_ab_other, "More options")
-
-    private val subtitleViews = mutableListOf<TextView>()
-    private val valueViews = mutableListOf<TextView>()
 
     init {
         // 1. Scroll content column

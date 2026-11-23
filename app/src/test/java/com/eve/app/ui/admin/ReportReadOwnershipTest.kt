@@ -24,7 +24,7 @@ import org.robolectric.android.controller.ActivityController
 
 /** Actual protected Activity, native filter callbacks and report transport order. */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk=[35],application=Application::class,
+@Config(sdk=[35],
  shadows=[ProfileEditorAuthFixture.ShadowAuth::class,EditExamBoundaryFixture.AdminBoundary::class,
  QuestionReviewBoundaryFixture.ReportsBoundary::class],instrumentedPackages=["com.eve.app.data.repository"])
 class ReportReadOwnershipTest {
@@ -136,11 +136,11 @@ class ReportReadOwnershipTest {
         row.itemView.findViewById<View>(R.id.btnDismissFlag).performClick()
         idle()
         val dialog = org.robolectric.shadows.ShadowDialog.getLatestDialog()
-            as com.eve.app.designsystem.TelegramNativeAlertDialog
+            as org.telegram.ui.ActionBar.AlertDialog
         val prior = QuestionReviewBoundaryFixture.dismissCalls
         EditExamBoundaryFixture.permissions = AdminMeData(
             email = "owner@example.test", rights = emptyList())
-        dialog.getActionButton(DialogInterface.BUTTON_POSITIVE)!!.performClick()
+        dialog.getButton(DialogInterface.BUTTON_POSITIVE)!!.performClick()
         idle()
         assertEquals(prior, QuestionReviewBoundaryFixture.dismissCalls)
         dialog.dismiss()

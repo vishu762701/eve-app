@@ -25,7 +25,7 @@ import org.robolectric.annotation.GraphicsMode
 import java.time.Duration
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [35], application = Application::class, qualifiers = "mdpi")
+@Config(sdk = [35], qualifiers = "mdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class QrScannerControlsTest {
     @Test fun portraitUsesSourceGeometryAndCompactGroupFitsMeasuredSafeArea() {

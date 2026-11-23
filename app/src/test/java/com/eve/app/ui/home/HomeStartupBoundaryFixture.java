@@ -22,6 +22,12 @@ public final class HomeStartupBoundaryFixture {
         @Implementation public void onCreate() throws Exception {
             java.lang.reflect.Field field=EveApplication.class.getDeclaredField("instance");
             field.setAccessible(true);field.set(null,application);
+            org.telegram.messenger.ApplicationLoader.applicationContext = application;
+            org.telegram.messenger.AndroidUtilities.checkDisplaySize(application, application.getResources().getConfiguration());
+            com.eve.app.theme.TelegramThemeEngine.INSTANCE.init(application);
+            org.telegram.ui.ActionBar.Theme.syncFromEvePalette(application);
+            com.eve.app.util.ThemeSwitchAnimator.INSTANCE.ensureLifecycleRegistered(application);
+            com.eve.app.util.SystemBarHelper.INSTANCE.init(application);
         }
     }
     @Implements(value=ApiClient.class,isInAndroidSdk=false)

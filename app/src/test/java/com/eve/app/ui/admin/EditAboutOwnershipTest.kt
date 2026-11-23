@@ -10,7 +10,7 @@ import com.eve.app.R
 import com.eve.app.data.model.AppContent
 import com.eve.app.data.remote.AdminMeData
 import com.eve.app.data.remote.ApiResponse
-import com.eve.app.designsystem.TelegramNativeAlertDialog
+import org.telegram.ui.ActionBar.AlertDialog
 import com.eve.app.ui.profile.ProfileEditorAuthFixture
 import com.google.android.material.tabs.TabLayout
 import kotlin.coroutines.resume
@@ -27,7 +27,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowDialog
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk=[35],application=Application::class,
+@Config(sdk=[35],
     shadows=[ProfileEditorAuthFixture.ShadowAuth::class,EditExamBoundaryFixture.AdminBoundary::class,
         AdminApiTransportFixture.Transport::class],
     instrumentedPackages=["com.eve.app.data.repository","com.eve.app.data.remote"])
@@ -123,13 +123,13 @@ class EditAboutOwnershipTest {
     }
     @Test fun rapidDirtyTabClicksKeepOneOriginalTelegramConfirmation()=exercise {a,_->
         read(0);edit(a);tab(a,1)
-        val first=ShadowDialog.getLatestDialog() as TelegramNativeAlertDialog
+        val first=ShadowDialog.getLatestDialog() as AlertDialog
         tab(a,2);assertSame(first,ShadowDialog.getLatestDialog());assertTrue(first.isShowing)
     }
     @Test fun staleUnsavedConfirmationCannotWriteAfterStopAndReturn()=exercise {a,c->
         read(0);edit(a);tab(a,1)
-        val dialog=ShadowDialog.getLatestDialog() as TelegramNativeAlertDialog
-        val button=dialog.getActionButton(DialogInterface.BUTTON_POSITIVE)!!
+        val dialog=ShadowDialog.getLatestDialog() as AlertDialog
+        val button=dialog.getButton(DialogInterface.BUTTON_POSITIVE)!!
         c.pause().stop();c.start().resume();idle();button.performClick();idle()
         assertFalse(dialog.isShowing);assertEquals(0,AppContentBoundaryFixture.writes.size)
     }
@@ -155,17 +155,17 @@ class EditAboutOwnershipTest {
     }
     @Test fun dirtyTabCancelAndDiscardPreserveOriginalNativeNavigation()=exercise {a,_->
         read(0);edit(a);tab(a,1)
-        (ShadowDialog.getLatestDialog() as TelegramNativeAlertDialog).getActionButton(DialogInterface.BUTTON_NEUTRAL)!!.performClick();idle()
+        (ShadowDialog.getLatestDialog() as AlertDialog).getButton(DialogInterface.BUTTON_NEUTRAL)!!.performClick();idle()
         assertEquals(0,a.findViewById<com.eve.app.designsystem.TelegramTabsView>(R.id.tabLayout).selectedTabPosition)
         assertEquals(draft.title,title(a));assertEquals(1,AppContentBoundaryFixture.reads.size)
         tab(a,2)
-        (ShadowDialog.getLatestDialog() as TelegramNativeAlertDialog).getActionButton(DialogInterface.BUTTON_NEGATIVE)!!.performClick();idle()
+        (ShadowDialog.getLatestDialog() as AlertDialog).getButton(DialogInterface.BUTTON_NEGATIVE)!!.performClick();idle()
         assertEquals(listOf("privacy","contact"),AppContentBoundaryFixture.readTypes)
         assertEquals(0,AppContentBoundaryFixture.writes.size)
     }
     @Test fun dirtyTabSaveNavigatesOnlyAfterMatchingConfirmation()=exercise {a,_->
         read(0);edit(a);tab(a,1)
-        (ShadowDialog.getLatestDialog() as TelegramNativeAlertDialog).getActionButton(DialogInterface.BUTTON_POSITIVE)!!.performClick();idle()
+        (ShadowDialog.getLatestDialog() as AlertDialog).getButton(DialogInterface.BUTTON_POSITIVE)!!.performClick();idle()
         assertEquals(1,AppContentBoundaryFixture.writes.size)
         AppContentBoundaryFixture.writes[0].resume(ApiResponse<Unit>(true));idle()
         assertEquals(listOf("privacy","privacy"),AppContentBoundaryFixture.readTypes)
@@ -175,7 +175,7 @@ class EditAboutOwnershipTest {
     }
     @Test fun backSaveReusesThePendingWriteAndWaitsForMatchingReadback()=exercise {a,_->
         read(0);edit(a);save(a);a.findViewById<View>(R.id.btnBack).performClick();idle()
-        (ShadowDialog.getLatestDialog() as TelegramNativeAlertDialog).getActionButton(DialogInterface.BUTTON_POSITIVE)!!.performClick();idle()
+        (ShadowDialog.getLatestDialog() as AlertDialog).getButton(DialogInterface.BUTTON_POSITIVE)!!.performClick();idle()
         assertEquals(1,AppContentBoundaryFixture.writes.size)
         AppContentBoundaryFixture.writes[0].resume(ApiResponse<Unit>(true));idle();assertFalse(a.isFinishing)
         read(1,draft);assertTrue(a.isFinishing)
@@ -190,15 +190,15 @@ class EditAboutOwnershipTest {
     }
     @Test fun backCancelKeepsTheDraftAndBackDiscardLeavesWithoutAWrite()=exercise {a,_->
         read(0);edit(a);a.findViewById<View>(R.id.btnBack).performClick();idle()
-        (ShadowDialog.getLatestDialog() as TelegramNativeAlertDialog).getActionButton(DialogInterface.BUTTON_NEUTRAL)!!.performClick();idle()
+        (ShadowDialog.getLatestDialog() as AlertDialog).getButton(DialogInterface.BUTTON_NEUTRAL)!!.performClick();idle()
         assertFalse(a.isFinishing);assertEquals(draft.title,title(a));assertEquals(0,AppContentBoundaryFixture.writes.size)
         a.findViewById<View>(R.id.btnBack).performClick();idle()
-        (ShadowDialog.getLatestDialog() as TelegramNativeAlertDialog).getActionButton(DialogInterface.BUTTON_NEGATIVE)!!.performClick();idle()
+        (ShadowDialog.getLatestDialog() as AlertDialog).getButton(DialogInterface.BUTTON_NEGATIVE)!!.performClick();idle()
         assertTrue(a.isFinishing);assertEquals(0,AppContentBoundaryFixture.writes.size)
     }
     @Test fun backDiscardDuringPendingSaveNeverInventsARollbackOrOldSuccess()=exercise {a,_->
         read(0);edit(a);save(a);a.findViewById<View>(R.id.btnBack).performClick();idle()
-        (ShadowDialog.getLatestDialog() as TelegramNativeAlertDialog).getActionButton(DialogInterface.BUTTON_NEGATIVE)!!.performClick();idle()
+        (ShadowDialog.getLatestDialog() as AlertDialog).getButton(DialogInterface.BUTTON_NEGATIVE)!!.performClick();idle()
         assertTrue(a.isFinishing)
         AppContentBoundaryFixture.writes[0].resume(ApiResponse<Unit>(true));idle()
         assertEquals(1,AppContentBoundaryFixture.writes.size);assertEquals(1,AppContentBoundaryFixture.reads.size)
