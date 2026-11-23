@@ -36,10 +36,11 @@ class ProfileOverflowNativeTest {
                 else if (showing) {
                     val root = sourceWindow(popup).contentView as ActionBarPopupWindow.ActionBarPopupWindowLayout
                     val rows = (0 until root.itemsCount).map(root::getItemAt)
-                    observed += ", scale=${root.backScaleY}, alpha=${root.backAlpha}, rows=" +
-                        rows.joinToString { "${it.alpha}/${it.translationY}" }
-                    settled = kotlin.math.abs(root.backScaleY - 1f) < .001f && root.backAlpha == 255 &&
-                        rows.all { (!it.isEnabled || kotlin.math.abs(it.alpha - 1f) < .001f) &&
+                    observed += ", laidOut=${root.isLaidOut}, size=${root.width}x${root.height}, scale=${root.backScaleY}, alpha=${root.backAlpha}, rows=" +
+                        rows.joinToString { "${it.height}:${it.alpha}/${it.translationY}" }
+                    settled = root.isLaidOut && root.width > 0 && root.height > 0 &&
+                        kotlin.math.abs(root.backScaleY - 1f) < .001f && root.backAlpha == 255 &&
+                        rows.all { it.height > 0 && (!it.isEnabled || kotlin.math.abs(it.alpha - 1f) < .001f) &&
                             kotlin.math.abs(it.translationY) < .01f }
                 }
             }
@@ -162,7 +163,8 @@ class ProfileOverflowNativeTest {
                     for (i in 0 until root.itemsCount) {
                         val row = root.getItemAt(i)
                         assertTrue(row.isEnabled)
-                        assertTrue(row.height >= 48 * row.resources.displayMetrics.density)
+                        val minRowHeight = 48 * row.resources.displayMetrics.density
+                        assertTrue("Expected row height >= $minRowHeight, was ${row.height}", row.height >= minRowHeight)
                         assertEquals(1f, row.alpha, .001f)
                     }
                     // Actual source row callback, not a duplicate test handler.

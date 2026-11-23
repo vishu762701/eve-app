@@ -8,6 +8,7 @@ import com.eve.app.R
 import org.junit.Assert.assertNotNull
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.telegram.ui.ActionBar.BaseFragment
 import org.telegram.ui.ChangeNameActivity as TelegramChangeNameActivity
 
 @RunWith(AndroidJUnit4::class)
@@ -23,6 +24,12 @@ class DisplayNameEditorNativeTest {
                 }
                 val context = ContextThemeWrapper(base.createConfigurationContext(config), R.style.Theme_Eve)
                 val fragment = TelegramChangeNameActivity(null)
+                // Initialize actionBar via Telegram BaseFragment lifecycle contract before createView(context)
+                val createdActionBar = fragment.createActionBar(context)
+                BaseFragment::class.java
+                    .getDeclaredField("actionBar")
+                    .apply { isAccessible = true }
+                    .set(fragment, createdActionBar)
                 val view = fragment.createView(context)
                 assertNotNull(view)
                 assertNotNull(fragment.actionBar)

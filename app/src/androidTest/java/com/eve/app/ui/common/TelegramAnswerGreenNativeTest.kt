@@ -21,12 +21,13 @@ class TelegramAnswerGreenNativeTest {
             scenario.onActivity { activity ->
                 val option = TelegramRadioButton(activity)
                 activity.setContentView(option)
+                val current = com.eve.app.theme.TelegramThemeEngine.resolveCurrentPalette(activity)
                 val greenSurface = ContextCompat.getColor(activity, R.color.system_green_container)
                 val greenIndicator = ContextCompat.getColor(activity, R.color.system_green_text)
                 option.isChecked = true
                 val checked = option.background.current as GradientDrawable
                 assertEquals(greenSurface, checked.color?.defaultColor)
-                assertEquals(ContextCompat.getColor(activity, R.color.text_primary),
+                assertEquals(current.textPrimary,
                     option.textColors.getColorForState(intArrayOf(android.R.attr.state_checked), -1))
                 assertEquals(greenIndicator, option.indicator?.checkedColor)
                 option.isChecked = false
@@ -37,7 +38,6 @@ class TelegramAnswerGreenNativeTest {
 
                 // Theme-preview callbacks can arrive before Configuration/qualifier
                 // recreation. Both directions must rebind the checked indicator.
-                val current = com.eve.app.theme.TelegramThemeEngine.resolveCurrentPalette(activity)
                 for (night in listOf(true, false, true)) {
                     option.updatePalette(current.copy(isDark = night))
                     assertEquals(

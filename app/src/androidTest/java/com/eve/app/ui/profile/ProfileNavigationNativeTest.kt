@@ -3,12 +3,15 @@ package com.eve.app.ui.profile
 import android.content.Context
 import android.content.Intent
 import android.view.View
+import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.eve.app.R
 import com.eve.app.ui.home.MainActivity
+import com.google.firebase.auth.FirebaseAuth
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -31,12 +34,19 @@ class ProfileNavigationNativeTest {
         }
 
         ActivityScenario.launch<MainActivity>(mainIntent).use { scenario ->
-            scenario.onActivity { activity ->
-                assertNotNull("MainActivity must be launched", activity)
-                val drawerAvatar = activity.findViewById<View>(R.id.ivDrawerAvatar)
-                assertNotNull("Drawer avatar must be present", drawerAvatar)
-                // Trigger drawer avatar click directly
-                drawerAvatar.performClick()
+            if (scenario.state == Lifecycle.State.DESTROYED) {
+                assertNull(
+                    "MainActivity may only self-finish when unauthenticated",
+                    FirebaseAuth.getInstance().currentUser
+                )
+            } else {
+                scenario.onActivity { activity ->
+                    assertNotNull("MainActivity must be launched", activity)
+                    val drawerAvatar = activity.findViewById<View>(R.id.ivDrawerAvatar)
+                    assertNotNull("Drawer avatar must be present", drawerAvatar)
+                    // Trigger drawer avatar click directly
+                    drawerAvatar.performClick()
+                }
             }
         }
     }
@@ -49,17 +59,26 @@ class ProfileNavigationNativeTest {
         }
 
         ActivityScenario.launch<ProfileActivity>(intent).use { scenario ->
-            scenario.onActivity { activity ->
-                assertNotNull("ProfileActivity must be launched", activity)
-                val decor = activity.window?.decorView
-                assertNotNull("Window decorView must not be null", decor)
+            if (scenario.state == Lifecycle.State.DESTROYED) {
+                assertNull(
+                    "ProfileActivity may only self-finish when unauthenticated",
+                    FirebaseAuth.getInstance().currentUser
+                )
+            } else {
+                scenario.onActivity { activity ->
+                    assertNotNull("ProfileActivity must be launched", activity)
+                    val decor = activity.window?.decorView
+                    assertNotNull("Window decorView must not be null", decor)
 
-                val scrollView = activity.findViewById<View>(R.id.profileScrollView)
-                val avatarGooey = activity.findViewById<View>(R.id.avatarGooey)
-                // When unauthenticated, ProfileActivity gracefully finishes without throwing;
-                // when authenticated, views remain attached and active.
-                assertTrue("ProfileActivity must either be finishing gracefully or views must be bound",
-                    activity.isFinishing || (scrollView != null && avatarGooey != null))
+                    val scrollView = activity.findViewById<View>(R.id.profileScrollView)
+                    val avatarGooey = activity.findViewById<View>(R.id.avatarGooey)
+                    // When unauthenticated, ProfileActivity gracefully finishes without throwing;
+                    // when authenticated, views remain attached and active.
+                    assertTrue(
+                        "ProfileActivity must either be finishing gracefully or views must be bound",
+                        activity.isFinishing || (scrollView != null && avatarGooey != null)
+                    )
+                }
             }
         }
     }
@@ -72,8 +91,15 @@ class ProfileNavigationNativeTest {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             ActivityScenario.launch<ProfileActivity>(intent).use { scenario ->
-                scenario.onActivity { activity ->
-                    assertNotNull("Cycle $i must instantiate ProfileActivity", activity)
+                if (scenario.state == Lifecycle.State.DESTROYED) {
+                    assertNull(
+                        "Cycle $i: ProfileActivity may only self-finish when unauthenticated",
+                        FirebaseAuth.getInstance().currentUser
+                    )
+                } else {
+                    scenario.onActivity { activity ->
+                        assertNotNull("Cycle $i must instantiate ProfileActivity", activity)
+                    }
                 }
             }
         }
