@@ -69,6 +69,7 @@ class FlaggedQuestionsTelegramViewTree(context: Context) {
 
     val chipGroupReportType: TelegramChipGroup = TelegramChipGroup(context).apply {
         id = R.id.chipGroupReportType
+        isSingleSelection = true
     }
 
     val chipContentIssues: TelegramChip = TelegramChip(context).apply {

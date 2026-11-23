@@ -11,7 +11,7 @@ import com.eve.app.R
 import com.eve.app.data.model.Exam
 import com.eve.app.data.model.Question
 import com.eve.app.data.remote.AdminMeData
-import com.eve.app.designsystem.TelegramNativeAlertDialog
+import org.telegram.ui.ActionBar.AlertDialog
 import com.eve.app.ui.profile.ProfileEditorAuthFixture
 import com.eve.app.util.Constants
 import kotlin.coroutines.resume
@@ -32,7 +32,7 @@ import java.util.concurrent.TimeUnit
 
 @RunWith(RobolectricTestRunner::class)
 @LooperMode(LooperMode.Mode.PAUSED)
-@Config(sdk=[35],application=Application::class,
+@Config(sdk=[35],
     shadows=[ProfileEditorAuthFixture.ShadowAuth::class,EditExamBoundaryFixture.AdminBoundary::class,
         EditExamBoundaryFixture.ExamBoundary::class],instrumentedPackages=["com.eve.app.data.repository"])
 class EditExamDeferredDeleteTest {
@@ -65,9 +65,9 @@ class EditExamDeferredDeleteTest {
         val rv=rows(a);val adapter=rv.adapter as QuestionManageAdapter
         val row=adapter.onCreateViewHolder(rv,0);adapter.onBindViewHolder(row,0)
         row.itemView.findViewById<View>(R.id.btnDelete).performClick();idle()
-        val dialog=ShadowDialog.getLatestDialog() as TelegramNativeAlertDialog
+        val dialog=ShadowDialog.getLatestDialog() as AlertDialog
         assertTrue(dialog.isShowing)
-        return requireNotNull(dialog.getActionButton(DialogInterface.BUTTON_POSITIVE)).also {
+        return requireNotNull(dialog.getButton(DialogInterface.BUTTON_POSITIVE)).also {
             it.performClick();idle()
         }
     }
