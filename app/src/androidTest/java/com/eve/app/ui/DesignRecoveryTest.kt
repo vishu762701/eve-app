@@ -86,9 +86,13 @@ class DesignRecoveryTest {
                     val palette = com.eve.app.theme.TelegramThemeEngine.resolveCurrentPalette(context)
                     for (position in listOf(0, 1, 0)) {
                         examAdapter.onBindViewHolder(examHolder, position)
+                        val expectedSubmittedColor = com.eve.app.theme.TelegramColorRoles.accessibleForeground(
+                            org.telegram.ui.ActionBar.Theme.getColor(org.telegram.ui.ActionBar.Theme.key_windowBackgroundWhiteGreenText2),
+                            listOf(palette.surface)
+                        )
                         assertTrue("Bound and recycled Home metadata must remain readable in both themes",
-                            if (position == 1) tvExamTime.currentTextColor == org.telegram.ui.ActionBar.Theme.getColor(org.telegram.ui.ActionBar.Theme.key_windowBackgroundWhiteGreenText2)
-                            else androidx.core.graphics.ColorUtils.calculateContrast(tvExamTime.currentTextColor, palette.surface) >= 4.5)
+                            (position != 1 || tvExamTime.currentTextColor == expectedSubmittedColor) &&
+                                androidx.core.graphics.ColorUtils.calculateContrast(tvExamTime.currentTextColor, palette.surface) >= 4.5)
                     }
                     examAdapter.onViewRecycled(examHolder)
                     val d = context.resources.displayMetrics.density
