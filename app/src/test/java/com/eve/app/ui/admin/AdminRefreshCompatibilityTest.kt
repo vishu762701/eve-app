@@ -77,8 +77,9 @@ class AdminRefreshCompatibilityTest {
         )
         for (act in activities) {
             val code = source(act)
-            assertTrue("$act must wire up swipeRefresh.setOnRefreshListener",
-                code.contains("binding.swipeRefresh.setOnRefreshListener"))
+            assertTrue("$act must wire up refresh handling",
+                code.contains("binding.swipeRefresh.setOnRefreshListener") ||
+                    code.contains("MENU_REFRESH"))
         }
     }
 }

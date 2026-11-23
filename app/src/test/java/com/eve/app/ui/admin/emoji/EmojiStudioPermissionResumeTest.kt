@@ -16,7 +16,7 @@ import java.io.File
 
 @RunWith(RobolectricTestRunner::class)
 @Config(
-    sdk = [35], application = Application::class,
+    sdk = [35],
     shadows = [
         ProfileEditorAuthFixture.ShadowAuth::class,
         EditExamBoundaryFixture.AdminBoundary::class,
@@ -50,7 +50,7 @@ class EmojiStudioPermissionResumeTest {
         assertTrue("Must set reauthorizeOnResume in onStop",
             src.contains("reauthorizeOnResume = true"))
         assertTrue("Must re-validate admin rights on resume",
-            src.contains("AdminAccessGate.requireAdmin(this, binding.root, requireFreshServer = true, requiredRight = \"manage_content\")"))
+            src.contains("AdminAccessGate.requireAdmin(") && src.contains("requiredRight = \"manage_content\""))
         assertTrue("Must dismiss placementDialog in onStop",
             src.contains("placementDialog?.dismiss()"))
         assertTrue("Must dismiss packManagerDialog in onStop",

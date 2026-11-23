@@ -22,7 +22,7 @@ import java.io.File
 /** ManagePolls Activity re-validates fresh server rights on resume without duplicating UI wiring. */
 @RunWith(RobolectricTestRunner::class)
 @Config(
-    sdk = [35], application = Application::class,
+    sdk = [35],
     shadows = [
         ProfileEditorAuthFixture.ShadowAuth::class,
         EditExamBoundaryFixture.AdminBoundary::class
@@ -97,7 +97,7 @@ class ManagePollsPermissionResumeTest {
         assertTrue("onResume consumes reauthorizeOnResume", resume.contains("reauthorizeOnResume = false"))
         assertTrue("onResume guards identity change", resume.contains("live.uid != authorizedUid || live.email != authorizedEmail"))
         assertTrue("onResume re-checks AdminAccessGate with fresh server authority",
-            resume.contains("AdminAccessGate.requireAdmin(this, binding.root, requireFreshServer = true, requiredRight = \"moderate_feedback\")"))
+            resume.contains("AdminAccessGate.requireAdmin(this, rootView, requireFreshServer = true, requiredRight = \"moderate_feedback\")"))
         assertFalse("onResume must not duplicate setupAdminControls", resume.contains("setupAdminControls()"))
     }
 }

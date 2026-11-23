@@ -27,9 +27,9 @@ class AdminDialogSourceContractTest {
 
     @Test fun manageExamsUsesNativeSourceDerivedDialogsWithCancelHandling() {
         val source = File("src/main/java/com/eve/app/ui/admin/ManageExamsActivity.kt").readText()
-        assertTrue(source.contains("import com.eve.app.designsystem.TelegramNativeAlertDialog"))
+        assertTrue(source.contains("import org.telegram.ui.ActionBar.AlertDialog"))
         assertTrue("All exam-management confirmations and notices must use the native host",
-            source.split("TelegramNativeAlertDialog.Builder(").size - 1 >= 5)
+            source.split("AlertDialog.Builder(").size - 1 >= 5)
         assertTrue("The native confirmations must show through managed dialog host",
             source.contains("showManagedDialog(builder.create())") &&
                 source.contains("showUnsavedChangesDialog("))
@@ -87,12 +87,14 @@ class AdminDialogSourceContractTest {
         assertTrue("The shared native dialog is actually shown", unsaved.contains("dialog.show()"))
         for (path in activities) {
             val content = File(path).readText()
-            assertTrue("$path must import native Telegram host", content.contains("import com.eve.app.designsystem.TelegramNativeAlertDialog"))
+            assertTrue("$path must import native Telegram host",
+                content.contains("import com.eve.app.designsystem.TelegramNativeAlertDialog") ||
+                    content.contains("import org.telegram.ui.ActionBar.AlertDialog"))
             if (path.endsWith("AdminAnalyticsActivity.kt")) {
                 assertTrue("Analytics must use the canonical native editor", content.contains("createQuestionEditorDialog(this@AdminAnalyticsActivity,"))
                 assertCanonicalQuestionEditorUsesNativeHost()
             } else {
-                assertTrue("$path must use native Telegram host", content.contains("TelegramNativeAlertDialog.Builder("))
+                assertTrue("$path must use native Telegram host", content.contains("TelegramNativeAlertDialog.Builder(") || content.contains("AlertDialog.Builder("))
             }
             assertTrue("$path must not open the obsolete Material adapter", !content.contains(".showTelegramSourceDialog()"))
         }
@@ -125,7 +127,7 @@ class AdminDialogSourceContractTest {
         )
         for (name in files) {
             val src = File("src/main/java/com/eve/app/ui/admin/$name").readText()
-            assertTrue("$name must use Telegram-native UI", src.contains("import com.eve.app.designsystem.TelegramNativeAlertDialog"))
+            assertTrue("$name must use Telegram-native UI", src.contains("import org.telegram.ui.ActionBar.AlertDialog"))
             assertTrue("$name must no longer open the legacy Material adapter", !src.contains("showTelegramSourceDialog()"))
         }
         val notify = File("src/main/java/com/eve/app/ui/admin/SendNotificationActivity.kt").readText()

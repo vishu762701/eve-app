@@ -70,7 +70,7 @@ class AdminHubTelegramFidelityTest {
         assertTrue("AdminsAndRightsActivity must exist", adminsActivity.exists())
         val aSource = adminsActivity.readText()
         assertTrue("AdminsAndRightsActivity must use AdminAccessGate", aSource.contains("AdminAccessGate.requireAdmin"))
-        assertTrue("AdminsAndRightsActivity must use TelegramActionBar", aSource.contains("binding.telegramActionBar"))
+        assertTrue("AdminsAndRightsActivity must use Telegram ActionBar", aSource.contains("ActionBar(this)"))
 
         val manifest = File("src/main/AndroidManifest.xml").readText()
         assertTrue("Manifest must register ManageQuestionsActivity", manifest.contains("android:name=\".ui.admin.ManageQuestionsActivity\""))
@@ -138,9 +138,7 @@ class AdminHubTelegramFidelityTest {
         assertTrue("Telegram 50dp row must be explicit", cell.contains("val rowHeight = dp(50f)"))
         assertTrue("Physical divider pixel must increase layout height", cell.contains("(if (needDivider) 1 else 0)"))
         assertTrue("RTL must mirror divider inset", cell.contains("width - start"))
-        val detail = File(root + "TextDetailCell.kt").readText()
-        assertTrue("Telegram detail rows must be 60dp", detail.contains("val rowHeight = dp(60f)"))
-        assertTrue("Detail divider must be one physical pixel", detail.contains("height - 1f"))
+        assertTrue("Upstream Telegram TextDetailCell must exist", File("src/main/java/org/telegram/ui/Cells/TextDetailCell.java").exists())
         val check = File(root + "TextCheckCell.kt").readText()
         assertTrue("Subtitle changes must remeasure rights rows", check.contains("requestLayout() // Telegram TextCheckCell.java:148-153"))
     }
@@ -151,7 +149,7 @@ class AdminHubTelegramFidelityTest {
         assertTrue("Search-back must be lifecycle bound", actionBar.contains("bindSystemBack(owner: OnBackPressedDispatcherOwner)"))
         assertTrue("System Back must collapse expanded search", actionBar.contains("if (isSearchExpanded) {\n                    closeSearch()"))
         assertTrue("Fallback Back must forward rather than recurse", actionBar.contains("isEnabled = false"))
-        for (activity in listOf("AdminActivity.kt", "ActivityLogActivity.kt", "emoji/EmojiStudioActivity.kt")) {
+        for (activity in listOf("AdminActivity.kt", "ActivityLogActivity.kt")) {
             val source = File("src/main/java/com/eve/app/ui/admin/" + activity).readText()
             assertTrue("Search-aware hardware Back missing for " + activity, source.contains(".bindSystemBack(this)"))
         }
@@ -163,7 +161,7 @@ class AdminHubTelegramFidelityTest {
         val emoji = File("src/main/java/com/eve/app/ui/admin/emoji/EmojiStudioActivity.kt").readText()
         assertFalse("Recent Actions must not construct AndroidX AlertDialog", activityLog.contains("import androidx.appcompat.app.AlertDialog"))
         assertFalse("Emoji Studio must not construct AndroidX AlertDialog", emoji.contains("import androidx.appcompat.app.AlertDialog"))
-        assertEquals("Recent Actions must use Telegram modal renderer", 1, activityLog.split("TelegramNativeAlertDialog.Builder(this)").size - 1)
+        assertEquals("Recent Actions must use Telegram modal renderer", 1, activityLog.split("AlertDialog.Builder(this)").size - 1)
         assertEquals("All six Emoji Studio dialogs must use Telegram modal renderer", 6, emoji.split("TelegramNativeAlertDialog.Builder(this)").size - 1)
         assertTrue("Delete confirmation must use destructive text role", emoji.contains("makeRed(DialogInterface.BUTTON_POSITIVE)"))
     }

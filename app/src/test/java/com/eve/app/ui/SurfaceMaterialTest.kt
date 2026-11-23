@@ -140,9 +140,10 @@ class SurfaceMaterialTest {
     fun testSubmitConfirmationDialog_sourceCodeAndInvariants() {
         val testActivitySource = File("src/main/java/com/eve/app/ui/test/TestActivity.kt").readText()
 
+        assertTrue(testActivitySource.contains("import org.telegram.ui.ActionBar.AlertDialog"))
         assertTrue(
             "confirmSubmit() must use source-isolated Telegram native dialog",
-            testActivitySource.contains("TelegramNativeAlertDialog.Builder(this)")
+            testActivitySource.contains("AlertDialog.Builder(this)")
         )
         assertTrue(
             "confirmSubmit() must set title 'Submit test?'",

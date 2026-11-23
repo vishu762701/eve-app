@@ -18,7 +18,7 @@ class TelegramTestConfirmationSourceContractTest {
         assertTrue(back.contains("viewModel.pauseSession(examId, currentPos)"))
         assertTrue(back.contains("finally { finish() }"))
         assertTrue(back.contains("setOnDismissListener { leaveConfirmDialog = null }"))
-        assertTrue(back.contains("TelegramNativeAlertDialog.Builder(this@TestActivity)"))
+        assertTrue(back.contains("AlertDialog.Builder(this@TestActivity)"))
         assertTrue(back.contains(".setNegativeButton(\"Continue\", null)"))
     }
 
@@ -34,7 +34,7 @@ class TelegramTestConfirmationSourceContractTest {
         }
         assertTrue(confirm.contains(".setPositiveButton(\"Submit\") { _, _ -> submit() }"))
         assertTrue(confirm.contains(".setNegativeButton(\"Cancel\", null)"))
-        assertTrue(confirm.contains("TelegramNativeAlertDialog.Builder(this)"))
+        assertTrue(confirm.contains("AlertDialog.Builder(this)"))
         assertTrue(confirm.contains("dialog.show()"))
         assertTrue(!confirm.contains("DesignSurfaces.dialog(dialog)"))
         assertTrue(confirm.contains("setOnDismissListener { submitConfirmDialog = null }"))
@@ -69,8 +69,7 @@ class TelegramTestConfirmationSourceContractTest {
             notices.split(".let(::showExamNotice)").size >= 3)
         val attemptLimit = activity.substringAfter("if (!canAttempt)")
             .substringBefore("viewModel.start(")
-        assertTrue(attemptLimit.contains(".let(::showExamNotice)"))
-        assertTrue(attemptLimit.contains(".setCancelable(false)"))
+        assertTrue(attemptLimit.contains("showExamNotice(") && attemptLimit.contains("cancelable = false"))
     }
 
     @Test fun dialogCleanupRetainsTimerAndTypographySessionCleanup() {

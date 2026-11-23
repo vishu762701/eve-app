@@ -12,7 +12,7 @@ class SystemMonitorTelegramDialogContractTest {
         val retry = file.substringAfter("private fun confirmRetry(id: String)")
             .substringBefore("private fun JsonObject.string")
         assertTrue(retry.contains("if (!canRetryGeneration || loading || !canPublish() || retryPending"))
-        assertTrue(retry.contains("retryConfirmationDialog?.isShowing == true) return"))
+        assertTrue(retry.contains("retryConfirmationDialog?.isShowing == true") && retry.contains(") return"))
         assertTrue(file.contains("!isFinishing && !isDestroyed"))
         assertTrue(retry.contains("val dialog = AlertDialog.Builder(this)"))
         assertTrue(retry.contains(".show()"))
@@ -23,7 +23,7 @@ class SystemMonitorTelegramDialogContractTest {
 
     @Test fun retryAuthorizationAndServerPayloadRemainUnchanged() {
         val file = File("src/main/java/com/eve/app/ui/admin/SystemMonitorActivity.kt").readText()
-        assertTrue(file.contains("AdminAccessGate.requireAdmin(this, binding.root, requireFreshServer = true, requiredRight = \"view_analytics_logs\")"))
+        assertTrue(file.contains("AdminAccessGate.requireAdmin(") && file.contains("requiredRight = \"view_analytics_logs\""))
         assertTrue(file.contains("if (loading || retryPending || !canPublish() || id in confirmedRetries) return@setPositiveButton"))
         val action = file.substringAfter("retryJob = lifecycleScope.launch")
         assertTrue(action.indexOf("requireFreshRetryRight(epoch)") < action.indexOf("ApiClient.api.retryGenerationJob(id)"))

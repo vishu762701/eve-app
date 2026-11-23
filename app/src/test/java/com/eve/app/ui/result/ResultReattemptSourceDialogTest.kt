@@ -16,9 +16,9 @@ class ResultReattemptSourceDialogTest {
     }
 
     @Test fun reattemptUsesIsolatedTelegramHostAndPreservesDestructiveAction() {
-        assertTrue(code.contains("TelegramNativeAlertDialog.Builder(this@ResultActivity)"))
-        assertTrue(code.contains("requireNotNull(dialog.getActionButton(DialogInterface.BUTTON_POSITIVE))"))
-        assertTrue(code.contains("confirmBtn.setTextColor(ContextCompat.getColor(this@ResultActivity, R.color.system_red_text))"))
+        assertTrue(code.contains("AlertDialog.Builder(this@ResultActivity)"))
+        assertTrue(code.contains("dialog.getButton(DialogInterface.BUTTON_POSITIVE)"))
+        assertTrue(code.contains("confirmBtn.setTextColor(Theme.getColor(Theme.key_text_RedRegular))"))
         assertTrue(!code.contains("TelegramDialogSourceBackground.apply(limitDialog)"))
         assertTrue(code.contains("AttemptLimitManager.canAttempt"))
         assertTrue(code.contains("Attempt Limit Reached"))

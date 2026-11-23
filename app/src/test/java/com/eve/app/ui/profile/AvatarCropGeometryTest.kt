@@ -128,7 +128,7 @@ class AvatarCropGeometryTest {
         val profile = java.io.File(
             "src/main/java/com/eve/app/ui/profile/ProfileActivity.kt"
         ).readText()
-        assertTrue(profile.contains("AvatarCropActivity.intent(this, uri)"))
+        assertTrue(profile.contains("PhotoCropActivity.intent(this, uri)"))
         assertTrue(profile.contains("ProfilePhotoManager.saveCroppedPhoto"))
         assertTrue(profile.contains("pendingPhotoCropped"))
 
