@@ -45,7 +45,7 @@ import com.eve.app.ui.settings.SettingsActivity
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(
-    sdk = [34],
+    sdk = [35],
     application = EveApplication::class,
     shadows = [
         ProfileEditorAuthFixture.ShadowAuth::class,
