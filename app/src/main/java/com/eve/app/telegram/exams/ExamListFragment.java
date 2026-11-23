@@ -74,6 +74,7 @@ public class ExamListFragment extends BaseFragment implements FactorAnimator.Tar
     private RecyclerListView listView;
     private ExamListAdapter adapter;
     private DialogsSearchAdapter searchAdapter;
+    private kotlinx.coroutines.Job examsLoadJob;
 
     private FragmentSearchField searchField;
     private MainTabsLayout tabsView;
@@ -144,6 +145,15 @@ public class ExamListFragment extends BaseFragment implements FactorAnimator.Tar
         adapter = new ExamListAdapter(context);
         searchAdapter = new DialogsSearchAdapter(context);
         listView.setAdapter(adapter);
+        listView.setOnItemClickListener((view, position) -> {
+            if (listView.getAdapter() == adapter) {
+                ExamListEntry entry = adapter.getEntry(position);
+                if (entry != null) {
+                    ExamListLoader.openExam(context, entry);
+                }
+            }
+        });
+        loadExamsFromWorker();
 
         // Pull to search scroll listener
         listView.addOnScrollListener(new RecyclerView.OnScrollListener() {
@@ -404,14 +414,54 @@ public class ExamListFragment extends BaseFragment implements FactorAnimator.Tar
         }
     }
 
+    private void loadExamsFromWorker() {
+        if (examsLoadJob != null) {
+            examsLoadJob.cancel(null);
+        }
+        examsLoadJob = ExamListLoader.loadLiveExams(new ExamListLoader.Callback() {
+            @Override
+            public void onLoaded(@NonNull List<ExamListEntry> entries) {
+                if (adapter != null) {
+                    adapter.submitEntries(entries);
+                }
+            }
+
+            @Override
+            public void onError(@NonNull String message) {
+                // Keep current list state; empty list remains honest rather than showing fake exams.
+            }
+        });
+    }
+
+    @Override
+    public void onFragmentDestroy() {
+        if (examsLoadJob != null) {
+            examsLoadJob.cancel(null);
+            examsLoadJob = null;
+        }
+        super.onFragmentDestroy();
+    }
+
     private class ExamListAdapter extends RecyclerListView.SelectionAdapter {
 
         private final Context context;
-        private final List<DialogCell.CustomDialog> items;
+        private final List<ExamListEntry> entries = new java.util.ArrayList<>();
 
         public ExamListAdapter(Context context) {
             this.context = context;
-            this.items = ExamListFakeData.getFakeExams();
+        }
+
+        public void submitEntries(@NonNull List<ExamListEntry> newEntries) {
+            entries.clear();
+            entries.addAll(newEntries);
+            notifyDataSetChanged();
+        }
+
+        public ExamListEntry getEntry(int position) {
+            if (position < 0 || position >= entries.size()) {
+                return null;
+            }
+            return entries.get(position);
         }
 
         @Override
@@ -421,7 +471,7 @@ public class ExamListFragment extends BaseFragment implements FactorAnimator.Tar
 
         @Override
         public int getItemCount() {
-            return items.size();
+            return entries.size();
         }
 
         @NonNull
@@ -435,8 +485,8 @@ public class ExamListFragment extends BaseFragment implements FactorAnimator.Tar
         @Override
         public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
             DialogCell cell = (DialogCell) holder.itemView;
-            cell.useSeparator = (position != items.size() - 1);
-            cell.setDialog(items.get(position));
+            cell.useSeparator = (position != entries.size() - 1);
+            cell.setDialog(entries.get(position).getDialog());
         }
     }
 }

@@ -310,14 +310,24 @@ class MainActivity : EveBaseActivity(), INavigationLayout, INavigationLayout.INa
                                 }
                             )
                         } else {
-                            startActivity(
-                                Intent(this@MainActivity, TestActivity::class.java)
-                                    .putExtra(Constants.EXTRA_EXAM_ID, exam.id)
-                                    .putExtra(Constants.EXTRA_EXAM_NAME, exam.examName)
-                                    .putExtra(Constants.EXTRA_EXAM_CATEGORY, exam.categoryOrOther)
-                                    .putExtra(Constants.EXTRA_TIME_LIMIT, exam.timeLimitMinutes)
-                                    .putExtra(Constants.EXTRA_NEGATIVE_MARKING, exam.negativeMarkingValue)
+                            val spec = TestInstructionsSpec(
+                                title = exam.examName,
+                                category = exam.categoryOrOther,
+                                questionCount = exam.questionCount,
+                                timeLimitMinutes = exam.timeLimitMinutes,
+                                negativeMarking = exam.negativeMarkingValue
                             )
+                            TestInstructionsSheet.show(this@MainActivity, spec) {
+                                if (isFinishing || isDestroyed) return@show
+                                startActivity(
+                                    Intent(this@MainActivity, TestActivity::class.java)
+                                        .putExtra(Constants.EXTRA_EXAM_ID, exam.id)
+                                        .putExtra(Constants.EXTRA_EXAM_NAME, exam.examName)
+                                        .putExtra(Constants.EXTRA_EXAM_CATEGORY, exam.categoryOrOther)
+                                        .putExtra(Constants.EXTRA_TIME_LIMIT, exam.timeLimitMinutes)
+                                        .putExtra(Constants.EXTRA_NEGATIVE_MARKING, exam.negativeMarkingValue)
+                                )
+                            }
                         }
                     }
                 } catch (cancel: kotlinx.coroutines.CancellationException) {

@@ -248,7 +248,7 @@
       "upstream_sha256": null,
       "mode": "COMPOSED",
       "reason": "Eve host/screen/adapter referencing Telegram components",
-      "eve_sha256": "dbd7d55c58f86960c6e755b68fc0c7cd58b1c33f67399b9514b04971c799d7ac"
+      "eve_sha256": "ccbb1347f6450c47492dc01ab282060c2430b65f1692d2390e545fd29cb3e2c2"
     },
     {
       "path": "app/src/main/java/com/eve/app/telegram/qr/QrScanMorph.java",
@@ -672,7 +672,7 @@
       "upstream_sha256": null,
       "mode": "NEW",
       "reason": "Eve host/screen/adapter referencing Telegram components",
-      "eve_sha256": "ce4b2383d96b572798da653bd1c3b6c0d841e2c609f1d8e181065a1a3326a1d7"
+      "eve_sha256": "5e4d14f2761feea83a41797cdb5b6491ea4dd5b97cb878f70cd8f5e7e57de584"
     },
     {
       "path": "app/src/main/java/com/eve/app/ui/home/HomeBannerAdapter.kt",
@@ -712,7 +712,7 @@
       "upstream_sha256": null,
       "mode": "NEW",
       "reason": "Eve host/screen/adapter referencing Telegram components",
-      "eve_sha256": "0eb81694b0cbd8341938a60bd49cae842ffa96a658233e0edd857e656d2e85a4"
+      "eve_sha256": "49bd3ace95fc05907bb3f2ca5c64c159b1313c2462a2c4ff15af32d1e5f15931"
     },
     {
       "path": "app/src/main/java/com/eve/app/ui/home/TargetExamsBottomSheet.kt",
@@ -2428,6 +2428,22 @@
       "mode": "VERBATIM",
       "eve_sha256": "f26655db5c1452a96a9147e22199b7d440d57a576cc115c1f0f969c7bdd5c8a1",
       "upstream_sha256": "f26655db5c1452a96a9147e22199b7d440d57a576cc115c1f0f969c7bdd5c8a1"
+    },
+    {
+      "path": "app/src/main/java/com/eve/app/ui/home/TestInstructionsSheet.kt",
+      "upstream_path": null,
+      "upstream_sha256": null,
+      "mode": "NEW",
+      "reason": "Eve host/screen/adapter referencing Telegram components",
+      "eve_sha256": "f8e5c27f386c0399c17c961ece46ae689e82a1f7772d19d77afd02b9f91b09ad"
+    },
+    {
+      "path": "app/src/main/java/com/eve/app/telegram/exams/ExamListLoader.kt",
+      "upstream_path": null,
+      "upstream_sha256": null,
+      "mode": "NEW",
+      "reason": "Eve host/screen/adapter referencing Telegram components",
+      "eve_sha256": "e321eb5c476c8aaf9489fffa96c8fef883789ad7a50fa0b8b167f534dbac2a62"
     }
   ],
   "blocks": [

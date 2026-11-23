@@ -349,13 +349,28 @@ class ExamTestsActivity : EveBaseActivity() {
                 }
             )
         } else {
-            val intent = Intent(this, TestActivity::class.java).apply {
-                putExtra(Constants.EXTRA_EXAM_ID, testKey)
-                putExtra(Constants.EXTRA_EXAM_NAME, title)
-                putExtra(Constants.EXTRA_EXAM_CATEGORY, currentExam?.categoryOrOther ?: "Other")
-                putExtra(Constants.EXTRA_TIME_LIMIT, currentExam?.timeLimitMinutes ?: 30)
+            val category = currentExam?.categoryOrOther ?: "Other"
+            val timeLimit = currentExam?.timeLimitMinutes ?: 30
+            val negativeMarking = currentExam?.negativeMarkingValue ?: 0.0
+            val questionCount = if (test.questionCount > 0) test.questionCount else test.questions.size
+            val spec = TestInstructionsSpec(
+                title = title,
+                category = category,
+                questionCount = questionCount,
+                timeLimitMinutes = timeLimit,
+                negativeMarking = negativeMarking
+            )
+            TestInstructionsSheet.show(this, spec) {
+                if (!hasExamTestsOwner() || isFinishing || isDestroyed) return@show
+                val intent = Intent(this, TestActivity::class.java).apply {
+                    putExtra(Constants.EXTRA_EXAM_ID, testKey)
+                    putExtra(Constants.EXTRA_EXAM_NAME, title)
+                    putExtra(Constants.EXTRA_EXAM_CATEGORY, category)
+                    putExtra(Constants.EXTRA_TIME_LIMIT, timeLimit)
+                    putExtra(Constants.EXTRA_NEGATIVE_MARKING, negativeMarking)
+                }
+                startActivity(intent)
             }
-            startActivity(intent)
         }
     }
 
