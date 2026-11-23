@@ -1356,7 +1356,7 @@
       "upstream_path": "TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarPopupWindow.java",
       "upstream_sha256": "8bb24d8cbd230c71617e4754cf14a6bdfb1dbbf8797603f33518d7e12eebdb65",
       "mode": "CUT",
-      "eve_sha256": "770660ec3183a367d74e333776a48b44b2792e09bbb9114a5c6cd537da4f48cf"
+      "eve_sha256": "9004b102ff24920d9595b7dbbf15558db70af1a2e9cd6f553d60bcac560325b9"
     },
     {
       "path": "app/src/main/java/org/telegram/ui/ActionBar/AlertDialog.java",
