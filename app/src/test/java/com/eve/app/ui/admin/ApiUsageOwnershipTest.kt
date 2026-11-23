@@ -45,8 +45,15 @@ class ApiUsageOwnershipTest {
             idle()
         }
     }
-    private fun count(a:ApiUsageActivity)=a.findViewById<TextView>(R.id.tvGeminiCallsCount).text.toString()
-    private fun refresh(a:ApiUsageActivity){a.findViewById<View>(R.id.btnRefresh).performClick();idle()}
+    private inline fun <reified T : View> findAll(root: View): List<T> = buildList {
+        if (root is T) add(root)
+        if (root is android.view.ViewGroup) for (i in 0 until root.childCount) addAll(findAll<T>(root.getChildAt(i)))
+    }
+    private fun count(a:ApiUsageActivity)=findAll<org.telegram.ui.Cells.TextDetailSettingsCell>(a.window.decorView)
+        .single { it.valueTextView.text.toString() == "Gemini AI Calls" }.textView.text.toString()
+    private fun refresh(a:ApiUsageActivity){
+        findAll<org.telegram.ui.ActionBar.ActionBar>(a.window.decorView).single().menu.getItem(1).performClick();idle()
+    }
     private fun answer(index:Int,calls:Long)=ApiUsageBoundaryFixture.reads[index].resume(ApiResponse(true,
         MonthlyApiUsageDto(yearMonth=ApiUsageBoundaryFixture.months[index],monthDisplayName="Confirmed month",
             geminiCalls=calls,geminiSuccessfulCalls=calls,geminiFailedCalls=0,documentsCreated=0,testSubmissions=0,lastUpdated=123)))

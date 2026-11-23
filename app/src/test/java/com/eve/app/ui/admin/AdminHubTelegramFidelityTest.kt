@@ -81,7 +81,7 @@ class AdminHubTelegramFidelityTest {
         assertTrue("AdminRightsEditActivity must exist", rightsActivity.exists())
         val rSource = rightsActivity.readText()
         assertTrue("AdminRightsEditActivity must use AdminAccessGate", rSource.contains("AdminAccessGate.requireAdmin"))
-        assertTrue("AdminRightsEditActivity must use TelegramActionBar", rSource.contains("binding.telegramActionBar"))
+        assertTrue("AdminRightsEditActivity must use Telegram ActionBar", rSource.contains("ActionBar(this)"))
 
         val rightsXml = File("src/main/res/layout/activity_admin_rights_edit.xml").readText()
         assertTrue("Rights layout must contain headerRights", rightsXml.contains("android:id=\"@+id/headerRights\""))

@@ -61,8 +61,18 @@ class SystemMonitorOwnershipTest {
         if (root is TextView) add(root)
         if (root is ViewGroup) for (i in 0 until root.childCount) addAll(texts(root.getChildAt(i)))
     }
-    private fun root(a: SystemMonitorActivity): View = a.findViewById(R.id.layoutMonitorContent)
-    private fun button(a: SystemMonitorActivity, label: String) = texts(root(a)).single { it.text.toString()==label }
+    private inline fun <reified T : View> findAll(root: View): List<T> = buildList {
+        if (root is T) add(root)
+        if (root is ViewGroup) for (i in 0 until root.childCount) addAll(findAll<T>(root.getChildAt(i)))
+    }
+    private fun root(a: SystemMonitorActivity): View = a.findViewById(android.R.id.content)
+    private fun buttons(root: View) = findAll<org.telegram.ui.Stories.recorder.ButtonWithCounterView>(root)
+    private fun cells(root: View) = findAll<org.telegram.ui.Cells.TextDetailSettingsCell>(root)
+    private fun button(a: SystemMonitorActivity, label: String) = buttons(root(a)).single { it.text.text?.toString()==label }
+    private fun hasRetryButton(a: SystemMonitorActivity) = buttons(root(a)).any { it.text.text?.toString()=="Retry Exam" }
+    private fun hasProfileCount(a: SystemMonitorActivity, count: Int) = cells(root(a)).any {
+        it.valueTextView.text.toString()=="Registered profiles" && it.textView.text.toString()==count.toString()
+    }
     private fun confirm(a: SystemMonitorActivity): View {
         button(a,"Retry Exam").performClick(); idle()
         val dialog = ShadowDialog.getLatestDialog() as AlertDialog
@@ -172,7 +182,7 @@ class SystemMonitorOwnershipTest {
         confirm(a).performClick(); idle()
         SystemMonitorBoundaryFixture.retries.last().resume(response("""{"testId":"test-1","jobId":"new-job","questionCount":10}""")); idle()
         assertEquals(before+1,SystemMonitorBoundaryFixture.operationReads)
-        assertFalse(texts(root(a)).any { it.text.toString()=="Retry Exam" })
+        assertFalse(hasRetryButton(a))
     }
     @Test fun delayedWorkerReplyAfterStopCannotRefreshOrShowFailure() = exercise { a,c ->
         confirm(a).performClick(); idle()
@@ -189,8 +199,8 @@ class SystemMonitorOwnershipTest {
         assertEquals(2,SystemMonitorBoundaryFixture.overviewReads.size)
         SystemMonitorBoundaryFixture.overviewReads[1].resume(overview(22)); idle()
         SystemMonitorBoundaryFixture.overviewReads[0].resume(overview(11)); idle()
-        assertTrue(texts(root(a)).any { it.text.toString()=="Registered profiles: 22" })
-        assertFalse(texts(root(a)).any { it.text.toString()=="Registered profiles: 11" })
+        assertTrue(hasProfileCount(a, 22))
+        assertFalse(hasProfileCount(a, 11))
     }
     @Test fun delayedReadCannotPublishAfterAccountChange() = exercise { a,_ ->
         SystemMonitorBoundaryFixture.holdOverview=true
@@ -198,7 +208,7 @@ class SystemMonitorOwnershipTest {
         load.invoke(a); idle()
         ProfileEditorAuthFixture.listeners.clear(); ProfileEditorAuthFixture.setOwner("owner-b")
         SystemMonitorBoundaryFixture.overviewReads.last().resume(overview(77)); idle()
-        assertFalse(texts(root(a)).any { it.text.toString()=="Registered profiles: 77" })
+        assertFalse(hasProfileCount(a, 77))
     }
     @Test fun malformedWorkerAcknowledgmentsNeverConfirmGeneration() {
         for (json in listOf("{}", """{"testId":"t","jobId":"j"}""",
@@ -216,6 +226,6 @@ class SystemMonitorOwnershipTest {
     }
     @Test fun analyticsOnlyEntryHasNoMutationControl() {
         rights(viewRight)
-        exercise { a,_ -> assertFalse(texts(root(a)).any { it.text.toString()=="Retry Exam" }) }
+        exercise { a,_ -> assertFalse(hasRetryButton(a)) }
     }
 }

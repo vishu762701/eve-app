@@ -66,7 +66,7 @@ class TelegramTestConfirmationSourceContractTest {
             notices.contains(".setNeutralButton(\"Cancel\", null)") &&
             notices.contains(".setTitle(\"Submission Saved Offline\")"))
         assertTrue("Recovery and offline acknowledgements share the native source host",
-            notices.split(".let(::showExamNotice)").size >= 3)
+            notices.contains(".let(::showExamNotice)") && notices.contains("showExamNotice(it, cancelable = false)"))
         val attemptLimit = activity.substringAfter("if (!canAttempt)")
             .substringBefore("viewModel.start(")
         assertTrue(attemptLimit.contains("showExamNotice(") && attemptLimit.contains("cancelable = false"))

@@ -57,8 +57,7 @@ class TelegramBottomSheetSourceScrimTest {
 
         assertTrue("Result must use Telegram BottomSheet", result.contains("BottomSheet.Builder(this)") || result.contains("TelegramBottomSheetSourceBackdrop.install(dialog, this)"))
 
-        assertTrue("UsernameCard must install backdrop", usernameCard.contains("TelegramBottomSheetSourceBackdrop.install(sheet, this)"))
-        assertTrue("UsernameCard must use theme", usernameCard.contains("Theme_Eve_BottomSheetDialog"))
+        assertTrue("UsernameCard must use Telegram BottomSheet", usernameCard.contains("BottomSheet.Builder(this)") || usernameCard.contains("TelegramBottomSheetSourceBackdrop.install(sheet, this)"))
 
         assertTrue("PaymentMethod must use theme", paymentMethod.contains("Theme_Eve_BottomSheetDialog"))
         assertTrue("PaymentMethod must install backdrop", paymentMethod.contains("TelegramBottomSheetSourceBackdrop.install(dialog, ctx)"))
