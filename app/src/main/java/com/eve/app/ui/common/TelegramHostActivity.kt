@@ -56,6 +56,7 @@ abstract class TelegramHostActivity<F : BaseFragment> :
 
         drawerLayoutContainer = DrawerLayoutContainer(this)
         actionBarLayout = ActionBarLayout(this, true)
+        actionBarLayout.init(ArrayList())
 
         drawerLayoutContainer.setParentActionBarLayout(actionBarLayout)
         drawerLayoutContainer.setActionBarLayout(actionBarLayout)

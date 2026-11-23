@@ -394,6 +394,7 @@ class MainActivity : EveBaseActivity(), INavigationLayout, INavigationLayout.INa
 
         drawerLayoutContainer = DrawerLayoutContainer(this)
         actionBarLayout = ActionBarLayout(this, true)
+        actionBarLayout.init(ArrayList())
 
         drawerLayoutContainer.setParentActionBarLayout(actionBarLayout)
         drawerLayoutContainer.setActionBarLayout(actionBarLayout)
