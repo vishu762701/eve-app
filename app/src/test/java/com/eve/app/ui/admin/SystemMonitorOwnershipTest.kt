@@ -61,10 +61,11 @@ class SystemMonitorOwnershipTest {
         if (root is TextView) add(root)
         if (root is ViewGroup) for (i in 0 until root.childCount) addAll(texts(root.getChildAt(i)))
     }
-    private inline fun <reified T : View> findAll(root: View): List<T> = buildList {
-        if (root is T) add(root)
-        if (root is ViewGroup) for (i in 0 until root.childCount) addAll(findAll<T>(root.getChildAt(i)))
+    private fun <T : View> findAll(root: View, type: Class<T>): List<T> = buildList {
+        if (type.isInstance(root)) add(type.cast(root)!!)
+        if (root is ViewGroup) for (i in 0 until root.childCount) addAll(findAll(root.getChildAt(i), type))
     }
+    private inline fun <reified T : View> findAll(root: View): List<T> = findAll(root, T::class.java)
     private fun root(a: SystemMonitorActivity): View = a.findViewById(android.R.id.content)
     private fun buttons(root: View) = findAll<org.telegram.ui.Stories.recorder.ButtonWithCounterView>(root)
     private fun cells(root: View) = findAll<org.telegram.ui.Cells.TextDetailSettingsCell>(root)

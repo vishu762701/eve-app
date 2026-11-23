@@ -54,10 +54,11 @@ class EditAboutOwnershipTest {
         }
     }
     private fun read(index:Int,value:AppContent=original){AppContentBoundaryFixture.reads[index].resume(ApiResponse(true,value));idle()}
-    private inline fun <reified T : View> findAll(root: View): List<T> = buildList {
-        if (root is T) add(root)
-        if (root is android.view.ViewGroup) for (i in 0 until root.childCount) addAll(findAll<T>(root.getChildAt(i)))
+    private fun <T : View> findAll(root: View, type: Class<T>): List<T> = buildList {
+        if (type.isInstance(root)) add(type.cast(root)!!)
+        if (root is android.view.ViewGroup) for (i in 0 until root.childCount) addAll(findAll(root.getChildAt(i), type))
     }
+    private inline fun <reified T : View> findAll(root: View): List<T> = findAll(root, T::class.java)
     private fun titleInput(a:EditAboutActivity)=findAll<EditText>(a.window.decorView).single { it.hint?.toString() == "Page title" }
     private fun bodyInput(a:EditAboutActivity)=findAll<EditText>(a.window.decorView).single { it.hint?.toString() == "Page body content" }
     private fun saveButton(a:EditAboutActivity):View=findAll<org.telegram.ui.Stories.recorder.ButtonWithCounterView>(a.window.decorView).single()

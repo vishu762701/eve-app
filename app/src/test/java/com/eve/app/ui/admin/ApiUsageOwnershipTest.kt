@@ -45,10 +45,11 @@ class ApiUsageOwnershipTest {
             idle()
         }
     }
-    private inline fun <reified T : View> findAll(root: View): List<T> = buildList {
-        if (root is T) add(root)
-        if (root is android.view.ViewGroup) for (i in 0 until root.childCount) addAll(findAll<T>(root.getChildAt(i)))
+    private fun <T : View> findAll(root: View, type: Class<T>): List<T> = buildList {
+        if (type.isInstance(root)) add(type.cast(root)!!)
+        if (root is android.view.ViewGroup) for (i in 0 until root.childCount) addAll(findAll(root.getChildAt(i), type))
     }
+    private inline fun <reified T : View> findAll(root: View): List<T> = findAll(root, T::class.java)
     private fun count(a:ApiUsageActivity)=findAll<org.telegram.ui.Cells.TextDetailSettingsCell>(a.window.decorView)
         .single { it.valueTextView.text.toString() == "Gemini AI Calls" }.textView.text.toString()
     private fun refresh(a:ApiUsageActivity){
