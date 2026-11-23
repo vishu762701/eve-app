@@ -99,8 +99,15 @@ class ExamAdapter(
 
     inner class HeaderVH(private val cell: HeaderCell) : RecyclerView.ViewHolder(cell) {
         fun bind(header: HomeListItem.Header) {
-            cell.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite))
+            val palette = com.eve.app.theme.TelegramThemeEngine.resolveCurrentPalette(cell.context)
+            cell.setBackgroundColor(palette.surface)
             cell.setText(header.title)
+            cell.textView.setTextColor(
+                com.eve.app.theme.TelegramColorRoles.accessibleForeground(
+                    Theme.getColor(Theme.key_windowBackgroundWhiteBlueHeader),
+                    listOf(palette.surface)
+                )
+            )
             val categoryEmoji = com.eve.app.ui.admin.emoji.EmojiRenderer.getCategoryEmoji(header.title)
             com.eve.app.ui.admin.emoji.EmojiRenderer.attachEmoji(cell.textView, header.title, categoryEmoji)
         }
@@ -239,13 +246,14 @@ class ExamAdapter(
     ) : RecyclerView.ViewHolder(container) {
         fun bind(post: FeedbackPost) {
             val ctx = container.context
-            container.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite))
+            val palette = com.eve.app.theme.TelegramThemeEngine.resolveCurrentPalette(ctx)
+            container.setBackgroundColor(palette.surface)
             tvTitle.text = post.title
-            tvTitle.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText))
+            tvTitle.setTextColor(palette.textPrimary)
             tvMessage.text = post.message
-            tvMessage.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText))
+            tvMessage.setTextColor(palette.textPrimary)
             tvDate.text = formatTimestamp(post.timestamp)
-            tvDate.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText))
+            tvDate.setTextColor(palette.textSecondary)
             etReply.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText))
             etReply.setHintTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteHintText))
             etReply.setCursorColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText))
