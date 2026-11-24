@@ -1,24 +1,14 @@
-# EVE handoff
+# EVE handoff — final requirements locked
 
-Read `EVE_PROJECT_STATE.md` for the permanent record and NEXT ACTION. Development is on `main` only.
-
-## Done
-- T1 (Authentic Telegram Navigation Architecture): `ActionBarLayout.java` (CUT) and `DrawerLayoutContainer.java` (VERBATIM) integrated into `TelegramHostActivity.kt` and `MainActivity.kt`. Replaced fake stubs with genuine Telegram fragment stack, gesture physics, dual-container view recycling, and `INavigationLayout` delegation. Added `TelegramNavigationIntegrationTest.kt`. Expanded `PORT_MANIFEST.json` to 327 verified files; `verify_telegram_port.py` passes with zero errors.
-- Main has a read-only, on-demand diagnostic for the entire debug JVM suite, the host startup correction for offline UI tests, and an additional sandbox-context regression. No production authorization or source pin changed.
-- `AGENTS.md` and `BUILD_FAILURE_RULES.md` now permit evidence-based repair without routine approval. Only the owner accepts a screen.
-
-## In progress
-- S0: original patch verified against the main workflow preimage. Its 18,832-byte result is not yet on main; the whole-text transport previously truncated it. Use a verified blob or authenticated Git, not a probe or PR.
-- S1: [before](https://github.com/vishu762701/eve-app/actions/runs/45026877717/job/137221732340) 255/1,305 failed; [after](https://github.com/vishu762701/eve-app/actions/runs/45027710308/job/137224271291) 153/1,306 failed, zero skipped. These are JVM results, not FULL.
-- S2: three missing emulator/gallery entry points and strengthened checks are prepared as one patch, not installed or emulator-verified. T1-T10 stay open.
-
-## Next
-- Publish the exact S0 bytes on main, verify them by commit SHA, then run `build.yml` FULL with `publish_verified_apk=false`.
-- Apply and test the Profile fix and manifest update atomically. Keep S2 separate. Never merge historical packaging probes.
-
-## Known bugs
-- PROFILE-001: confirmed JVM failure at `ProfileTelegramViewTree.kt:389`; the first value row is built at line 153, before `valueViews` at line 241. No post-fix Android run or same-build phone trace yet.
-- FULL-001: 77 remaining JVM failures point to theme initialization; other failures include obsolete dialog casts and missing provenance files. Do not weaken assertions or invent evidence.
-
-## Open decisions
-- Legacy Firebase retirement and production D1 migration 0031 remain separate from normal CI. No production deployment is authorized by this handoff.
+1. Read `AGENTS.md`, `docs/EVE_TELEGRAM_UI_REQUIREMENTS.md`, `BUILD_FAILURE_RULES.md`, `EVE_PROJECT_STATE.md`, and `PORT_MANIFEST.json` before work.
+2. Telegram source of truth: `DrKLO/Telegram@21f7d109da6ab3506c9e9577f98c6a38771ab335`.
+3. Sole visual source: `docs/reference/eve-telegram-ui-reference-pack-25.zip` (25 owner screenshots; SHA-256 `ca5e07965817862ede93c206ba78dfc41d88234d0426b699ad25503c9d0c0ff7`).
+4. All 25 screens/states are mandatory. Use actual upstream Telegram screens/components plus their full dependency closure; customize with real EVE data/actions.
+5. No screenshot-only imitation, no custom replacement where upstream exists, no fake/dead controls, no silent omission.
+6. Preserve existing EVE exam, account, admin, backend, data and security functionality.
+7. First task after this rule update: create/complete `docs/EVE_TELEGRAM_SCREEN_SOURCE_MAP.md` for references 01–25, based on actual pinned source inspection.
+8. Previous implementation-matrix `COMPLETE` claims are not final acceptance; revalidate every screen against the final contract.
+9. PR #5: `gemini/eve-full-implementation` → `main`; observed HEAD `0ba658eb4842a2e71d08edea08fe9aee6b7d36a8`.
+10. FULL run `45180331464`: 7/7 verification jobs passed; APK publication was skipped, so no APK artifact was uploaded by that run.
+11. Use feature branches + PRs. Never push directly to main or rewrite history. Do not weaken tests, source integrity, auth, data, scoring or release gates.
+12. Report exact commit, CI run, tests, visual evidence, APK artifact status and all unverified limitations. Only owner accepts final screens.

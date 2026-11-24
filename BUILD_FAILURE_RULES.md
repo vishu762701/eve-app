@@ -1,60 +1,71 @@
-# BUILD_FAILURE_RULES.md
+# BUILD_FAILURE_RULES.md — mandatory failure diagnosis and repair policy
 
-Binding rules for any agent (Antigravity, Codex, or any other) when a CI build fails. They apply on top of AGENTS.md.
+These rules apply to every agent and developer. They supplement `AGENTS.md` and may be made stricter by the owner, never weaker.
 
-## Rule 0 — Precedence
-A mission file may make these rules stricter (for example fewer fix cycles). It may never loosen them or widen its own scope to get a build green.
+## 1. First causal error before edits
 
+1. Fetch the exact failing workflow run, commit SHA, failed job and complete logs.
+2. Find the first causal error/assertion/exception (not the last cascading Gradle message).
+3. Record file, line, task/test, actual exception and why it is causal.
+4. Classify exactly one primary category:
+   - `TELEGRAM_SOURCE`: pinned upstream Java/Kotlin/resource/JNI code;
+   - `EVE_ANDROID`: EVE Android Java/Kotlin/UI/business code;
+   - `RESOURCE`: Android resource, theme, drawable, manifest or AAPT;
+   - `DEPENDENCY_TOOLCHAIN`: Gradle/Maven/NDK/CMake/Rust/SDK resolution or mismatch;
+   - `BACKEND_DATA`: Worker, D1, Firebase, rules, migrations or API;
+   - `CI_CONFIG`: workflow/script/runner wiring or missing CI file;
+   - `INFRA`: runner/network/service outage or proven infrastructure timeout.
+5. Do not edit code until the root cause and evidence are written down.
 
-## Rule 0.5 — Source integrity verifier is mandatory first gate
-Before Android compilation, the `telegram-port-integrity` CI job runs `.github/scripts/verify_telegram_port.py`. A failure of the verifier is a PORT_INTEGRITY failure, not an INFRA failure unless network/runner evidence proves that classification. Fixes must restore manifest and source integrity; weakening the verifier is forbidden.
+## 2. Infrastructure failures
 
-## Rule 1 — Find the root error, then classify
-Read the log from the FIRST `error`, `FAILED`, `E0xxx` or `fatal` line. The Gradle stack trace at the end is usually only a symptom. Quote the root error with file and line, then put the failure in exactly one category. No fix starts before this is written down.
-- `NATIVE_TELEGRAM`: Telegram's jni/C++ code.
-- `NATIVE_EVE`: Eve's own native code (`eve_*`, Rust `tlottie`) or its toolchain.
-- `JAVA_TELEGRAM`: failing file is under `org/telegram/`.
-- `KOTLIN_EVE`: failing file is under `com/eve/`.
-- `RESOURCE`: aapt, missing drawable, string, dimen, style or color.
-- `DEPENDENCY`: Gradle or Maven resolution, version conflict.
-- `CI_CONFIG`: `.github/`, a missing path, or a missing tool.
-- `INFRA`: network error, runner problem, timeout, HTTP 5xx.
+Retry once without code changes. If it passes, report it as flaky infrastructure. Do not change application code to compensate for an infrastructure-only failure. If it repeats, capture runner/network evidence and continue independent work.
 
-## Rule 2 — INFRA failures
-Re-run once with no code change. If it passes, report it as flaky. Never change code because of an INFRA failure.
+## 3. Telegram-derived source failures
 
-## Rule 3 — A Telegram-derived file fails
-Look the file up in `PORT_MANIFEST.json`.
-- `VERBATIM`: its sha256 must equal `upstream_sha256`. If not, restore the verbatim file from the pinned source and rebuild. If equal and it still fails, go to Rule 4.
-- `CUT` or `SHIM`: its sha256 must equal the recorded `eve_sha256`. If not, someone edited it without recording; report the drift. Compare with upstream: every difference must sit inside an `EVE-CUT` or `EVE-SHIM` block. Restore upstream for any difference outside those blocks, then go to Rule 4.
-- Not in the manifest: it is Eve-owned code.
+Check the affected file against `PORT_MANIFEST.json` and the pinned Telegram SHA.
 
-## Rule 4 — The file matches its record and still fails
-This is usually a missing dependency or resource, not an upstream bug. Try in this order and stop at the first that works:
-1. The missing class, resource or string exists upstream at the pinned revision: add it verbatim, record it as `VERBATIM`, only if it is UI-only and within the mission's stop limits.
-2. The missing symbol is used only by a feature the mission cuts: remove the usage inside an `EVE-CUT` block.
-3. A minimal `EVE-SHIM` with only the members actually used, only if 1 and 2 are impossible.
-4. If none work: stop and report file, line, exact error, and what upstream has at that line.
-Never change Telegram layout, measure, draw, dimension, color or logic to make a build pass.
+- `VERBATIM`: imported file bytes must match the pinned upstream source exactly.
+- `CUT`: differences must be deletion-only and precisely recorded.
+- `SHIM`: minimal and explicitly documented; never a replacement UI.
+- `TRANSPLANT` / `EVE-COPY`: only byte-identical copied blocks may use these labels.
+- `COMPOSED` / `EVE-REF`: adapted code must be separately reviewed and must not replace original Telegram rendering/interaction when the upstream component can be used.
+- `NEW`: EVE-owned code only; it must not be represented as original Telegram code.
 
-## Rule 5 — Build config pins (checked against the pinned Telegram source on 2026-11-21)
-- Must match Telegram: `compileSdk` 36, `targetSdk` 36, NDK `27.2.12479018`, CMake `3.22.1`.
-- Differ today and must NOT be changed without an owner decision: `minSdk` (Eve 24, Telegram 23), Android Gradle Plugin (Eve 8.5.2, Telegram 8.13.2), Gradle version.
-- Eve-only components with no Telegram equivalent (the Rust toolchain for `tlottie` and the QR native renderer) are pinned by `.github/scripts/prepare-qr-native.sh`. Follow that file; do not change those pins without an owner decision.
-- If a failure traces to one of these differences, stop and report the evidence. Do not bump versions on your own.
+A hash match does not prove runtime use. Check the actual navigation entry point, live view hierarchy and behavior. Restore unapproved drift. Update manifest hashes/provenance atomically with source changes.
 
-## Rule 6 — Every fix is recorded
-- Every changed Telegram-derived file uses `// EVE-CUT` or `// EVE-SHIM` markers.
-- `PORT_MANIFEST.json` records the file with `mode` and the new `eve_sha256`.
-- The report lists every changed file and line.
+## 4. Fix order
 
-## Rule 7 — Continue on evidence, not on a retry count
-Record the failing run and SHA, first causal error or frame, attempted fix and verification result in EVE_PROJECT_STATE.md. A further routine attempt needs new evidence or a discriminating regression test, not owner approval. Do not retry the same hypothesis blindly. If a change causes a new regression, isolate it and revert only that change with a new commit; never reset or rewrite main. When evidence, access or production authorization is missing, record that blocker and continue independent eligible work. Keep all existing tests, integrity gates, toolchain pins and production safeguards.
+1. Reproduce failure with the smallest relevant test or workflow job.
+2. Add/retain a regression test that fails before the fix.
+3. Inspect the pinned upstream implementation and full dependency/resource closure.
+4. Make the smallest root-cause fix that preserves original Telegram UI behavior and EVE functionality.
+5. Do not change Telegram measurement, rendering, colors, dimensions, gesture physics or animations to hide a failure.
+6. Run the focused test, affected module tests, relevant integration tests and required CI gates.
+7. Read back the exact committed bytes and verify the tested SHA matches the commit.
 
-## Rule 8 — Report format
-Category, root error (file:line), fix applied or none, files changed, CI run URL and status for every cycle, and everything UNVERIFIED. "Fixed" means a green CI run URL is in the report. Without it write `NOT FIXED`.
+Never replace an upstream screen/component with a custom lookalike as a build workaround.
 
-## Never allowed
-- Deleting or weakening tests, lint, or CI steps to get green.
-- Suppressing warnings or errors (`@SuppressWarnings`, lint baselines, `-w`, disabling checks) on Telegram files.
-- Writing "verified" or "fixed" without a green CI run URL.
+## 5. Build/toolchain configuration
+
+Do not change SDK, NDK, CMake, AGP, Gradle, Rust, native renderer or dependency pins just to make a failure disappear. Inspect the pinned Telegram configuration and current EVE configuration, provide evidence of incompatibility, explain the impact and obtain owner approval for a version/pin change. Preserve the QR/native renderer and all ABI coverage unless the owner explicitly approves a product change.
+
+## 6. Tests, security and integrity are non-negotiable
+
+Never delete, skip, weaken or rewrite assertions to make CI green. Never disable lint, source-integrity checks, emulator gates, screenshot review, backend rules or security checks. Never suppress warnings/errors on Telegram-derived code to hide drift. Never loosen auth, RBAC, Firestore/Storage rules, server-authoritative scoring, submission integrity or release signing.
+
+A stale source-contract test must be corrected to assert the actual migrated upstream behavior, not deleted or weakened. A test must not force reintroduction of obsolete UI solely to satisfy a stale assertion.
+
+## 7. Required evidence and reporting
+
+For every failure/fix cycle, record:
+
+- run URL, tested commit SHA and failed job;
+- category and first causal error with file:line;
+- reproduction and regression-test evidence;
+- files/lines changed and reason;
+- focused test and full relevant CI results;
+- whether emulator/physical-device behavior was actually tested;
+- remaining `UNVERIFIED` or `BLOCKED` items.
+
+Use `NOT FIXED` until a relevant green CI run proves the fix. A green build alone does not prove Telegram source fidelity, runtime use, screen completeness or visual acceptance.
