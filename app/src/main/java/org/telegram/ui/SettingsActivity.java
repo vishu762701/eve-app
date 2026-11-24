@@ -8,6 +8,7 @@
 
 package org.telegram.ui;
 
+import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -37,7 +38,9 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.math.MathUtils;
 import androidx.core.view.ViewCompat;
+import androidx.recyclerview.widget.RecyclerView;
 import androidx.core.view.WindowInsetsCompat;
 
 import org.telegram.messenger.AndroidUtilities;
@@ -51,7 +54,9 @@ import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.ActionBar.ThemeDescription;
 import org.telegram.ui.Components.AvatarDrawable;
+import org.telegram.ui.Components.CubicBezierInterpolator;
 import org.telegram.ui.Components.IconBackgroundColors;
+import org.telegram.ui.Components.LinkSpanDrawable;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.RecyclerListView;
 import org.telegram.ui.Components.UItem;
@@ -93,8 +98,11 @@ public class SettingsActivity extends BaseFragment {
     private TextView subtitleView;
     private ImageView avatarView;
     private AvatarDrawable avatarDrawable;
+    private FrameLayout avatarContainer;
     private FrameLayout cameraButton;
     private FrameLayout cameraBackground;
+    private boolean actionBarVisible;
+    private ValueAnimator actionBarVisibleAnimator;
     private TextView versionView;
     private ActionBarMenuItem searchItem;
     private ActionBarMenuItem otherItem;
@@ -142,6 +150,7 @@ public class SettingsActivity extends BaseFragment {
                 if (listView != null && listView.adapter != null) {
                     listView.adapter.update(false);
                 }
+                updateActionBarVisible();
             }
 
             @Override
@@ -150,6 +159,7 @@ public class SettingsActivity extends BaseFragment {
                 if (listView != null && listView.adapter != null) {
                     listView.adapter.update(false);
                 }
+                updateActionBarVisible();
             }
 
             @Override
@@ -180,7 +190,7 @@ public class SettingsActivity extends BaseFragment {
         headerLayout.setGravity(Gravity.CENTER_HORIZONTAL);
         headerLayout.setPadding(AndroidUtilities.dp(16), AndroidUtilities.dp(16), AndroidUtilities.dp(16), AndroidUtilities.dp(14));
 
-        FrameLayout avatarContainer = new FrameLayout(context);
+        avatarContainer = new FrameLayout(context);
         avatarContainer.setContentDescription(LocaleController.getString(R.string.AccDescrProfilePicture));
         avatarDrawable = new AvatarDrawable();
         avatarView = new ImageView(context);
@@ -245,6 +255,13 @@ public class SettingsActivity extends BaseFragment {
         listView.setSectionsDrawBackground(true);
         listView.setClipToPadding(false);
         listView.setPadding(0, 0, 0, AndroidUtilities.dp(24));
+        listView.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {
+                updateActionBarVisible();
+                updateAvatarHide();
+            }
+        });
         contentView.addView(listView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
 
         ViewCompat.setOnApplyWindowInsetsListener(contentView, (v, insets) -> {
@@ -257,6 +274,7 @@ public class SettingsActivity extends BaseFragment {
 
         updateUserInfo();
         listView.adapter.update(false);
+        updateActionBarVisible(true, false);
 
         return fragmentView = contentView;
     }
@@ -321,15 +339,89 @@ public class SettingsActivity extends BaseFragment {
         }
     }
 
+    private void updateActionBarVisible() {
+        updateActionBarVisible(false, true);
+    }
+
+    private void updateActionBarVisible(boolean force, boolean animated) {
+        final boolean visible;
+        if (searchItem != null && searchItem.isSearchFieldVisible2()) {
+            visible = true;
+        } else if (listView != null && listView.getChildCount() > 0) {
+            final View firstChild = listView.getChildAt(0);
+            visible = (
+                listView.getChildAdapterPosition(firstChild) > 0 ||
+                firstChild.getY() + firstChild.getHeight() < AndroidUtilities.dp(56)
+            );
+        } else {
+            visible = false;
+        }
+        if (actionBarVisible == visible && !force) return;
+        actionBarVisible = visible;
+        if (actionBarVisibleAnimator != null) {
+            actionBarVisibleAnimator.cancel();
+            actionBarVisibleAnimator = null;
+        }
+        float currentAlpha = actionBar != null && actionBar.getTitleTextView() != null ? actionBar.getTitleTextView().getAlpha() : (visible ? 0f : 1f);
+        if (!animated) {
+            setActionBarVisibilityFactor(visible ? 1f : 0f);
+        } else {
+            actionBarVisibleAnimator = ValueAnimator.ofFloat(currentAlpha, visible ? 1.0f : 0.0f);
+            actionBarVisibleAnimator.addUpdateListener(a -> setActionBarVisibilityFactor((float) a.getAnimatedValue()));
+            actionBarVisibleAnimator.setInterpolator(CubicBezierInterpolator.EASE_OUT_QUINT);
+            actionBarVisibleAnimator.setDuration(420);
+            actionBarVisibleAnimator.start();
+        }
+    }
+
+    private void setActionBarVisibilityFactor(float factor) {
+        if (actionBar != null && actionBar.getTitleTextView() != null) {
+            actionBar.getTitleTextView().setAlpha(factor);
+        }
+    }
+
+    private void updateAvatarHide() {
+        if (listView == null || avatarContainer == null || topView == null) return;
+        if (listView.getChildCount() == 0) return;
+        View firstChild = listView.getChildAt(0);
+        int pos = listView.getChildAdapterPosition(firstChild);
+        float shown;
+        if (pos > 0) {
+            shown = 0f;
+        } else {
+            int h = Math.max(1, topView.getHeight());
+            shown = MathUtils.clamp(1f + firstChild.getY() / (h * 0.65f), 0f, 1f);
+        }
+        float scale = AndroidUtilities.lerp(0.65f, 1f, shown);
+        avatarContainer.setScaleX(scale);
+        avatarContainer.setScaleY(scale);
+        avatarContainer.setAlpha(shown);
+        if (cameraButton != null) {
+            cameraButton.setAlpha(MathUtils.clamp((shown - 0.5f) / 0.5f, 0f, 1f));
+        }
+    }
+
+    @Override
+    public boolean onBackPressed() {
+        if (searchItem != null && searchItem.isSearchFieldVisible2()) {
+            actionBar.closeSearchField(true);
+            return false;
+        }
+        return super.onBackPressed();
+    }
+
     /**
-     * Ref 04 (04_settings_ask_question_dialog.jpg): Original Telegram AlertDialog for Ask a Question
-     * with inline clickable FAQ link, Cancel, and Ask Support actions bound to EVE.
+     * Ref 04 (04_settings_ask_question_dialog.jpg): Restored upstream AlertsCreator.createSupportAlert
+     * using LinkSpanDrawable.LinksTextView (16dp, 23dp horizontal padding, LinkMovementMethodMy)
+     * inside original org.telegram.ui.ActionBar.AlertDialog.Builder.
      */
     public AlertDialog showAskQuestionDialog(Runnable onOpenFaq, Runnable onAskSupport) {
         Context context = getParentActivity();
         if (context == null) return null;
 
         final AlertDialog[] dialogRef = new AlertDialog[1];
+        final LinkSpanDrawable.LinksTextView message = new LinkSpanDrawable.LinksTextView(context, getResourceProvider());
+
         String intro = "Please note that EVE Support replies are handled by our team. We try to respond as quickly as possible, but it may take a while.\n\n";
         String faqPromptPrefix = "Please take a look at the ";
         String faqLinkText = "EVE FAQ";
@@ -337,17 +429,17 @@ public class SettingsActivity extends BaseFragment {
         String troubleLinkText = "troubleshooting";
         String ending = ".";
 
-        SpannableStringBuilder message = new SpannableStringBuilder();
-        message.append(intro);
-        message.append(faqPromptPrefix);
-        int faqStart = message.length();
-        message.append(faqLinkText);
-        int faqEnd = message.length();
-        message.append(faqPromptSuffix);
-        int troubleStart = message.length();
-        message.append(troubleLinkText);
-        int troubleEnd = message.length();
-        message.append(ending);
+        SpannableStringBuilder spanned = new SpannableStringBuilder();
+        spanned.append(intro);
+        spanned.append(faqPromptPrefix);
+        int faqStart = spanned.length();
+        spanned.append(faqLinkText);
+        int faqEnd = spanned.length();
+        spanned.append(faqPromptSuffix);
+        int troubleStart = spanned.length();
+        spanned.append(troubleLinkText);
+        int troubleEnd = spanned.length();
+        spanned.append(ending);
 
         ClickableSpan faqSpan = new ClickableSpan() {
             @Override
@@ -375,13 +467,20 @@ public class SettingsActivity extends BaseFragment {
                 ds.setUnderlineText(false);
             }
         };
-        message.setSpan(faqSpan, faqStart, faqEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        message.setSpan(troubleSpan, troubleStart, troubleEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        spanned.setSpan(faqSpan, faqStart, faqEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        spanned.setSpan(troubleSpan, troubleStart, troubleEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+
+        message.setText(spanned);
+        message.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16);
+        message.setLinkTextColor(Theme.getColor(Theme.key_dialogTextLink, getResourceProvider()));
+        message.setHighlightColor(Theme.getColor(Theme.key_dialogLinkSelection, getResourceProvider()));
+        message.setPadding(AndroidUtilities.dp(23), 0, AndroidUtilities.dp(23), 0);
+        message.setMovementMethod(new AndroidUtilities.LinkMovementMethodMy());
+        message.setTextColor(Theme.getColor(Theme.key_dialogTextBlack, getResourceProvider()));
 
         AlertDialog.Builder builder = new AlertDialog.Builder(context, getResourceProvider());
+        builder.setView(message);
         builder.setTitle(LocaleController.getString(R.string.AskAQuestion));
-        builder.setMessage(message);
-        builder.setMessageTextViewClickable(true);
         builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
         builder.setPositiveButton("Ask Support", (d, which) -> {
             if (onAskSupport != null) onAskSupport.run();
