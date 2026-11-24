@@ -2475,7 +2475,7 @@
       "upstream_sha256": null,
       "mode": "NEW",
       "reason": "Eve host/screen/adapter referencing Telegram PrivacySettingsActivity",
-      "eve_sha256": "c4f50d6b3457271b82192f4ed7348ec7abe583097344c8c6d9917d68fae0cd82"
+      "eve_sha256": "50caf4e5f18692ef4bdea5a65c36433622c7f19a4982955c2cbc2d4beee6920c"
     },
     {
       "path": "app/src/main/java/com/eve/app/ui/settings/TelegramPrivacyDelegate.kt",

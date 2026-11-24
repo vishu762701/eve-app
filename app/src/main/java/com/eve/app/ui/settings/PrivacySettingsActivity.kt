@@ -59,13 +59,13 @@ class PrivacySettingsActivity : TelegramHostActivity<TelegramPrivacySettingsActi
             TelegramPrivacySettingsActivity.ROW_BIOMETRIC -> {
                 val next = !PasscodeManager.isFingerprintEnabled(this)
                 PasscodeManager.setFingerprintEnabled(this, next)
-                AppBulletin.showInfo(this, if (next) "Biometric unlock enabled" else "Biometric unlock disabled")
+                AppBulletin.show(this, if (next) "Biometric unlock enabled" else "Biometric unlock disabled")
             }
             TelegramPrivacySettingsActivity.ROW_LOGIN_EMAIL -> {
-                AppBulletin.showInfo(this, "Signed in as ${getLoginEmail()}")
+                AppBulletin.show(this, "Signed in as ${getLoginEmail()}")
             }
             TelegramPrivacySettingsActivity.ROW_ACTIVE_SESSION -> {
-                AppBulletin.showInfo(this, "Current EVE session active on this device")
+                AppBulletin.show(this, "Current EVE session active on this device")
             }
             TelegramPrivacySettingsActivity.ROW_SCREENSHOT_PROTECTION -> {
                 val uid = currentUid()
@@ -80,7 +80,7 @@ class PrivacySettingsActivity : TelegramHostActivity<TelegramPrivacySettingsActi
             }
             TelegramPrivacySettingsActivity.ROW_DELETE_ACCOUNT -> {
                 startActivity(Intent(this, SettingsActivity::class.java))
-                AppBulletin.showInfo(this, "Use the Settings overflow menu to confirm permanent account deletion")
+                AppBulletin.show(this, "Use the Settings overflow menu to confirm permanent account deletion")
             }
         }
     }
