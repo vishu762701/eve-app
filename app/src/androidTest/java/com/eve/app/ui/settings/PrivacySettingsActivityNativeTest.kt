@@ -25,15 +25,16 @@ import org.junit.runner.RunWith
 import org.telegram.ui.ActionBar.ActionBar
 import org.telegram.ui.Cells.HeaderCell
 import org.telegram.ui.Cells.TextCell
-import org.telegram.ui.Components.UniversalRecyclerView
+import org.telegram.ui.Cells.TextSettingsCell
+import org.telegram.ui.Components.RecyclerListView
 import java.io.File
 import java.io.FileOutputStream
 
 /**
  * Batch 3 (Refs 10, 11, 12) Native UI Instrumentation Test:
- * Launches original Telegram PrivacySettingsActivity in EVE, verifies hierarchy,
- * visibility preference persistence, light/dark rendering, and captures emulator screenshots
- * for Refs 12 (Security), 11 (Privacy), and 10 (Data & Protection).
+ * Launches restored upstream org.telegram.ui.PrivacySettingsActivity in EVE, verifies
+ * RecyclerListView + HeaderCell + TextCell + TextSettingsCell hierarchy, preference persistence,
+ * light/dark rendering, and captures emulator screenshots for Refs 12, 11, and 10.
  */
 @RunWith(AndroidJUnit4::class)
 class PrivacySettingsActivityNativeTest {
@@ -69,37 +70,33 @@ class PrivacySettingsActivityNativeTest {
             SystemClock.sleep(550)
             val root = activity.window.decorView
             val actionBar = findFirst(root, ActionBar::class.java)
-            val listView = findFirst(root, UniversalRecyclerView::class.java)
+            val listView = findFirst(root, RecyclerListView::class.java)
             val headers = findAll(root, HeaderCell::class.java)
             val cells = findAll(root, TextCell::class.java)
 
             assertNotNull("Original Telegram ActionBar must be present", actionBar)
-            assertNotNull("Original Telegram UniversalRecyclerView must be present", listView)
+            assertNotNull("Original Telegram RecyclerListView must be present", listView)
             assertTrue("HeaderCell sections must render", headers.isNotEmpty())
-            assertTrue("TextCell rows must render", cells.isNotEmpty())
+            assertTrue("TextCell security rows must render", cells.isNotEmpty())
 
             // Ref 12: Security & Privacy top section
             captureScreenshot("ref12-privacy-security-light")
 
             // Verify preference persistence
-            activity.onVisibilitySelected(
-                org.telegram.ui.PrivacySettingsActivity.ROW_LEADERBOARD_VISIBILITY,
-                PrivacyPreferences.VISIBILITY_ONLY_ME
-            )
-            assertEquals(PrivacyPreferences.VISIBILITY_ONLY_ME, activity.getLeaderboardVisibility())
-            activity.onVisibilitySelected(
-                org.telegram.ui.PrivacySettingsActivity.ROW_LEADERBOARD_VISIBILITY,
-                PrivacyPreferences.VISIBILITY_EVERYBODY
-            )
+            activity.setRuleVisibility(PrivacyPreferences.RULE_LEADERBOARD, PrivacyPreferences.VISIBILITY_ONLY_ME)
+            assertEquals(PrivacyPreferences.VISIBILITY_ONLY_ME, activity.getRuleVisibility(PrivacyPreferences.RULE_LEADERBOARD))
+            activity.setRuleVisibility(PrivacyPreferences.RULE_LEADERBOARD, PrivacyPreferences.VISIBILITY_EVERYBODY)
 
-            // Ref 11: Privacy section
-            activity.runOnUiThread { listView!!.scrollBy(0, 700) }
-            SystemClock.sleep(400)
+            // Ref 11: Privacy section (TextSettingsCell rows)
+            activity.runOnUiThread { listView!!.scrollBy(0, 750) }
+            SystemClock.sleep(450)
+            val settingsCells = findAll(root, TextSettingsCell::class.java)
+            assertTrue("TextSettingsCell privacy rows must render", settingsCells.isNotEmpty())
             captureScreenshot("ref11-privacy-mid-light")
 
-            // Ref 10: Lower Data & Protection section
-            activity.runOnUiThread { listView!!.scrollBy(0, 900) }
-            SystemClock.sleep(400)
+            // Ref 10: Lower Data & Exam Security section
+            activity.runOnUiThread { listView!!.scrollBy(0, 1100) }
+            SystemClock.sleep(450)
             captureScreenshot("ref10-privacy-lower-light")
         } finally {
             if (!activity.isFinishing && !activity.isDestroyed) {
@@ -115,8 +112,8 @@ class PrivacySettingsActivityNativeTest {
         val darkActivity = instrumentation.startActivitySync(intent) as PrivacySettingsActivity
         try {
             SystemClock.sleep(550)
-            val darkList = findFirst(darkActivity.window.decorView, UniversalRecyclerView::class.java)
-            assertNotNull("UniversalRecyclerView must render in dark theme", darkList)
+            val darkList = findFirst(darkActivity.window.decorView, RecyclerListView::class.java)
+            assertNotNull("RecyclerListView must render in dark theme", darkList)
             captureScreenshot("ref12-privacy-security-dark")
         } finally {
             if (!darkActivity.isFinishing && !darkActivity.isDestroyed) {

@@ -6,23 +6,31 @@ import org.junit.Test
 
 /**
  * Batch 3 (Refs 10, 11, 12) contract tests:
- * Verifies org.telegram.ui.PrivacySettingsActivity is wired into SettingsActivity,
- * registered in AndroidManifest.xml, uses original UniversalRecyclerView rounded sections
- * and AlertDialog, and binds real EVE controls.
+ * Verifies restored upstream org.telegram.ui.PrivacySettingsActivity uses RecyclerListView +
+ * ListAdapter (6 view types including TextSettingsCell, TextInfoPrivacyCell, HeaderCell,
+ * TextCheckCell, TextCell), setSections(), PrivacyControlActivity & SessionsActivity navigation,
+ * and is wired from SettingsActivity & AndroidManifest.xml.
  */
 class PrivacySettingsContractTest {
 
     private val tgPrivacySrc = File("src/main/java/org/telegram/ui/PrivacySettingsActivity.java").readText()
+    private val tgControlSrc = File("src/main/java/org/telegram/ui/PrivacyControlActivity.java").readText()
+    private val tgSessionsSrc = File("src/main/java/org/telegram/ui/SessionsActivity.java").readText()
     private val eveSettingsSrc = File("src/main/java/com/eve/app/ui/settings/SettingsActivity.kt").readText()
     private val manifestXml = File("src/main/AndroidManifest.xml").readText()
 
     @Test
-    fun privacySettingsUsesOriginalTelegramSectionsAndAlertDialog() {
+    fun privacySettingsRestoresUpstreamListAdapterAndSupportingScreens() {
         assertTrue(tgPrivacySrc.contains("extends BaseFragment"))
+        assertTrue(tgPrivacySrc.contains("private class ListAdapter extends RecyclerListView.SelectionAdapter"))
         assertTrue(tgPrivacySrc.contains("listView.setSections();"))
         assertTrue(tgPrivacySrc.contains("listView.setSectionsDrawBackground(true);"))
-        assertTrue(tgPrivacySrc.contains("new AlertDialog.Builder(context, getResourceProvider())"))
+        assertTrue(tgPrivacySrc.contains("textCell.setBetterLayout(true);"))
+        assertTrue(tgPrivacySrc.contains("presentFragment(new PrivacyControlActivity("))
+        assertTrue(tgPrivacySrc.contains("presentFragment(new SessionsActivity("))
         assertTrue(tgPrivacySrc.contains("public boolean isSupportEdgeToEdge()"))
+        assertTrue(tgControlSrc.contains("extends BaseFragment"))
+        assertTrue(tgSessionsSrc.contains("extends BaseFragment"))
     }
 
     @Test

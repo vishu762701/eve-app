@@ -8,9 +8,9 @@ import org.junit.Test
 /**
  * Batch 2 (Refs 04, 19, 20) contract tests:
  * Verifies org.telegram.ui.SettingsActivity preserves upstream rounded sections,
- * avatar camera badge, subtitle Language row, native ActionBar inline search,
- * honest EVE rows without duplicate Telegram-only shims, and original Telegram AlertDialog
- * for Ask a Question (Ref 04).
+ * avatar camera badge, scroll-driven ActionBar title fade & avatar hide,
+ * subtitle Language row, native ActionBar inline search, honest EVE rows,
+ * and upstream AlertsCreator.createSupportAlert LinkSpanDrawable.LinksTextView dialog (Ref 04).
  */
 class SettingsBatch2ContractTest {
 
@@ -18,10 +18,12 @@ class SettingsBatch2ContractTest {
     private val eveSettingsSrc = File("src/main/java/com/eve/app/ui/settings/SettingsActivity.kt").readText()
 
     @Test
-    fun settingsActivityUsesOriginalSectionsCameraBadgeAndEdgeToEdge() {
+    fun settingsActivityUsesOriginalSectionsCameraBadgeScrollFadeAndEdgeToEdge() {
         assertTrue("SettingsActivity must call listView.setSections()", tgSettingsSrc.contains("listView.setSections();"))
         assertTrue("SettingsActivity must call listView.setSectionsDrawBackground(true)", tgSettingsSrc.contains("listView.setSectionsDrawBackground(true);"))
         assertTrue("SettingsActivity must render avatar camera badge", tgSettingsSrc.contains("cameraButton = new FrameLayout(context)"))
+        assertTrue("SettingsActivity must implement upstream updateActionBarVisible", tgSettingsSrc.contains("private void updateActionBarVisible("))
+        assertTrue("SettingsActivity must implement upstream updateAvatarHide", tgSettingsSrc.contains("private void updateAvatarHide()"))
         assertTrue("SettingsActivity must support edge-to-edge", tgSettingsSrc.contains("public boolean isSupportEdgeToEdge()"))
     }
 
@@ -42,9 +44,10 @@ class SettingsBatch2ContractTest {
     }
 
     @Test
-    fun askAQuestionUsesOriginalTelegramAlertDialogWithClickableFaqLink() {
+    fun askAQuestionUsesUpstreamLinksTextViewInsideOriginalTelegramAlertDialog() {
         assertTrue("SettingsActivity must use org.telegram.ui.ActionBar.AlertDialog", tgSettingsSrc.contains("import org.telegram.ui.ActionBar.AlertDialog;"))
-        assertTrue("showAskQuestionDialog must enable clickable FAQ links", tgSettingsSrc.contains("builder.setMessageTextViewClickable(true);"))
+        assertTrue("showAskQuestionDialog must use LinkSpanDrawable.LinksTextView (AlertsCreator.createSupportAlert)", tgSettingsSrc.contains("new LinkSpanDrawable.LinksTextView("))
+        assertTrue("showAskQuestionDialog must use AndroidUtilities.LinkMovementMethodMy()", tgSettingsSrc.contains("new AndroidUtilities.LinkMovementMethodMy()"))
         assertTrue("showAskQuestionDialog must show via BaseFragment.showDialog", tgSettingsSrc.contains("showDialog(dialog);"))
         assertTrue("EVE SettingsActivity host must delegate Ask a Question to Telegram fragment", eveSettingsSrc.contains("fragment.showAskQuestionDialog("))
     }
