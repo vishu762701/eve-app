@@ -169,6 +169,7 @@ public class LanguageSelectActivity extends BaseFragment { private com.eve.app.u
 
         fragmentView = new FrameLayout(context);
         FrameLayout frameLayout = (FrameLayout) fragmentView;
+        frameLayout.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundGray)); // EVE-PATCH: preserve Telegram windowBackgroundGray canvas behind rounded Language card
 
         emptyView = new EmptyTextProgressView(context);
         emptyView.setText(LocaleController.getString(R.string.NoResult));
@@ -182,7 +183,7 @@ public class LanguageSelectActivity extends BaseFragment { private com.eve.app.u
         listView.setSectionsDrawBackground(true);
         listView.setVerticalScrollBarEnabled(false);
         listView.setAdapter(listAdapter);
-        DefaultItemAnimator itemAnimator = new DefaultItemAnimator(); itemAnimator.setSupportsChangeAnimations(false); listView.setItemAnimator(itemAnimator); // EVE-PATCH: use standard AndroidX DefaultItemAnimator
+        DefaultItemAnimator itemAnimator = new DefaultItemAnimator(); itemAnimator.setAddDuration(400); itemAnimator.setRemoveDuration(400); itemAnimator.setMoveDuration(400); itemAnimator.setChangeDuration(400); itemAnimator.setSupportsChangeAnimations(false); listView.setItemAnimator(itemAnimator); // EVE-PATCH: preserve upstream 400ms animator timing with AndroidX DefaultItemAnimator
         frameLayout.addView(listView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
         frameLayout.addView(emptyView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
 
@@ -208,7 +209,7 @@ public class LanguageSelectActivity extends BaseFragment { private com.eve.app.u
                 }
                 if (localeInfo != null) {
                     LocaleController.LocaleInfo prevLocale = LocaleController.getInstance().getCurrentLocaleInfo();
-                    boolean sameLang = eveDelegate != null && TextUtils.equals(eveDelegate.getCurrentLanguageTag(), localeInfo.shortName); if (eveDelegate != null) { eveDelegate.onLanguageSelected(localeInfo); if (listAdapter != null) listAdapter.notifyDataSetChanged(); return; } // EVE-PATCH: apply selected language via Eve delegate
+                    boolean sameLang = eveDelegate != null && TextUtils.equals(eveDelegate.getCurrentLanguageTag(), localeInfo.shortName); if (eveDelegate != null) { eveDelegate.onLanguageSelected(localeInfo); if (listAdapter != null) listAdapter.notifyDataSetChanged(); if (searchListViewAdapter != null) searchListViewAdapter.notifyDataSetChanged(); if (!sameLang) { AndroidUtilities.runOnUIThread(() -> { if (actionBar != null) actionBar.closeSearchField(); updateLanguage(); }, 10); } return; } // EVE-PATCH: apply selected language via Eve delegate and preserve upstream post-selection search close + UI refresh
 
                     final AlertDialog progressDialog = new AlertDialog(getContext(), AlertDialog.ALERT_TYPE_SPINNER);
                     if (!sameLang) {
@@ -330,14 +331,14 @@ public class LanguageSelectActivity extends BaseFragment { private com.eve.app.u
 
             for (int a = 0, N = unofficialLanguages.size(); a < N; a++) {
                 LocaleController.LocaleInfo c = unofficialLanguages.get(a);
-                if (c.name.toLowerCase().startsWith(query) || c.nameEnglish.toLowerCase().startsWith(query)) {
+                if (c.name.toLowerCase().startsWith(q) || c.nameEnglish.toLowerCase().startsWith(q)) { // EVE-PATCH: match trimmed lowercase query q
                     resultArray.add(c);
                 }
             }
 
             for (int a = 0, N = sortedLanguages.size(); a < N; a++) {
                 LocaleController.LocaleInfo c = sortedLanguages.get(a);
-                if (c.name.toLowerCase().startsWith(query) || c.nameEnglish.toLowerCase().startsWith(query)) {
+                if (c.name.toLowerCase().startsWith(q) || c.nameEnglish.toLowerCase().startsWith(q)) { // EVE-PATCH: match trimmed lowercase query q
                     resultArray.add(c);
                 }
             }
@@ -552,6 +553,10 @@ public class LanguageSelectActivity extends BaseFragment { private com.eve.app.u
         return themeDescriptions;
     }
 
+    @Override
+    public boolean isSupportEdgeToEdge() {
+        return true;
+    }
 
     /** theme editor: colors this page shows (former ThemeDescription keys) */
     @Override

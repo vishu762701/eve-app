@@ -2217,7 +2217,7 @@
       "upstream_path": "TMessagesProj/src/main/java/org/telegram/ui/LanguageSelectActivity.java",
       "upstream_sha256": "d9380f51e5a57685518c701ac7e4aca4f005fe8a8d6d668f12b8f0d2f74acbe4",
       "mode": "CUT",
-      "eve_sha256": "1263abd048f0c924178d5cefbd94d0f1bdd97528706048eef42ab8849a83b7ff"
+      "eve_sha256": "fdb29b02c65935684579b5abb4585f80399b2276deb6401f1ad21a21665adb77"
     },
     {
       "path": "app/src/main/java/org/telegram/ui/MainTabsLayout.java",
