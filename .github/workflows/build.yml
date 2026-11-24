@@ -79,7 +79,7 @@ jobs:
           if [[ "$full" == true ]]; then
             echo "Manual FULL: unit, security, native UI, backend, functions, lint, and APK integrity." >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "Automatic FAST: compile :app:assembleDebug only; no verification suites." >> "$GITHUB_STEP_SUMMARY"
+            echo "Automatic FAST preview (NOT fully verified): compile :app:assembleDebug, AndroidTest Kotlin compile, and lintDebug only; no FULL verification suites." >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - uses: actions/setup-java@v4
@@ -140,12 +140,29 @@ jobs:
             gradle :app:assembleDebug -Peve.nativeAbis=arm64-v8a :app:compileDebugAndroidTestKotlin :app:lintDebug --stacktrace --console=plain 2>&1 | tee ci-fast-gradle.log
           fi
 
-      - name: Upload FAST push debug APK artifact
+      - name: Generate FAST preview build-info.txt
+        if: ${{ steps.verification_profile.outputs.full != 'true' }}
+        run: |
+          set -euo pipefail
+          test -s app/build/outputs/apk/debug/app-debug.apk
+          apk_sha256="$(sha256sum app/build/outputs/apk/debug/app-debug.apk | cut -d' ' -f1)"
+          mkdir -p app/build/outputs/apk/preview-meta
+          cat << EOF > app/build/outputs/apk/preview-meta/build-info.txt
+          commit_sha=${GITHUB_SHA}
+          workflow_run_url=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+          build_profile=FAST_PREVIEW (NOT FULLY VERIFIED)
+          apk_sha256=${apk_sha256}
+          EOF
+          cat app/build/outputs/apk/preview-meta/build-info.txt
+
+      - name: Upload FAST preview debug APK artifact
         if: ${{ steps.verification_profile.outputs.full != 'true' }}
         uses: actions/upload-artifact@v4
         with:
-          name: Eve-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: Eve-preview-debug-apk
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            app/build/outputs/apk/preview-meta/build-info.txt
           if-no-files-found: error
           retention-days: 14
 
@@ -384,7 +401,7 @@ jobs:
 
   publish-apk:
     name: Publish verified debug APK
-    needs: [build, native-ui, backend, firebase-functions]
+    needs: [telegram-port-integrity, build, native-ui, backend, firebase-functions, port-smoke]
     if: ${{ needs.build.outputs.full == 'true' && success() && github.event_name == 'workflow_dispatch' && inputs.publish_verified_apk == true }}
     runs-on: ubuntu-latest
     steps:
@@ -406,9 +423,24 @@ jobs:
           echo "$EXPECTED_SHA256  app/build/outputs/apk/debug/app-debug.apk" | sha256sum --check --status
           echo "Publishing exact APK compiled for $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload verified debug APK
+      - name: Generate final verified build-info.txt
+        env:
+          EXPECTED_SHA256: ${{ needs.build.outputs.apk_sha256 }}
+        run: |
+          set -euo pipefail
+          mkdir -p app/build/outputs/apk/verified-meta
+          cat << EOF > app/build/outputs/apk/verified-meta/build-info.txt
+          commit_sha=${GITHUB_SHA}
+          workflow_run_url=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+          build_profile=FULL_VERIFIED
+          apk_sha256=${EXPECTED_SHA256}
+          EOF
+
+      - name: Upload final verified debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: Eve-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: Eve-final-verified-debug-apk
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            app/build/outputs/apk/verified-meta/build-info.txt
           if-no-files-found: error
