@@ -328,6 +328,14 @@ class SettingsActivity : TelegramHostActivity<TelegramSettingsActivity>(), Teleg
     }
 
     private fun showAskQuestionDialog() {
+        val fragment = actionBarLayout.lastFragment as? TelegramSettingsActivity
+        if (fragment != null) {
+            fragment.showAskQuestionDialog(
+                { startActivity(Intent(this, AboutActivity::class.java)) },
+                { startActivity(Intent(this, com.eve.app.ui.feedback.FeedbackActivity::class.java)) }
+            )
+            return
+        }
         TelegramNativeAlertDialog.Builder(this)
             .setTitle("Ask a Question")
             .setMessage(

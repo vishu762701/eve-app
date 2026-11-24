@@ -984,7 +984,7 @@
       "upstream_sha256": null,
       "mode": "NEW",
       "reason": "Eve host/screen/adapter referencing Telegram components",
-      "eve_sha256": "e3335a805fd8ae0e7dd39069aae5647eb7edfd176f5d4c1c5b9785cc20a252ee"
+      "eve_sha256": "702868faeda7e8f787ec4b9166a8e9471b4153b260570df6e945c264eb7bff7b"
     },
     {
       "path": "app/src/main/java/com/eve/app/ui/settings/SharedConfig.kt",
@@ -2287,7 +2287,7 @@
       "upstream_path": "TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java",
       "upstream_sha256": "ced897fb9dc732754face0126b5482aae4d627f6f5f357a2f1b3f26145b8da4c",
       "mode": "CUT",
-      "eve_sha256": "8a8f915ada59d1093a25afed3a73ee3f396af9eabc755e7d1203419df6cdd9c8"
+      "eve_sha256": "8cb5b4b2f2687d96e1eca8a77727d68192d50f8ca7e030e695e5ea83ca9b209d"
     },
     {
       "path": "app/src/main/java/org/telegram/ui/Stories/StoriesUtilities.java",
