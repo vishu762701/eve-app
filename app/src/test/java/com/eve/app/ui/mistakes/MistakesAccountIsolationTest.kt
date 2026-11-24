@@ -97,8 +97,8 @@ class MistakesAccountIsolationTest {
         val failure = src.substringAfter("private fun showMistakeReadFailure()")
             .substringBefore("private fun updateFilterCounts()")
         assertTrue(failure.contains("mistakeLoadFailed = true"))
-        assertTrue(failure.contains("Check your connection and tap to retry"))
-        assertTrue(failure.contains("binding.messageGroup.isFocusable = true"))
+        assertTrue(failure.contains("Check your connection and tap Retry."))
+        assertTrue(failure.contains("retryButton.visibility = View.VISIBLE"))
     }
     @Test fun deletionCleanupIsAfterServerAndFirebaseConfirmation() {
         val settings = File("src/main/java/com/eve/app/ui/settings/SettingsActivity.kt").readText()

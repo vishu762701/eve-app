@@ -248,7 +248,7 @@
       "upstream_sha256": null,
       "mode": "COMPOSED",
       "reason": "Eve host/screen/adapter referencing Telegram components",
-      "eve_sha256": "dbd7d55c58f86960c6e755b68fc0c7cd58b1c33f67399b9514b04971c799d7ac"
+      "eve_sha256": "ccbb1347f6450c47492dc01ab282060c2430b65f1692d2390e545fd29cb3e2c2"
     },
     {
       "path": "app/src/main/java/com/eve/app/telegram/qr/QrScanMorph.java",
@@ -304,7 +304,7 @@
       "upstream_sha256": null,
       "mode": "NEW",
       "reason": "Eve host/screen/adapter referencing Telegram components",
-      "eve_sha256": "e8b801ffec8c52b8d0413bcbc71004aa2ae47440eb6cc81f7bdc7ecf3efbb72b"
+      "eve_sha256": "727d9f19bc6440e1f8cbc9485da0b2fe0f89c4a64be194a680f59333a4ede5de"
     },
     {
       "path": "app/src/main/java/com/eve/app/ui/admin/AdminDeleteFlow.kt",
@@ -408,7 +408,7 @@
       "upstream_sha256": null,
       "mode": "NEW",
       "reason": "Eve host/screen/adapter referencing Telegram components",
-      "eve_sha256": "2061a25c39c7994b61ce93ba3e8d04ed0e9db17b0df68c2e328527f12440d9d7"
+      "eve_sha256": "7009fb9838f4d4a1b20bb4ad0ad34f1a40f30579cf9b11a9e8b423693265dc78"
     },
     {
       "path": "app/src/main/java/com/eve/app/ui/admin/GeneratedTestsActivity.kt",
@@ -664,7 +664,7 @@
       "upstream_sha256": null,
       "mode": "NEW",
       "reason": "Eve host/screen/adapter referencing Telegram components",
-      "eve_sha256": "d6d633110ff788402af90f40da6c1cf3e6943bedad82fa7d66d14fe44e697b1e"
+      "eve_sha256": "7927649304f9199c0495be8089484acf564d9d27ddbf84c7bd8aa491f8978d7c"
     },
     {
       "path": "app/src/main/java/com/eve/app/ui/home/ExamTestsActivity.kt",
@@ -672,7 +672,7 @@
       "upstream_sha256": null,
       "mode": "NEW",
       "reason": "Eve host/screen/adapter referencing Telegram components",
-      "eve_sha256": "ce4b2383d96b572798da653bd1c3b6c0d841e2c609f1d8e181065a1a3326a1d7"
+      "eve_sha256": "5e4d14f2761feea83a41797cdb5b6491ea4dd5b97cb878f70cd8f5e7e57de584"
     },
     {
       "path": "app/src/main/java/com/eve/app/ui/home/HomeBannerAdapter.kt",
@@ -712,7 +712,7 @@
       "upstream_sha256": null,
       "mode": "NEW",
       "reason": "Eve host/screen/adapter referencing Telegram components",
-      "eve_sha256": "0eb81694b0cbd8341938a60bd49cae842ffa96a658233e0edd857e656d2e85a4"
+      "eve_sha256": "49bd3ace95fc05907bb3f2ca5c64c159b1313c2462a2c4ff15af32d1e5f15931"
     },
     {
       "path": "app/src/main/java/com/eve/app/ui/home/TargetExamsBottomSheet.kt",
@@ -824,7 +824,7 @@
       "upstream_sha256": null,
       "mode": "NEW",
       "reason": "Eve host/screen/adapter referencing Telegram components",
-      "eve_sha256": "f53c32ca5dd354ad1092acce7878d14c58acebcbb410559c05ea3661d978ea2e"
+      "eve_sha256": "b5bb286080be10a16772bebb54c5d1e48abc1c3ea9e36b5995eb8d80ae1477f5"
     },
     {
       "path": "app/src/main/java/com/eve/app/ui/profile/ChangePhoneActivity.kt",
@@ -896,7 +896,7 @@
       "upstream_sha256": null,
       "mode": "NEW",
       "reason": "Eve host/screen/adapter referencing Telegram components",
-      "eve_sha256": "cee21125bf34a5832dbf5149f74f4825e2bd289fa719cc2bb2b8a2461399b5f8"
+      "eve_sha256": "3169d77bea3d44143e134728f2eb6fc3a45775bc67b50cfe92fcc17381927df4"
     },
     {
       "path": "app/src/main/java/com/eve/app/ui/profile/QrShareActivity.kt",
@@ -904,7 +904,7 @@
       "upstream_sha256": null,
       "mode": "NEW",
       "reason": "Eve host/screen/adapter referencing Telegram components",
-      "eve_sha256": "fbf875962a8e41db7f5ee1597780d07d787cc1b4f6c3607e94cff29481f13981"
+      "eve_sha256": "e71ce5a6a143e8cf39cf9838b88c04b5c0326eed89e58ec5ec287da5c202e8f7"
     },
     {
       "path": "app/src/main/java/com/eve/app/ui/profile/TelegramUsernameDelegate.kt",
@@ -984,7 +984,7 @@
       "upstream_sha256": null,
       "mode": "NEW",
       "reason": "Eve host/screen/adapter referencing Telegram components",
-      "eve_sha256": "18787691e79ea8018af86752a1bea29afa165ebca9fcfb98e96599aef9a1d900"
+      "eve_sha256": "52fd40cb0b2fae2e6131611cf9605ed0f9a9e67bc35cbf19e4646bb84b9f7051"
     },
     {
       "path": "app/src/main/java/com/eve/app/ui/settings/SharedConfig.kt",
@@ -1356,7 +1356,7 @@
       "upstream_path": "TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarPopupWindow.java",
       "upstream_sha256": "8bb24d8cbd230c71617e4754cf14a6bdfb1dbbf8797603f33518d7e12eebdb65",
       "mode": "CUT",
-      "eve_sha256": "770660ec3183a367d74e333776a48b44b2792e09bbb9114a5c6cd537da4f48cf"
+      "eve_sha256": "9004b102ff24920d9595b7dbbf15558db70af1a2e9cd6f553d60bcac560325b9"
     },
     {
       "path": "app/src/main/java/org/telegram/ui/ActionBar/AlertDialog.java",
@@ -2217,7 +2217,7 @@
       "upstream_path": "TMessagesProj/src/main/java/org/telegram/ui/LanguageSelectActivity.java",
       "upstream_sha256": "d9380f51e5a57685518c701ac7e4aca4f005fe8a8d6d668f12b8f0d2f74acbe4",
       "mode": "CUT",
-      "eve_sha256": "1263abd048f0c924178d5cefbd94d0f1bdd97528706048eef42ab8849a83b7ff"
+      "eve_sha256": "fdb29b02c65935684579b5abb4585f80399b2276deb6401f1ad21a21665adb77"
     },
     {
       "path": "app/src/main/java/org/telegram/ui/MainTabsLayout.java",
@@ -2287,7 +2287,7 @@
       "upstream_path": "TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java",
       "upstream_sha256": "ced897fb9dc732754face0126b5482aae4d627f6f5f357a2f1b3f26145b8da4c",
       "mode": "CUT",
-      "eve_sha256": "8a8f915ada59d1093a25afed3a73ee3f396af9eabc755e7d1203419df6cdd9c8"
+      "eve_sha256": "49b588b2bd8a905c18a2a9c390deb215f387c16c4925316ed27e3a35e5057b5c"
     },
     {
       "path": "app/src/main/java/org/telegram/ui/Stories/StoriesUtilities.java",
@@ -2428,6 +2428,83 @@
       "mode": "VERBATIM",
       "eve_sha256": "f26655db5c1452a96a9147e22199b7d440d57a576cc115c1f0f969c7bdd5c8a1",
       "upstream_sha256": "f26655db5c1452a96a9147e22199b7d440d57a576cc115c1f0f969c7bdd5c8a1"
+    },
+    {
+      "path": "app/src/main/java/com/eve/app/ui/home/TestInstructionsSheet.kt",
+      "upstream_path": null,
+      "upstream_sha256": null,
+      "mode": "NEW",
+      "reason": "Eve host/screen/adapter referencing Telegram components",
+      "eve_sha256": "2226278e118df43591bfdc979b4cf91c01d2d0b956e87183b39252bc254a6359"
+    },
+    {
+      "path": "app/src/main/java/com/eve/app/telegram/exams/ExamListLoader.kt",
+      "upstream_path": null,
+      "upstream_sha256": null,
+      "mode": "NEW",
+      "reason": "Eve host/screen/adapter referencing Telegram components",
+      "eve_sha256": "e321eb5c476c8aaf9489fffa96c8fef883789ad7a50fa0b8b167f534dbac2a62"
+    },
+    {
+      "path": "app/src/main/java/com/eve/app/ui/settings/PowerSavingActivity.kt",
+      "upstream_path": null,
+      "upstream_sha256": null,
+      "mode": "NEW",
+      "reason": "Eve host/screen/adapter referencing Telegram components",
+      "eve_sha256": "7df4de069b7cc90f3b495bc9b071429a3c4f9aa6265fbf4aa27deedc9660a3c2"
+    },
+    {
+      "path": "app/src/main/java/com/eve/app/ui/settings/SettingsSearchIndex.kt",
+      "upstream_path": null,
+      "upstream_sha256": null,
+      "mode": "NEW",
+      "reason": "Eve host/screen/adapter referencing Telegram components",
+      "eve_sha256": "b28524c55093dacc20eb323c4d7ffd3fb0f4263268316201685eae27fa29972e"
+    },
+    {
+      "path": "app/src/main/java/com/eve/app/ui/settings/PrivacyPreferences.kt",
+      "upstream_path": null,
+      "upstream_sha256": null,
+      "mode": "NEW",
+      "reason": "Eve user-scoped privacy preferences store for PrivacySettingsActivity",
+      "eve_sha256": "731cf1df4eb48a4537fd0cf83145412fd8b750af479d6a2b46889efcfe02bb81"
+    },
+    {
+      "path": "app/src/main/java/com/eve/app/ui/settings/PrivacySettingsActivity.kt",
+      "upstream_path": null,
+      "upstream_sha256": null,
+      "mode": "NEW",
+      "reason": "Eve host/screen/adapter referencing Telegram PrivacySettingsActivity",
+      "eve_sha256": "d6bf54749cad2497a7321075016ca7c684b3faefdca3baefffc0c56e5e7cfafb"
+    },
+    {
+      "path": "app/src/main/java/com/eve/app/ui/settings/TelegramPrivacyDelegate.kt",
+      "upstream_path": null,
+      "upstream_sha256": null,
+      "mode": "NEW",
+      "reason": "Eve CUT-INTERFACE delegate for Telegram PrivacySettingsActivity",
+      "eve_sha256": "e6d2820285d51cd45c19d4033e09cef4a2401500aae76082b35d37896df6f8a8"
+    },
+    {
+      "path": "app/src/main/java/org/telegram/ui/PrivacySettingsActivity.java",
+      "upstream_path": "TMessagesProj/src/main/java/org/telegram/ui/PrivacySettingsActivity.java",
+      "upstream_sha256": "456bcbd1eb18e6d57dd15f73bb3c790b67a47ab086f66bd0fa740801c0ded681",
+      "mode": "CUT",
+      "eve_sha256": "03062df75eec6aeec8dcbbadc21110760214a753b515a024e5090aaabc572118"
+    },
+    {
+      "path": "app/src/main/java/org/telegram/ui/PrivacyControlActivity.java",
+      "upstream_path": "TMessagesProj/src/main/java/org/telegram/ui/PrivacyControlActivity.java",
+      "upstream_sha256": "ee6d887cb18e6394818d8812fb7edeb52f110ba9e1befb4a148580250c69025c",
+      "mode": "CUT",
+      "eve_sha256": "13de9e2c609202e47e575beed49d32c2f08464fa94cbd557d8d3b10212a50c24"
+    },
+    {
+      "path": "app/src/main/java/org/telegram/ui/SessionsActivity.java",
+      "upstream_path": "TMessagesProj/src/main/java/org/telegram/ui/SessionsActivity.java",
+      "upstream_sha256": "ffe73191baf679771ee86cc3a292efbc471df3db057404e0b96fe153d0ccd16e",
+      "mode": "CUT",
+      "eve_sha256": "3e9a397a535d0637b95dc9b87241e0723dc50db18ff8b00d017a1dcbd6dc540f"
     }
   ],
   "blocks": [

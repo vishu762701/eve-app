@@ -118,7 +118,7 @@ class TelegramRadioIndicatorTest {
         // R07: the checked dot is GREEN and the tile is green-tinted.
         // No correctness is inferred from this manually chosen option.
         assertEquals(context.getColor(R.color.system_green_text), radio.indicator!!.checkedColor)
-        assertEquals(context.getColor(R.color.text_primary), radio.currentTextColor)
+        assertEquals(palette.textPrimary, radio.currentTextColor)
         assertEquals(context.getColor(R.color.system_green_container),
             (radio.background.current as android.graphics.drawable.GradientDrawable).color?.defaultColor)
         TelegramThemeApplier.applyToViewTree(root, palette.copy(textSecondary = Color.BLUE, onAccent = Color.GREEN))

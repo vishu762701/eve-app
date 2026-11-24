@@ -1,40 +1,67 @@
-# AGENTS.md — the only rulebook for Eve
+# AGENTS.md — EVE authoritative engineering rules
 
-Eve: free mock test / exam prep Android app (Indian govt & entrance exams). Android (Java Telegram UI + Kotlin glue), Firebase Auth/Firestore, Cloudflare Worker + D1 backend. App UI language is English only.
+EVE is an Android application for Indian government-exam preparation. Its required Telegram experience is defined by `docs/EVE_TELEGRAM_UI_REQUIREMENTS.md`. That file is the final product/source/UI contract and overrides conflicting older prompts, plans, matrices, comments and handoffs.
 
-## Scope
-1. The owner's latest message defines the task. Do exactly that and nothing else: no extra redesign, refactor or cleanup.
-2. One screen or feature per mission. Continue to the next eligible mission only after applicable engineering gates pass. Record phone-only acceptance separately; it does not block unrelated work.
-3. If an instruction is unclear, wrong or would not work in a real app, say so and propose the fix. Do not follow it blindly.
+## 1. Mandatory reading and precedence
 
-## Telegram source (the only truth for Telegram-style screens)
-4. Inspect the official https://github.com/DrKLO/Telegram source at `21f7d109da6ab3506c9e9577f98c6a38771ab335`. Resolve the full dependency closure before importing. No alternate UI implementations.
-5. A Telegram-style screen must run the original Telegram Java classes (Fragment/Cells/Components) and their original custom views, physics and animations. Kotlin is only glue: auth, data, repositories, navigation, lifecycle host.
-6. Never recreate a Telegram-looking screen with XML, Compose or Material. A copied class that is never launched is not a port.
-7. Mapping rule: wherever Telegram shows chats, Eve shows exams (title = exam name, subtitle = next test info, badge = pending tests). Each mission states the exact mapping for its screen.
+Before any implementation, planning or review mission, read:
+1. `AGENTS.md`;
+2. `docs/EVE_TELEGRAM_UI_REQUIREMENTS.md`;
+3. `BUILD_FAILURE_RULES.md`;
+4. `EVE_PROJECT_STATE.md` and `HANDOFF.md`;
+5. `PORT_MANIFEST.json` and the affected source/tests.
 
-## Evidence and honesty
-8. A screen is ACCEPTED only with all three: (a) a green GitHub Actions run URL, (b) the owner's phone screenshot/video compared to Telegram, (c) no crash in the owner's logcat. Anything else stays OPEN.
-9. Never write "verified", "passed" or "fixed" for something you did not actually run. Write `UNVERIFIED` and say why. Every claim about code quotes a file path and line number.
-10. Reproduce the crash, retain the first causal application frame, demonstrate a failing regression, then apply the smallest justified fix and rerun. Missing evidence is a blocker for that fix, not a basis for a guess.
+The owner-approved final specification and exact 25-image archive are mandatory. Never substitute other screenshots, web images, AI mockups or an agent's preferred design. If instructions conflict, the final requirements document wins unless the owner explicitly changes it.
 
-## Repo hygiene
-11. Delete only files proven obsolete for the screen you just finished (grep shows 0 callers). List them in the commit message.
-12. `EVE_PROJECT_STATE.md` is the permanent mission, evidence and crash record. Append completed history; do not erase or relabel historical results. Keep individual screen evidence identifiable.
-13. Synchronize `HANDOFF.md` (at most 30 lines) with the state file after meaningful milestones. Before editing, read both, this file, `BUILD_FAILURE_RULES.md` and `PORT_MANIFEST.json`; continue from NEXT ACTION.
-14. Work directly on `main` only. No alternate branch or PR, no force push, no history rewrite. Respect branch protection. Test writes for byte integrity before changing code; read back remote bytes by immutable SHA. Verify the pushed SHA and its Actions result.
+## 2. Source and screen fidelity — no shortcuts
 
-## Security (never weaken)
-15. No secrets in the repo (service-account JSON, release keystore, tokens). Admin authority is enforced on the backend/rules only, never trusted from the client. Do not weaken auth, Firestore/Storage rules, scoring or answer integrity to make a build pass.
+- Telegram source of truth: `https://github.com/DrKLO/Telegram` at `21f7d109da6ab3506c9e9577f98c6a38771ab335`.
+- Visual source of truth: `docs/reference/eve-telegram-ui-reference-pack-25.zip`, SHA-256 `ca5e07965817862ede93c206ba78dfc41d88234d0426b699ad25503c9d0c0ff7`.
+- All 25 images/states are mandatory. Inspect the actual images.
+- Use the actual original Telegram Activities/Fragments/views/cells/adapters/resources/theme/gesture/animation code and the complete required dependency closure for every applicable screen.
+- Adapt original screens/components to EVE data and actions. Do not recreate their visuals with XML, Compose, Material, custom drawing or third-party UI where upstream code exists.
+- A copied class that is not navigated to and present in the live view hierarchy is not implemented.
+- Keep per-file provenance in `PORT_MANIFEST.json` and screen-level source/runtime/visual evidence in `docs/EVE_TELEGRAM_SCREEN_SOURCE_MAP.md`.
+- Preserve upstream behavior and visuals. Deviations require prior explicit owner approval.
 
-## Licensing
-16. Eve is open source (GPL). Telegram-derived files keep their original authorship and license headers. Do not use the Telegram name, logo or branding in the app.
-17. On any CI failure follow BUILD_FAILURE_RULES.md. A mission may make it stricter, never looser.
+## 3. Product preservation and customization
 
-## Telegram fidelity and port verification
-18. Telegram UI fidelity is enforced by the pinned source verifier (`.github/scripts/verify_telegram_port.py`), not by comments or agent claims.
-19. `VERBATIM`, `CUT`, `SHIM`, `COMPOSED`, `TRANSPLANT`, and `NEW` have precise meanings. Only byte-identical blocks may be called `TRANSPLANT`/`EVE-COPY`; adapted code is `COMPOSED`/`EVE-REF` and must be separately reviewed.
-20. Only original pinned Telegram code implements Telegram rendering, sizing, gestures, navigation and animations. A COMPOSED adapter may bind EVE data and events. CUT is deletion-only; SHIM is not an alternate UI. A matching manifest hash alone does not establish provenance or runtime use.
-21. A copied class that is not actually reached/launched is not a port. Every screen mission must identify its runtime entry point and prove the original Telegram component classes are present in the running view hierarchy; later screen missions must add appropriate runtime instrumentation and manual device evidence.
-22. Green compilation means only build success, not Telegram fidelity or screen acceptance.
-23. Historical 01B-R is not accepted. Use current stability gates and the T1-T10 dependencies in EVE_PROJECT_STATE.md. Only the owner may mark OWNER ACCEPTED; a FAST build is not FULL verification.
+- EVE branding, authenticated user data, exam data and EVE actions must replace screenshot sample data.
+- Preserve all existing EVE product functionality and its backend/data/security contracts during migration.
+- Every visible control needs a real EVE action. No dead controls, fake data or fabricated success states.
+- Do not add unrelated Telegram backend/services solely because their labels appear in a screenshot. Map them to real EVE capabilities or record an owner decision/blocker; never silently skip a required screen/state.
+- Do not remove existing code/data/migrations until callers, data, APIs, tests and replacement behavior are audited and owner approval is recorded where needed.
+
+## 4. Mission execution
+
+- The overall mission includes all 25 reference screens and complete EVE functionality. Work in coherent, reviewable batches, but do not redefine the scope to one screen and stop.
+- First reconcile the live repository/PR/branch/CI. Then maintain `docs/EVE_TELEGRAM_SCREEN_SOURCE_MAP.md` with upstream paths/classes, dependency closure, provenance, EVE mapping, runtime entry points, tests and visual evidence for each image.
+- Diagnose actual code and logs before changing code. State assumptions and blockers; do not guess.
+- Keep a complete audit of existing EVE modules and explicitly track `PASS`, `FAIL`, `UNVERIFIED`, `BLOCKED`.
+- A green compile or source hash is not proof of functional or visual fidelity.
+
+## 5. Validation and evidence
+
+- Run the relevant unit, backend, lint, native, AndroidTest, emulator, source-integrity and full CI gates.
+- Capture actual EVE emulator/device screenshots and compare them to the exact supplied references under equivalent conditions.
+- Prove navigation/runtime hierarchy and verify all visible interactions.
+- Physical-device checks, production auth/network traffic and CI emulator checks are distinct; report each honestly.
+- Never say `PASS`, `verified` or `fixed` without evidence. Use `UNVERIFIED` when not run.
+- Preserve all tests and CI checks. See `BUILD_FAILURE_RULES.md` on every failure.
+
+## 6. Branch, security and delivery
+
+- Use a feature branch and PR into `main`. Never push directly to `main`, force-push, or rewrite history.
+- Keep secrets, tokens, release keys and service-account files out of the repository.
+- Enforce admin authority and scoring on the backend/rules; never trust client claims.
+- Never weaken authentication, authorization, data rules, answer integrity, signing or release safeguards to get a green build.
+- No production deploy, destructive migration, release or APK publication without explicit owner authorization.
+- Preserve original license/copyright headers and comply with the pinned Telegram license. EVE must not misrepresent itself as the official Telegram app.
+- Every report must include changed paths, commit SHA, exact workflow URL/status, test totals, artifacts, and unverified limitations.
+
+## 7. Permanent project records
+
+- `EVE_PROJECT_STATE.md` is the current factual checkpoint, not a stale backlog. Update it after meaningful milestones.
+- `HANDOFF.md` is the concise entry point and must agree with the state file.
+- `docs/EVE_TELEGRAM_UI_REQUIREMENTS.md` is the immutable owner-approved product/source/UI contract; only an explicit owner instruction may change it.
+- Historical matrices or archived documents are reference material only and cannot overrule the final requirements.

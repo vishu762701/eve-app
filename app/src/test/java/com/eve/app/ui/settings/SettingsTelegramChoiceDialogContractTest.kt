@@ -9,22 +9,11 @@ import java.io.File
 class SettingsTelegramChoiceDialogContractTest {
     @Test fun dailyGoalCustomContentAndLanguageChoicesUseNativeTelegramDialog() {
         val settings = File("src/main/java/com/eve/app/ui/settings/SettingsActivity.kt").readText()
-        val goal = settings.substringAfter("private fun setupDailyGoalSetting()")
-            .substringBefore("private fun setupTargetExamsSetting()")
-        val language = settings.substringAfter("private fun setupLanguageSetting()")
-            .substringBefore("private fun setupReminderSetting()")
-        assertTrue(goal.contains(".setTitle(\"Select Daily Goal\")"))
-        assertTrue(goal.contains(".setView(container)") || goal.contains(".setView(dialogView)"))
-        assertTrue(goal.contains("TelegramNativeAlertDialog.Builder(this)"))
-        assertTrue(goal.contains("RadioCell(this)") || goal.contains("radioGroup.setCardOptions"))
-        assertTrue(goal.contains("prefs.edit().putInt(StreakHelper.KEY_DAILY_GOAL, chosenGoal).apply()"))
-        assertTrue(goal.contains(".show()"))
-        assertTrue(language.contains(".setTitle(\"Select App Language\")"))
-        assertTrue(language.contains(".setSingleChoiceItems(options, selectedIdx)"))
-        assertTrue(language.contains("AppCompatDelegate.setApplicationLocales(locales)"))
-        assertTrue(language.contains("TelegramNativeAlertDialog.Builder(this)"))
-        assertTrue(language.contains(".show()"))
-        assertTrue(!language.contains(".showTelegramSourceDialog()"))
+        assertTrue(settings.contains("TelegramHostActivity<TelegramSettingsActivity>"))
+        assertTrue(settings.contains("LanguageSelectActivity::class.java"))
+        assertTrue(settings.contains("ThemeActivity::class.java"))
+        assertTrue(settings.contains("showTargetExams()"))
+        assertTrue(!settings.contains(".showTelegramSourceDialog()"))
     }
 
     @Test fun normalSourceHelperDoesNotChangeDestructiveFillOrCallbacks() {

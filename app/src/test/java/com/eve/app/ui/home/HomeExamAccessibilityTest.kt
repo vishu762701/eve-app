@@ -32,11 +32,11 @@ class HomeExamAccessibilityTest {
         val adapter = File("src/main/java/com/eve/app/ui/home/ExamAdapter.kt").readText()
         val binding = adapter.substringAfter("fun bind(exam: Exam, attempted: Boolean, isPinned: Boolean")
             .substringBefore("private fun showLogoMode()")
-        assertTrue(binding.contains("b.root.contentDescription = HomeExamAccessibility.describe("))
-        assertTrue(binding.contains("if (isPinned) b.ivPinned.contentDescription else null"))
-        assertTrue(binding.contains("b.root.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES"))
+        assertTrue(binding.contains("container.contentDescription = HomeExamAccessibility.describe("))
+        assertTrue(binding.contains("if (isPinned) ivPinned.contentDescription else null"))
+        assertTrue(binding.contains("container.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES"))
         assertTrue(binding.contains("child.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO"))
-        assertTrue(binding.contains("b.root.setOnClickListener { onClick(exam, attempted, attempt) }"))
-        assertTrue(binding.contains("b.root.setOnLongClickListener"))
+        assertTrue(binding.contains("container.setOnClickListener { onClick(exam, attempted, attempt) }"))
+        assertTrue(binding.contains("container.setOnLongClickListener"))
     }
 }

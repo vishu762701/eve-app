@@ -13,7 +13,7 @@ class AdminAnalyticsCollectorLifecycleContractTest {
         val creation = source.substringAfter("override fun onCreate(")
             .substringBefore("private fun setup()")
         val observer = creation.indexOf("repeatOnLifecycle(Lifecycle.State.STARTED)")
-        val binding = creation.indexOf("binding = ActivityAdminAnalyticsBinding.inflate")
+        val binding = creation.indexOf("binding = AdminAnalyticsTelegramViewTree(this)")
         val authorization = creation.lastIndexOf("authorizeAnalytics()")
         assertTrue("Collector should start after binding, before first protected read",
             binding >= 0 && observer > binding && authorization > observer)

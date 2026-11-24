@@ -337,10 +337,12 @@ class ManualUiSpecificationTest {
                             // Material leaves an absent, zero-width stroke color unset.
                             assertEquals(context.getColor(R.color.transparent), button.strokeColor?.getColorForState(button.drawableState, 0)
                                 ?: context.getColor(R.color.transparent))
-                            assertEquals(Color.alpha(context.getColor(if (read) R.color.text_secondary else R.color.text_primary)), Color.alpha(button.currentTextColor))
-                            assertEquals(context.getColor(if (read) R.color.text_secondary else R.color.text_primary), button.currentTextColor)
+                            val palette = com.eve.app.theme.TelegramThemeEngine.resolveCurrentPalette(context)
+                            val expectedReplyColor = if (read) palette.textSecondary else palette.textPrimary
+                            assertEquals(Color.alpha(expectedReplyColor), Color.alpha(button.currentTextColor))
+                            assertEquals(expectedReplyColor, button.currentTextColor)
                             assertTrue(androidx.core.graphics.ColorUtils.calculateContrast(button.currentTextColor,
-                                context.getColor(R.color.surface)) >= 4.5)
+                                palette.surface) >= 4.5)
                         }
                         val toggle = com.google.android.material.materialswitch.MaterialSwitch(context)
                         for (enabled in listOf(true, false, true)) for (checked in listOf(false, true, false)) {

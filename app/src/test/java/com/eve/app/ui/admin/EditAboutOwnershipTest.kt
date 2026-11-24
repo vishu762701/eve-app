@@ -54,14 +54,25 @@ class EditAboutOwnershipTest {
         }
     }
     private fun read(index:Int,value:AppContent=original){AppContentBoundaryFixture.reads[index].resume(ApiResponse(true,value));idle()}
-    private fun title(a:EditAboutActivity)=a.findViewById<EditText>(R.id.etTitle).text.toString()
-    private fun edit(a:EditAboutActivity){a.findViewById<EditText>(R.id.etTitle).setText(draft.title);a.findViewById<EditText>(R.id.etBody).setText(draft.body)}
-    private fun save(a:EditAboutActivity):View=a.findViewById<View>(R.id.btnSave).also{it.performClick();idle()}
+    private fun <T : View> findAll(root: View, type: Class<T>): List<T> = buildList {
+        if (type.isInstance(root)) add(type.cast(root)!!)
+        if (root is android.view.ViewGroup) for (i in 0 until root.childCount) addAll(findAll(root.getChildAt(i), type))
+    }
+    private inline fun <reified T : View> findAll(root: View): List<T> = findAll(root, T::class.java)
+    private fun titleInput(a:EditAboutActivity)=findAll<EditText>(a.window.decorView).single { it.hint?.toString() == "Page title" }
+    private fun bodyInput(a:EditAboutActivity)=findAll<EditText>(a.window.decorView).single { it.hint?.toString() == "Page body content" }
+    private fun saveButton(a:EditAboutActivity):View=findAll<org.telegram.ui.Stories.recorder.ButtonWithCounterView>(a.window.decorView).single()
+    private fun backButton(a:EditAboutActivity):View=findAll<org.telegram.ui.ActionBar.ActionBar>(a.window.decorView).single().backButtonImageView
+    private fun tabs(a:EditAboutActivity)=findAll<com.eve.app.ui.admin.tg.TelegramSegmentedTabs>(a.window.decorView).single()
+    private fun selectedTabPosition(a:EditAboutActivity):Int{val c=tabs(a).getChildAt(0) as android.view.ViewGroup;return (0 until c.childCount).first{c.getChildAt(it).isSelected}}
+    private fun title(a:EditAboutActivity)=titleInput(a).text.toString()
+    private fun edit(a:EditAboutActivity){titleInput(a).setText(draft.title);bodyInput(a).setText(draft.body)}
+    private fun save(a:EditAboutActivity):View=saveButton(a).also{it.performClick();idle()}
     private fun message(a:EditAboutActivity)=a.findViewById<TextView>(R.id.tvBulletinMessage)?.text?.toString().orEmpty()
-    private fun tab(a:EditAboutActivity,index:Int){a.findViewById<com.eve.app.designsystem.TelegramTabsView>(R.id.tabLayout).getTabAt(index)!!.select();idle()}
+    private fun tab(a:EditAboutActivity,index:Int){tabs(a).selectTab(index,animated=false);idle()}
     @Test fun failedReadCannotEnableAnEditableOfflineDefault()=exercise {a,_->
         AppContentBoundaryFixture.reads[0].resumeWithException(java.io.IOException("offline"));idle()
-        assertFalse(a.findViewById<View>(R.id.btnSave).isEnabled)
+        assertFalse(saveButton(a).isEnabled)
         assertFalse(title(a)=="Privacy Policy")
     }
     @Test fun olderTabResponseCannotOverwriteNewerDocument()=exercise {a,_->
@@ -106,7 +117,7 @@ class EditAboutOwnershipTest {
         read(1,draft)
         assertEquals(1,AppContentBoundaryFixture.writes.size)
         assertEquals(draft.title,title(a))
-        assertTrue(a.findViewById<View>(R.id.btnSave).isEnabled)
+        assertTrue(saveButton(a).isEnabled)
     }
     @Test fun contradictoryReadbackCannotAcknowledgeOrReplaceTheDraft()=exercise {a,_->
         read(0);edit(a);save(a)
@@ -156,7 +167,7 @@ class EditAboutOwnershipTest {
     @Test fun dirtyTabCancelAndDiscardPreserveOriginalNativeNavigation()=exercise {a,_->
         read(0);edit(a);tab(a,1)
         (ShadowDialog.getLatestDialog() as AlertDialog).getButton(DialogInterface.BUTTON_NEUTRAL)!!.performClick();idle()
-        assertEquals(0,a.findViewById<com.eve.app.designsystem.TelegramTabsView>(R.id.tabLayout).selectedTabPosition)
+        assertEquals(0,selectedTabPosition(a))
         assertEquals(draft.title,title(a));assertEquals(1,AppContentBoundaryFixture.reads.size)
         tab(a,2)
         (ShadowDialog.getLatestDialog() as AlertDialog).getButton(DialogInterface.BUTTON_NEGATIVE)!!.performClick();idle()
@@ -174,7 +185,7 @@ class EditAboutOwnershipTest {
         read(2,original.copy(title="Confirmed terms"));assertEquals("Confirmed terms",title(a))
     }
     @Test fun backSaveReusesThePendingWriteAndWaitsForMatchingReadback()=exercise {a,_->
-        read(0);edit(a);save(a);a.findViewById<View>(R.id.btnBack).performClick();idle()
+        read(0);edit(a);save(a);backButton(a).performClick();idle()
         (ShadowDialog.getLatestDialog() as AlertDialog).getButton(DialogInterface.BUTTON_POSITIVE)!!.performClick();idle()
         assertEquals(1,AppContentBoundaryFixture.writes.size)
         AppContentBoundaryFixture.writes[0].resume(ApiResponse<Unit>(true));idle();assertFalse(a.isFinishing)
@@ -189,15 +200,15 @@ class EditAboutOwnershipTest {
         finally{restored.pause().stop().destroy();idle()}
     }
     @Test fun backCancelKeepsTheDraftAndBackDiscardLeavesWithoutAWrite()=exercise {a,_->
-        read(0);edit(a);a.findViewById<View>(R.id.btnBack).performClick();idle()
+        read(0);edit(a);backButton(a).performClick();idle()
         (ShadowDialog.getLatestDialog() as AlertDialog).getButton(DialogInterface.BUTTON_NEUTRAL)!!.performClick();idle()
         assertFalse(a.isFinishing);assertEquals(draft.title,title(a));assertEquals(0,AppContentBoundaryFixture.writes.size)
-        a.findViewById<View>(R.id.btnBack).performClick();idle()
+        backButton(a).performClick();idle()
         (ShadowDialog.getLatestDialog() as AlertDialog).getButton(DialogInterface.BUTTON_NEGATIVE)!!.performClick();idle()
         assertTrue(a.isFinishing);assertEquals(0,AppContentBoundaryFixture.writes.size)
     }
     @Test fun backDiscardDuringPendingSaveNeverInventsARollbackOrOldSuccess()=exercise {a,_->
-        read(0);edit(a);save(a);a.findViewById<View>(R.id.btnBack).performClick();idle()
+        read(0);edit(a);save(a);backButton(a).performClick();idle()
         (ShadowDialog.getLatestDialog() as AlertDialog).getButton(DialogInterface.BUTTON_NEGATIVE)!!.performClick();idle()
         assertTrue(a.isFinishing)
         AppContentBoundaryFixture.writes[0].resume(ApiResponse<Unit>(true));idle()

@@ -52,7 +52,7 @@ class ResultAsyncOwnerBoundaryTest {
     @Test fun oldResultCannotOpenReportOrCategorySheetAfterAccountChange() {
         assertTrue(src.contains("if (resultIdentityCurrent) {\n                ReportQuestionDialog.show("))
         assertTrue(src.contains("if (resultIdentityCurrent) showCategoryBottomSheet()"))
-        assertTrue(src.contains("if (resultIdentityCurrent) selectCutoffCategory(item.category)"))
+        assertTrue(src.contains("if (resultIdentityCurrent) selectCutoffCategory(cat)"))
         assertTrue(src.contains("if (!resultIdentityCurrent) return@setOnClickListener"))
         assertTrue(src.contains("if (!resultIdentityCurrent || pos !in allItems.indices) return"))
         assertTrue(src.contains("private fun applyReviewFilters() {\n        if (!resultIdentityCurrent) return"))

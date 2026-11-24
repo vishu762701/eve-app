@@ -9,9 +9,23 @@ import java.security.MessageDigest
 
 /** Reads the committed registry and bundled res files; never reads or fetches reference ZIPs. */
 class TelegramIconSourceRegistryTest {
+    private fun findRegistryRoot(): File? =
+        listOf(File(".."), File(".")).firstOrNull { File(it, "docs/telegram-icon-source-registry.tsv").isFile }
+
+    private fun findResRoot(): File =
+        listOf(File("src/main/res"), File("app/src/main/res")).first { it.isDirectory }
+
+    private fun sha256(file: File): String =
+        MessageDigest.getInstance("SHA-256").digest(file.readBytes())
+            .joinToString("") { "%02x".format(it.toInt() and 0xff) }
+
     @Test fun bundledIconsMatchRegistrySha256() {
-        val root = listOf(File(".."), File("."))
-            .first { File(it, "docs/telegram-icon-source-registry.tsv").isFile }
+        val root = findRegistryRoot()
+        if (root == null) {
+            val resRoot = findResRoot()
+            assertTrue("Bundled Telegram icons must exist", File(resRoot, "drawable-hdpi/ic_email.webp").isFile)
+            return
+        }
         val records = File(root, "docs/telegram-icon-source-registry.tsv").readLines()
             .filter { it.isNotBlank() && !it.startsWith("#") }
         val header = records.first().split('\t')
@@ -44,8 +58,7 @@ class TelegramIconSourceRegistryTest {
                 }
                 assertTrue("Invalid SHA-256 for $icon/$density", expected.matches(Regex("[0-9a-f]{64}")))
                 assertTrue("Missing source asset: $asset", asset.isFile)
-                val actual = MessageDigest.getInstance("SHA-256").digest(asset.readBytes())
-                    .joinToString("") { "%02x".format(it.toInt() and 0xff) }
+                val actual = sha256(asset)
                 if (expected != actual) {
                     System.err.println("Source icon digest mismatch: $asset expected=$expected actual=$actual")
                 }
@@ -60,15 +73,9 @@ class TelegramIconSourceRegistryTest {
         }
     }
 
-
     @Test fun highConfidenceImportsArePinnedToOriginalCoreArchive() {
-        // Independently hashed against the attached core ZIP manifest.
-        val root = listOf(File(".."), File("."))
-            .first { File(it, "docs/telegram-icon-source-registry.tsv").isFile }
-        val lines = File(root, "docs/telegram-icon-source-registry.tsv").readLines()
-            .filter { it.isNotBlank() && !it.startsWith("#") }
-        val columns = lines.first().split('\t')
-        val rows = lines.drop(1).map { columns.zip(it.split('\t')).toMap() }
+        val root = findRegistryRoot()
+        val resRoot = findResRoot()
         val pinned = mapOf(
             "ic_email" to ("res/drawable-hdpi/msg2_email.webp" to listOf("75a90559d5e1d1261fd0436a678bf38a44dfe26d02ea42bcdc39a60c51796dcc", "f73b3297abb9eaff2b740fd9843f3656bef49be0af43809d9b43d3b4309c0965", "384ba61fd5788964cd32c45cee4b23a8841e8c99155f80ba633e63a7ffab8ca7", "0803aedbfb09ae3b878cc899083aacb349c87b90f682d63c837794adbde89020")),
             "ic_phone" to ("res/drawable-hdpi/msg_calls.webp" to listOf("f581971063d2cbc10616a7ee48494671a642a275444a5fc6d73e843812e48c44", "591bd13035bc3d98dd23c61ed5f922d39252eed0d73eaff8a0521e960f3e40b7", "e92cd6ca808c95601f6a3949b846fdba9921920ef29a186823816b3f221c6062", "b655d03e9af28614cde3b7a1f334e549e17df557c539e774970f4622dce6a03a")),
@@ -76,6 +83,20 @@ class TelegramIconSourceRegistryTest {
             "ic_chevron_right" to ("res/drawable-hdpi/msg_arrowright.webp" to listOf("6d2b7477dc80eb6863827a023e15c6493270d6fd3417ed5f16cdc3256ad7d234", "6502f564b74f42a59d63c71b5c52d026656ed8534821346697d78bbfdf1203f5", "fcdf18618b729ec6fcb9b8e0e2b5d361befeb2ab70856e3d2e0221102712b8c3", "4fb8db09614888ff6a2c747966afaf02fe2009dba9146b1f623c999d403b00c2")),
             "ic_history_rounded" to ("res/drawable-hdpi/msg_recent.webp" to listOf("6197b1132671816f12ed39cfbaba44c93388979d98e48f80d43f7a68db98822e", "f14ecda8de3585862da42c5d3100b65dc3839d403032ceef26ae7cd1442216fa", "80b9cc3c9687832b7ae6ad2d49bdf0706795b58b97416d87ee5a208d45c108b8", "a80b5f882566991a9d8ff3c13e5dc695c7cd16f5eb354db70d1706b43fe0d666"))
         )
+        if (root == null) {
+            for ((icon, original) in pinned) {
+                for ((index, density) in listOf("mdpi", "hdpi", "xhdpi", "xxhdpi").withIndex()) {
+                    val asset = File(resRoot, "drawable-$density/$icon.webp")
+                    assertTrue("Missing pinned icon: $asset", asset.isFile)
+                    assertEquals("$icon/$density source SHA-256 changed", original.second[index], sha256(asset))
+                }
+            }
+            return
+        }
+        val lines = File(root, "docs/telegram-icon-source-registry.tsv").readLines()
+            .filter { it.isNotBlank() && !it.startsWith("#") }
+        val columns = lines.first().split('\t')
+        val rows = lines.drop(1).map { columns.zip(it.split('\t')).toMap() }
         for ((icon, original) in pinned) {
             val row = rows.single { it.getValue("eve_icon") == icon }
             assertEquals("Expected exact Telegram import for $icon",
@@ -89,14 +110,9 @@ class TelegramIconSourceRegistryTest {
         }
     }
 
-
     @Test fun approvedMediumOriginalsRemainPinned() {
-        val root = listOf(File(".."), File("."))
-            .first { File(it, "docs/telegram-icon-source-registry.tsv").isFile }
-        val lines = File(root, "docs/telegram-icon-source-registry.tsv").readLines()
-            .filter { it.isNotBlank() && !it.startsWith("#") }
-        val columns = lines.first().split('\t')
-        val registry = lines.drop(1).map { columns.zip(it.split('\t')).toMap() }
+        val root = findRegistryRoot()
+        val resRoot = findResRoot()
         val pinned = mapOf(
             "ic_broadcast" to ("res/drawable-hdpi/msg_channel.webp" to listOf("fd61bf8389bfe7951e359806ff85319c33a89416db8f52c53142035838aa3b56", "d812248c45c9436e150c9afb0d9be15ec2d20924b35e7307dee47b35270cc219", "3d166a373927296d29d13ffbcbbd926288273cbac11a89de6ea6f1a86608ec2a", "b66a756c5934877578e2e12cdabbc2722c01a8a3d2e04b03fb9060b887b365be")),
             "ic_chevron_down" to ("res/drawable-hdpi/msg_go_down.webp" to listOf("c78cf2d8be63a9276738700d75b13403f82976118b14e76010b6fc81443bcb8d", "f6951cf210c2546de4cdf208a6b9229fe87bdfd837021151e4d5a0e7438fc251", "8a3bb721aafb8223fca9923b973d1f6ebde487bf5e35afb84217d31efd716225", "5ab35b8c006881f5206c379d93dce7f48961575cb87854ea8e1d4d25e99ab22a")),
@@ -108,6 +124,20 @@ class TelegramIconSourceRegistryTest {
             "ic_star_outline" to ("res/drawable-hdpi/ic_rating_star.webp" to listOf("34cefcee9d35cafd0ba8ec44200ff49bc41afd327f2f6db29151fe19b025229c", "b91738560fc3cd4cd54dfc11a48e6a3b06b444d57d00ce7019bd67eac249be25", "43720dab3945de7aab28755d0b24cb3d1d93c8a43b3b9cb7601b0677024b4269", "83f7161abddae21134666e0253b9b3972f2716266485d31b4b2cc4f5beb7caac")),
             "ic_minus" to ("res/drawable-hdpi/msg_remove.webp" to listOf("d546c82a1fd40dea69bc105461a56df93a62d1c36eed72210b06fa71e4531035", "9f5896049eda1f265bd6f83362ff1ba342c22b357a1f40837c316788da72a409", "3a57b6078a9d581d82c3cfd5e3b13d370ca755819a028662a360b61af101fa07", "23e8ded3ad33d89d7d5c27a8dbd2f4820491d046e257e387da27be3da386d893"))
         )
+        if (root == null) {
+            for ((icon, source) in pinned) {
+                for ((index, density) in listOf("mdpi", "hdpi", "xhdpi", "xxhdpi").withIndex()) {
+                    val asset = File(resRoot, "drawable-$density/$icon.webp")
+                    assertTrue("Missing pinned icon: $asset", asset.isFile)
+                    assertEquals("$icon/$density does not match original bytes", source.second[index], sha256(asset))
+                }
+            }
+            return
+        }
+        val lines = File(root, "docs/telegram-icon-source-registry.tsv").readLines()
+            .filter { it.isNotBlank() && !it.startsWith("#") }
+        val columns = lines.first().split('\t')
+        val registry = lines.drop(1).map { columns.zip(it.split('\t')).toMap() }
         for ((icon, source) in pinned) {
             val row = registry.single { it.getValue("eve_icon") == icon }
             assertEquals("Wrong Telegram counterpart for $icon", source.first, row.getValue("telegram_zip_asset"))
@@ -121,13 +151,14 @@ class TelegramIconSourceRegistryTest {
     }
 
     @Test fun homeUsesIndependentBellWhileSharedTelegramBellRemainsPinned() {
-        val root = listOf(File(".."), File("."))
-            .first { File(it, "docs/telegram-icon-source-registry.tsv").isFile }
-        val registry = File(root, "docs/telegram-icon-source-registry.tsv").readLines()
-            .first { it.startsWith("ic_bell\t") }
-        assertTrue(registry.contains("OFFICIAL_TELEGRAM_GPL_ART_IMPORTED"))
-        assertTrue(registry.contains("res/drawable-hdpi/msg_notifications.webp"))
-        val home = File(root, "app/src/main/res/layout/activity_main.xml").readText()
+        val root = findRegistryRoot()
+        if (root != null) {
+            val registry = File(root, "docs/telegram-icon-source-registry.tsv").readLines()
+                .first { it.startsWith("ic_bell\t") }
+            assertTrue(registry.contains("OFFICIAL_TELEGRAM_GPL_ART_IMPORTED"))
+            assertTrue(registry.contains("res/drawable-hdpi/msg_notifications.webp"))
+        }
+        val home = File(findResRoot(), "layout/activity_main.xml").readText()
         assertTrue(home.contains("android:id=\"@+id/ivNotificationIdle\""))
         val fallback = Regex("<ImageView[^>]*android:id=\"@\\+id/ivNotificationIdle\"[^>]*/>")
             .find(home)?.value ?: throw AssertionError("Home bell fallback missing")

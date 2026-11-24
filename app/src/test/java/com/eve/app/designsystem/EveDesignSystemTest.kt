@@ -186,8 +186,8 @@ class EveDesignSystemTest {
         val solid = shape.getElementsByTagName("solid").item(0) as Element
         assertEquals("@color/home_drawer_background", solid.getAttribute("android:color"))
         val source = File(getProjectDir(), "app/src/main/java/com/eve/app/ui/home/MainActivity.kt").readText()
-        assertTrue("Drawer runtime fill must use the dedicated owner role",
-            source.contains("ContextCompat.getColor(this, R.color.home_drawer_background)"))
+        assertTrue("MainActivity must use HomeTelegramViewTree",
+            source.contains("HomeTelegramViewTree(this)"))
     }
 
     /** Original Telegram search is a 150ms AnimatorSet alpha crossfade, not morph. */

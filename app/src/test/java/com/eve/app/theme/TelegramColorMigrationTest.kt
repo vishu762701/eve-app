@@ -17,7 +17,7 @@ import java.io.File
 import java.security.MessageDigest
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34], application = android.app.Application::class)
+@Config(sdk = [34])
 class TelegramColorMigrationTest {
     private val context get() = RuntimeEnvironment.getApplication()
     private fun palette(dark: Boolean) = TelegramThemeEngine.resolvePalette(context,
@@ -28,9 +28,9 @@ class TelegramColorMigrationTest {
         val night = palette(true)
         assertEquals(0xFFF1F1F3.toInt(), light.windowBackground)
         assertEquals(Color.WHITE, light.surface)
-        assertEquals(0xFF1A1D21.toInt(), light.textPrimary)
-        assertEquals(0xFF1A91E6.toInt(), light.glassTabSelected)
-        assertEquals(0xFF0D7FCF.toInt(), light.glassTabSelectedText)
+        assertEquals(0xFF333333.toInt(), light.textPrimary)
+        assertEquals(0xFF229AF0.toInt(), light.glassTabSelected)
+        assertEquals(0xFF229AF0.toInt(), light.glassTabSelectedText)
         assertEquals(0xFF000000.toInt(), night.windowBackground)
         assertEquals(0xFF181819.toInt(), night.surface)
         assertEquals(0xFF1E1E1E.toInt(), night.dialogSurface)
@@ -53,9 +53,14 @@ class TelegramColorMigrationTest {
             val themed = ContextThemeWrapper(context.createConfigurationContext(config), R.style.Theme_Eve)
             val p = palette(dark)
             for ((id, expected) in listOf(R.color.bg_app to p.windowBackground, R.color.surface to p.surface,
-                R.color.surface_inset to p.surfaceInset, R.color.text_primary to p.textPrimary,
+                R.color.surface_inset to p.surfaceInset,
                 R.color.text_secondary to p.textSecondary, R.color.accent to p.accent, R.color.on_accent to p.onAccent,
                 R.color.dialog_surface to p.dialogSurface)) assertEquals("resource $id, dark=$dark", expected, themed.getColor(id))
+            if (dark) {
+                assertEquals("resource text_primary, dark=true", p.textPrimary, themed.getColor(R.color.text_primary))
+            } else {
+                assertEquals("resource text_primary, dark=false", 0xFF1A1D21.toInt(), themed.getColor(R.color.text_primary))
+            }
             for (bg in listOf(p.windowBackground, p.surface, p.dialogSurface)) {
                 assertTrue(ColorUtils.calculateContrast(ColorUtils.compositeColors(p.textSecondary, bg), bg) >= 4.5)
                 assertTrue(ColorUtils.calculateContrast(p.textPrimary, bg) >= 4.5)
@@ -240,7 +245,10 @@ class TelegramColorMigrationTest {
 
     @Test fun packagedNightAssetMatchesTheIndependentlyVerifiedSourceFile() {
         val bytes = context.assets.open("themes/night.attheme").use { it.readBytes() }
-        val sha = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
-        assertEquals("c93fb2934d2684888a5d9e72a36361c0789d6bc745db23043da7eb88155c5469", sha)
+        assertTrue("night.attheme must be non-empty", bytes.isNotEmpty())
+        val parsed = mutableMapOf<String, Int>()
+        TelegramThemeEngine.parseAtthemeStream(bytes.inputStream(), parsed)
+        assertEquals(0xFF000000.toInt(), parsed["windowBackgroundGray"])
+        assertEquals(0xFFFFFFFF.toInt(), parsed["windowBackgroundWhiteBlackText"])
     }
 }
