@@ -75,10 +75,10 @@ class LanguageSelectActivityNativeTest {
             val root = activity.window.decorView
 
             // 1. Prove original Telegram classes are live in the view hierarchy
-            val actionBar = findFirst<ActionBar>(root)
-            val recycler = findFirst<RecyclerListView>(root)
-            val header = findFirst<HeaderCell>(root)
-            val radioCells = findAll<TextRadioCell>(root)
+            val actionBar = findFirst(root, ActionBar::class.java)
+            val recycler = findFirst(root, RecyclerListView::class.java)
+            val header = findFirst(root, HeaderCell::class.java)
+            val radioCells = findAll(root, TextRadioCell::class.java)
 
             assertNotNull("Original Telegram ActionBar must be present", actionBar)
             assertNotNull("Original Telegram RecyclerListView must be present", recycler)
@@ -136,7 +136,7 @@ class LanguageSelectActivityNativeTest {
         val darkActivity = instrumentation.startActivitySync(intent) as LanguageSelectActivity
         try {
             SystemClock.sleep(500)
-            val darkRecycler = findFirst<RecyclerListView>(darkActivity.window.decorView)
+            val darkRecycler = findFirst(darkActivity.window.decorView, RecyclerListView::class.java)
             assertNotNull("RecyclerListView must render in dark theme", darkRecycler)
             captureScreenshot("ref06-language-dark")
         } finally {
@@ -147,22 +147,24 @@ class LanguageSelectActivityNativeTest {
         }
     }
 
-    private inline fun <reified T : View> findFirst(root: View): T? {
-        if (root is T) return root
+    private fun <T : View> findFirst(root: View, type: Class<T>): T? {
+        if (type.isInstance(root)) return type.cast(root)
         if (root is ViewGroup) {
             for (i in 0 until root.childCount) {
-                val found = findFirst<T>(root.getChildAt(i))
+                val found = findFirst(root.getChildAt(i), type)
                 if (found != null) return found
             }
         }
         return null
     }
 
-    private inline fun <reified T : View> findAll(root: View, out: MutableList<T> = mutableListOf()): List<T> {
-        if (root is T) out.add(root)
+    private fun <T : View> findAll(root: View, type: Class<T>, out: MutableList<T> = mutableListOf()): List<T> {
+        if (type.isInstance(root)) {
+            type.cast(root)?.let { out.add(it) }
+        }
         if (root is ViewGroup) {
             for (i in 0 until root.childCount) {
-                findAll(root.getChildAt(i), out)
+                findAll(root.getChildAt(i), type, out)
             }
         }
         return out
