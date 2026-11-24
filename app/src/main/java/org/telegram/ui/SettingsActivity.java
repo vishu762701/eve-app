@@ -402,12 +402,14 @@ public class SettingsActivity extends BaseFragment {
     }
 
     @Override
-    public boolean onBackPressed() {
+    public boolean onBackPressed(boolean invoked) {
         if (searchItem != null && searchItem.isSearchFieldVisible2()) {
-            actionBar.closeSearchField(true);
+            if (invoked) {
+                actionBar.closeSearchField(true);
+            }
             return false;
         }
-        return super.onBackPressed();
+        return super.onBackPressed(invoked);
     }
 
     /**

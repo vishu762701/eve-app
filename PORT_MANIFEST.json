@@ -2287,7 +2287,7 @@
       "upstream_path": "TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java",
       "upstream_sha256": "ced897fb9dc732754face0126b5482aae4d627f6f5f357a2f1b3f26145b8da4c",
       "mode": "CUT",
-      "eve_sha256": "4877219c32d043520f221720494095455aa35b4de12f3c4bbba5859492ddd12b"
+      "eve_sha256": "49b588b2bd8a905c18a2a9c390deb215f387c16c4925316ed27e3a35e5057b5c"
     },
     {
       "path": "app/src/main/java/org/telegram/ui/Stories/StoriesUtilities.java",
