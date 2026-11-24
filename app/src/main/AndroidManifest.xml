@@ -145,6 +145,7 @@
         <activity android:name=".ui.settings.AppearanceActivity" android:exported="false" />
         <activity android:name=".ui.settings.ThemeActivity" android:exported="false" />
         <activity android:name=".ui.settings.LanguageSelectActivity" android:exported="false" />
+        <activity android:name=".ui.settings.PrivacySettingsActivity" android:exported="false" />
         <activity android:name=".ui.settings.PowerSavingActivity" android:exported="false" />
         <activity android:name=".ui.about.ContentDisplayActivity" android:exported="false" />
         <activity android:name=".ui.admin.EditAboutActivity" android:exported="false" />

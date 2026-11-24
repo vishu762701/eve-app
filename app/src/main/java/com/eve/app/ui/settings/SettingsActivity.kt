@@ -185,7 +185,7 @@ class SettingsActivity : TelegramHostActivity<TelegramSettingsActivity>(), Teleg
                 startActivity(Intent(this, ThemeActivity::class.java))
             }
             TelegramSettingsActivity.ROW_PRIVACY -> {
-                startActivity(Intent(this, PasscodeActivity::class.java))
+                startActivity(Intent(this, PrivacySettingsActivity::class.java))
             }
             TelegramSettingsActivity.ROW_NOTIFICATIONS -> {
                 startActivity(Intent(this, com.eve.app.ui.notifications.NotificationsActivity::class.java))

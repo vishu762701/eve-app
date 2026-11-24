@@ -201,7 +201,7 @@ public class SettingsActivity extends BaseFragment {
         cameraBackground.setBackground(Theme.createCircleDrawable(AndroidUtilities.dp(28), Theme.getColor(Theme.key_featuredStickers_addButton)));
         ImageView cameraImageView = new ImageView(context);
         cameraImageView.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-        cameraImageView.setImageResource(R.drawable.ic_camera);
+        cameraImageView.setImageResource(com.eve.app.R.drawable.ic_camera);
         cameraImageView.setColorFilter(new PorterDuffColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN));
         cameraBackground.addView(cameraImageView, LayoutHelper.createFrame(18, 18, Gravity.CENTER));
         cameraButton.addView(cameraBackground, LayoutHelper.createFrame(28, 28, Gravity.CENTER));

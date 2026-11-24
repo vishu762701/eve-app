@@ -984,7 +984,7 @@
       "upstream_sha256": null,
       "mode": "NEW",
       "reason": "Eve host/screen/adapter referencing Telegram components",
-      "eve_sha256": "702868faeda7e8f787ec4b9166a8e9471b4153b260570df6e945c264eb7bff7b"
+      "eve_sha256": "52fd40cb0b2fae2e6131611cf9605ed0f9a9e67bc35cbf19e4646bb84b9f7051"
     },
     {
       "path": "app/src/main/java/com/eve/app/ui/settings/SharedConfig.kt",
@@ -2287,7 +2287,7 @@
       "upstream_path": "TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java",
       "upstream_sha256": "ced897fb9dc732754face0126b5482aae4d627f6f5f357a2f1b3f26145b8da4c",
       "mode": "CUT",
-      "eve_sha256": "8cb5b4b2f2687d96e1eca8a77727d68192d50f8ca7e030e695e5ea83ca9b209d"
+      "eve_sha256": "f6d64f45500bf70c21bbf78115cab7e8afa1249dbd135a5debd0985e255ae31d"
     },
     {
       "path": "app/src/main/java/org/telegram/ui/Stories/StoriesUtilities.java",
@@ -2460,6 +2460,37 @@
       "mode": "NEW",
       "reason": "Eve host/screen/adapter referencing Telegram components",
       "eve_sha256": "b28524c55093dacc20eb323c4d7ffd3fb0f4263268316201685eae27fa29972e"
+    },
+    {
+      "path": "app/src/main/java/com/eve/app/ui/settings/PrivacyPreferences.kt",
+      "upstream_path": null,
+      "upstream_sha256": null,
+      "mode": "NEW",
+      "reason": "Eve user-scoped privacy preferences store for PrivacySettingsActivity",
+      "eve_sha256": "4d4cd68eaf4149dbae2bb8e2826957d21da81cf33a41ee801a6327644871c545"
+    },
+    {
+      "path": "app/src/main/java/com/eve/app/ui/settings/PrivacySettingsActivity.kt",
+      "upstream_path": null,
+      "upstream_sha256": null,
+      "mode": "NEW",
+      "reason": "Eve host/screen/adapter referencing Telegram PrivacySettingsActivity",
+      "eve_sha256": "c4f50d6b3457271b82192f4ed7348ec7abe583097344c8c6d9917d68fae0cd82"
+    },
+    {
+      "path": "app/src/main/java/com/eve/app/ui/settings/TelegramPrivacyDelegate.kt",
+      "upstream_path": null,
+      "upstream_sha256": null,
+      "mode": "NEW",
+      "reason": "Eve CUT-INTERFACE delegate for Telegram PrivacySettingsActivity",
+      "eve_sha256": "34bb36157dd34f0e74a8b7bba0c665791c466953803720c9fd27b828fbe96961"
+    },
+    {
+      "path": "app/src/main/java/org/telegram/ui/PrivacySettingsActivity.java",
+      "upstream_path": "TMessagesProj/src/main/java/org/telegram/ui/PrivacySettingsActivity.java",
+      "upstream_sha256": "456bcbd1eb18e6d57dd15f73bb3c790b67a47ab086f66bd0fa740801c0ded681",
+      "mode": "CUT",
+      "eve_sha256": "97a8fc17bc554aa618775e1d27441686c3ea6b40d5ebb80383f83b05fcc441a5"
     }
   ],
   "blocks": [
