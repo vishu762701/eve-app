@@ -77,7 +77,14 @@ Statuses describe the new delivery effort, not the absence of existing code.
   - Bottom navigation (`MainTabsActivity.java`): preserved original `GlassTabView.TabAnimation.CHATS` icon and changed label to `R.string.MainTabsExams` (`"Exams"`).
   - Real backend exam adapter (`EveBackendClient.java`, `EveExamModels.java`, `EveExamRepository.java`, `EveExamDialogsMapper.java`, `EveExamTestsFragment.java`): fetches live exams (`GET /api/exams`) and published tests (`GET /api/generated-tests`), maps them to original `DialogCell.CustomDialog` rows (exam name, category/duration/questions/next-test subtitle, live test count badge, latest timestamp), and opens `EveExamTestsFragment` on row tap.
   - Original Chats screen UI (`DialogsActivity.java`, `DialogsAdapter.java`, `DialogsEmptyCell.java`, `strings.xml`): kept `"EVE"` title, `"Search exams"` live search filtering, `VIEW_TYPE_EXAM` backed by `DialogCell`, EVE exam discovery/auth/retry empty state in `DialogsEmptyCell`, and hid inappropriate compose/stories/folder clutter on Exams mode.
-  - Added `android/TMessagesProj/src/test/java/org/telegram/ui/eve/EveExamsMainScreenTest.java`.
+- **2026-11-25 — Mission 2: Main Screen Chats -> Exams (`63ba35da8ebfe3df998aaf4e6c7bb5c3d35b57d8`, CI GREEN)**
+  - CI verification: [`63ba35da8ebfe3df998aaf4e6c7bb5c3d35b57d8`](https://github.com/vishu762701/eve-app/actions/runs/45621367786) (`Build Eve APK` run `45621367786` succeeded across all 4 jobs: `firebase-functions`, `Telegram Port Integrity`, `backend`, `Build New Android App (android/)`; APK artifact `15026278212`, `72,110,156` bytes). Previous attempts `5bd0da4` (run `45619449117`: `DialogsEmptyCell` static init NPE in Robolectric) and `92445d8` (run `45620388779`: `LoadState.READY` typo) were resolved by extracting `EveExamDialogsMapper.resolveEmptyState` and asserting `LoadState.LOADED`/`EMPTY` in `EveExamsMainScreenTest`.
+  - Changed `android/TMessagesProj/src/main/java/org/telegram/ui/eve/auth/EveBackendClient.java`, `MainTabsActivity.java`, `DialogsActivity.java`, `DialogsAdapter.java`, `DialogsEmptyCell.java`, `res/values/strings.xml`, plus new `org.telegram.ui.eve.exams.*` adapters and `EveExamsMainScreenTest.java`.
+  - Pending: owner runtime phone screenshot/video acceptance on Exams list, search, empty states, and `EveExamTestsFragment`.
+
+- **2026-11-25 — Mission 3: Account Screen Cleanup (implemented)**
+  - Edited `android/TMessagesProj/src/main/java/org/telegram/ui/UserInfoActivity.java`: removed user-facing entries and navigation routes for Personal channel (`BUTTON_CHANNEL`), Chat Automation (`BUTTON_AI` + `EditProfileChatAutomationInfo`), and Add Account (`BUTTON_ADD_ACCOUNT` + Telegram Premium multi-account upsell shadow), while preserving Account title, First/Last name, Bio, Your Info, Phone, Username, Birthday + privacy settings, saved session switching (`AccountCell` if already present), Log Out (`LogoutActivity`), and keeping original Telegram classes (`ChooseChannelFragment`, `LoginActivity`, `AdminedChannelsFetcher`) undeleted.
+  - Added `android/TMessagesProj/src/test/java/org/telegram/ui/eve/EveAccountCleanupTest.java`.
 
 ## F. Active bugs
 - PROFILE-001, IN PROGRESS: owner reports a crash on tapping Profile. Two authenticated Robolectric tests reproduce `ProfileActivity.onCreate:187 -> ProfileTelegramViewTree.<init>:153 -> createCellValue:389`. `valueViews.add(this)` precedes the field initializer at line 241. This is the proven JVM cause; the exact phone event is not correlated. No main fix commit. The prepared change moves only the field, updates its EVE `NEW` hash and adds a four-row theme registration test. Post-fix Android and phone checks outstanding; not T7.
@@ -85,7 +92,7 @@ Statuses describe the new delivery effort, not the absence of existing code.
 - SMOKE-001, IN PROGRESS: the existing smoke test can fall back to one screen and accept a generic nonempty host. The prepared S2 change requires a packaged six-host inventory, attached fragment classes, live layout and fresh evidence.
 
 ## G. Current work position
-**NEXT ACTION:** Verify Mission 2 CI green run on `main`, then execute Mission 3 (Account screen cleanup in `UserInfoActivity.java`).
+**NEXT ACTION:** Verify Mission 3 CI green run on `main`, then execute Mission 4 (Chat Settings -> Exam Settings in `ThemeActivity.java` and `SettingsActivity.java`).
 
 Historical legacy-`app/` notes (pre-handover):
 - Offline fixture `ef2666ce97a833bf21deb4e0f954e1423cd606e3` and `a2ee6ef5d0e05314705a28c140586e64e8ce8be4` in `app/` remain preserved untouched in `app/`.

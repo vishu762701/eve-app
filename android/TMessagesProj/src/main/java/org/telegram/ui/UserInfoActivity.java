@@ -5,8 +5,6 @@ import static org.telegram.messenger.AndroidUtilities.replaceArrows;
 import static org.telegram.messenger.AndroidUtilities.replaceSingleTag;
 import static org.telegram.messenger.LocaleController.formatString;
 import static org.telegram.messenger.LocaleController.getString;
-import static org.telegram.ui.Cells.TextCell.applyNewSpan;
-import static org.telegram.ui.Components.Premium.LimitReachedBottomSheet.TYPE_ACCOUNTS;
 
 import android.content.Context;
 import android.graphics.PorterDuff;
@@ -48,7 +46,6 @@ import org.telegram.ui.Components.AlertsCreator;
 import org.telegram.ui.Components.BulletinFactory;
 import org.telegram.ui.Components.IconBackgroundColors;
 import org.telegram.ui.Components.LayoutHelper;
-import org.telegram.ui.Components.Premium.LimitReachedBottomSheet;
 import org.telegram.ui.Components.RecyclerListView;
 import org.telegram.ui.Components.UItem;
 import org.telegram.ui.Components.UniversalAdapter;
@@ -293,6 +290,21 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
     private static final int BUTTON_ADD_ACCOUNT = 10;
     private static final int BUTTON_LOGOUT = 11;
 
+    public static final int ACCOUNT_OPTION_PHONE = INFO_PHONE;
+    public static final int ACCOUNT_OPTION_USERNAME = INFO_USERNAME;
+    public static final int ACCOUNT_OPTION_BIRTHDAY = INFO_BIRTHDAY;
+    public static final int ACCOUNT_OPTION_CHANNEL = BUTTON_CHANNEL;
+    public static final int ACCOUNT_OPTION_CHAT_AUTOMATION = BUTTON_AI;
+    public static final int ACCOUNT_OPTION_ADD_ACCOUNT = BUTTON_ADD_ACCOUNT;
+    public static final int ACCOUNT_OPTION_LOGOUT = BUTTON_LOGOUT;
+
+    // EVE-PATCH: Mission 3 - Hide Personal channel, Chat Automation, and Add Account from Account screen.
+    public static boolean isEveAccountOptionEnabled(int buttonId) {
+        return buttonId != BUTTON_CHANNEL
+                && buttonId != BUTTON_AI
+                && buttonId != BUTTON_ADD_ACCOUNT;
+    }
+
     private final ArrayList<Integer> accountNumbers = new ArrayList<>();
     private void updateAccounts() {
         accountNumbers.clear();
@@ -334,6 +346,7 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
 
     @Override
     protected void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
+        channelRow = -1;
         addAccountRow = -1;
         numberRow = -1;
         updateAccounts();
@@ -388,57 +401,20 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
         }
         items.add(UItem.asShadow(birthdayInfo));
 
-        channelRow = items.size();
-        if (channel == null) {
-            items.add(SettingsActivity.SettingCell.Factory.of(BUTTON_CHANNEL, IconBackgroundColors.ORANGE.top, IconBackgroundColors.ORANGE.bottom, R.drawable.msg_filled_menu_channels, getString(R.string.EditProfileChannelTitle), null, getString(R.string.EditProfileChannelAdd)));
-        } else {
-            items.add(SettingsActivity.SettingCell.Factory.of(BUTTON_CHANNEL, IconBackgroundColors.ORANGE.top, IconBackgroundColors.ORANGE.bottom, R.drawable.msg_filled_menu_channels, getString(R.string.EditProfileChannelTitle), channel.title));
-        }
         if (hadHours) {
             items.add(SettingsActivity.SettingCell.Factory.of(BUTTON_HOURS, IconBackgroundColors.ORANGE_DEEP.top, IconBackgroundColors.ORANGE_DEEP.bottom, R.drawable.filled_premium_hours, getString(R.string.EditProfileHours)));
         }
         if (hadLocation) {
             items.add(SettingsActivity.SettingCell.Factory.of(BUTTON_LOCATION, IconBackgroundColors.RED.top, IconBackgroundColors.RED.bottom, R.drawable.filled_location, getString(R.string.EditProfileLocation)));
         }
-        if (bots != null && !bots.isEmpty()) {
-            final StringBuilder value = new StringBuilder();
-            for (final TL_account.TL_connectedBot bot : bots) {
-                final TLRPC.User botUser = MessagesController.getInstance(currentAccount).getUser(bot.bot_id);
-                if (botUser != null) {
-                    if (value.length() > 0) value.append(", ");
-                    value.append(UserObject.getUserName(botUser));
-                }
-            }
-            items.add(SettingsActivity.SettingCell.Factory.of(BUTTON_AI, IconBackgroundColors.PURPLE.top, IconBackgroundColors.PURPLE.bottom, R.drawable.premium_ai_editor, getString(R.string.EditProfileChatAutomation), value));
-        } else {
-            items.add(SettingsActivity.SettingCell.Factory.of(BUTTON_AI, IconBackgroundColors.PURPLE.top, IconBackgroundColors.PURPLE.bottom, R.drawable.premium_ai_editor, applyNewSpan(getString(R.string.EditProfileChatAutomation))));
-        }
-        items.add(UItem.asShadow(-3, getString(R.string.EditProfileChatAutomationInfo)));
-        final boolean hasAddAccount = UserConfig.getActivatedAccountsCount() < UserConfig.MAX_ACCOUNT_COUNT;
-        if (hasAddAccount) {
-            addAccountRow = items.size();
-            items.add(InfoCell.Factory.of(BUTTON_ADD_ACCOUNT, R.drawable.outline_add_account, getString(R.string.AddAccount), null, 0).accent());
-        }
+        // EVE-PATCH: Mission 3 - Personal channel (BUTTON_CHANNEL), Chat Automation (BUTTON_AI),
+        // and Add Account (BUTTON_ADD_ACCOUNT + Telegram Premium upsell shadow) entries are hidden.
         if (!accountNumbers.isEmpty()) {
-            if (!hasAddAccount) {
-                items.add(UItem.asHeader(getString(R.string.SettingsAccounts)));
-            }
+            items.add(UItem.asHeader(getString(R.string.SettingsAccounts)));
             for (int i = 0; i < accountNumbers.size(); ++i) {
                 items.add(SettingsActivity.AccountCell.Factory.of(i, accountNumbers.get(i)));
             }
-            if (!UserConfig.hasPremiumOnAccounts()) {
-                final int moreAccounts = Math.max(0, UserConfig.getMaxAccountCount() - UserConfig.getActivatedAccountsCount());
-                items.add(UItem.asShadow(
-                    TextUtils.concat(
-                        moreAccounts > 0 ? LocaleController.formatPluralStringComma("AddAccountInfo1", moreAccounts) + " " : "",
-                        replaceSingleTag(LocaleController.formatPluralStringComma("AddAccountInfo2", UserConfig.getMaxAccountCount()), () -> {
-                            presentFragment(new PremiumPreviewFragment("add_account"));
-                        })
-                    )
-                ));
-            } else {
-                items.add(UItem.asShadow(null));
-            }
+            items.add(UItem.asShadow(null));
         }
         logoutRow = items.size();
         items.add(InfoCell.Factory.of(BUTTON_LOGOUT, R.drawable.msg_leave, getString(R.string.LogOut), null, 0).red());
@@ -465,30 +441,13 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
 
     @Override
     protected void onClick(UItem item, View view, int position, float x, float y) {
-        if (item.id == BUTTON_ADD_ACCOUNT) {
-            int freeAccounts = 0;
-            Integer availableAccount = null;
-            for (int a = UserConfig.MAX_ACCOUNT_COUNT - 1; a >= 0; a--) {
-                if (!UserConfig.getInstance(a).isClientActivated()) {
-                    freeAccounts++;
-                    if (availableAccount == null) {
-                        availableAccount = a;
-                    }
-                }
-            }
-            if (!UserConfig.hasPremiumOnAccounts()) {
-                freeAccounts -= (UserConfig.MAX_ACCOUNT_COUNT - UserConfig.MAX_ACCOUNT_DEFAULT_COUNT);
-            }
-            if (freeAccounts > 0 && availableAccount != null) {
-                presentFragment(new LoginActivity(availableAccount));
-            } else if (!UserConfig.hasPremiumOnAccounts()) {
-                showDialog(new LimitReachedBottomSheet(this, getContext(), TYPE_ACCOUNTS, currentAccount, null));
-            }
-        } else if (item.instanceOf(SettingsActivity.AccountCell.Factory.class)) {
+        if (item.instanceOf(SettingsActivity.AccountCell.Factory.class)) {
             final int account = item.intValue;
             if (LaunchActivity.instance != null) {
                 LaunchActivity.instance.switchToAccount(account, true);
             }
+        } else if (!isEveAccountOptionEnabled(item.id)) {
+            return;
         } else if (item.id == BUTTON_BIRTHDAY || item.id == INFO_BIRTHDAY) {
             showDialog(AlertsCreator.createBirthdayPickerDialog(
                 getContext(),
@@ -511,29 +470,6 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
                 listView.adapter.update(true);
             }
             checkDone(true);
-        } else if (item.id == BUTTON_CHANNEL) {
-            presentFragment(new ChooseChannelFragment(
-                channels,
-                (channel == null ? 0 : channel.id), chat -> {
-                    if (channel == chat) return;
-                    channel = chat;
-                    if (chat != null) {
-                        BulletinFactory.of(this).createSimpleBulletin(R.raw.contact_check, getString(R.string.EditProfileChannelSet)).show();
-                    }
-                    checkDone(true);
-                    if (listView != null) {
-                        listView.adapter.update(true);
-                    }
-                }
-            ));
-//            showDialog(new ChooseChannel(this, channels, (channel == null ? 0 : channel.id), chat -> {
-//                if (channel == chat) return;
-//                channel = chat;
-//                checkDone(true);
-//                if (listView != null) {
-//                    listView.adapter.update(true);
-//                }
-//            }));
         } else if (item.id == BUTTON_LOCATION) {
             
 
@@ -570,13 +506,15 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
     @Override
     public void onResume() {
         super.onResume();
-        channels.invalidate();
-        channels.subscribe(() -> {
-            if (listView != null) {
-                listView.adapter.update(true);
-            }
-        });
-        channels.fetch();
+        if (isEveAccountOptionEnabled(ACCOUNT_OPTION_CHANNEL)) {
+            channels.invalidate();
+            channels.subscribe(() -> {
+                if (listView != null) {
+                    listView.adapter.update(true);
+                }
+            });
+            channels.fetch();
+        }
         birthdayInfo = null;
         if (listView != null) {
             listView.adapter.update(true);
