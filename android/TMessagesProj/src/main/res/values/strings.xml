@@ -5757,6 +5757,9 @@
     <string name="TelegramPremiumSubtitle">Go **beyond the limits**, get exclusive features and support us by subscribing to **Telegram Premium**.</string>
     <string name="TelegramPremiumSubscribedTitle">You are all set!</string>
     <string name="TelegramPremiumSubscribedSubtitle">Thank you for subscribing to **Telegram Premium**.\nHere’s what is now unlocked.</string>
+    <string name="EvePremium">EVE Premium</string>
+    <string name="EvePremiumSubtitle">EVE membership showcase. Exam plans and pricing will be managed in the EVE Admin Control Center.</string>
+    <string name="EvePremiumFooterInfo">Paid EVE plans and pricing are not active yet and will be configured in the EVE Admin Control Center.</string>
     <string name="LimitReachedFavoriteStickers">Limit of %d Stickers Reached</string>
     <string name="LimitReachedFavoriteStickersSubtitle">An older sticker was replaced with this one. You can **increase the limit** to %d stickers</string>
     <string name="LimitReachedFavoriteGifs">Limit of %d GIFs Reached</string>

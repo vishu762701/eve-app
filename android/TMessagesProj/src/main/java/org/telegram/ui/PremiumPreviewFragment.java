@@ -446,6 +446,11 @@ public class PremiumPreviewFragment extends BaseFragment implements Notification
         return null;
     }
 
+    // EVE-PATCH: Mission 6 - Remove Telegram Premium branding/promo/subscription tiers while preserving star animation.
+    public static boolean isEvePremiumTransformEnabled() {
+        return true;
+    }
+
     public PremiumPreviewFragment setForcePremium() {
         this.forcePremium = true;
         return this;
@@ -535,7 +540,9 @@ public class PremiumPreviewFragment extends BaseFragment implements Notification
         premiumFeatures.clear();
         morePremiumFeatures.clear();
         if (type == FEATURES_PREMIUM) {
-            fillPremiumFeaturesList(premiumFeatures, currentAccount, false);
+            if (!isEvePremiumTransformEnabled()) {
+                fillPremiumFeaturesList(premiumFeatures, currentAccount, false);
+            }
         } else {
             fillBusinessFeaturesList(premiumFeatures, currentAccount, false);
             fillBusinessFeaturesList(morePremiumFeatures, currentAccount, true);
@@ -1441,7 +1448,9 @@ public class PremiumPreviewFragment extends BaseFragment implements Notification
             showAdsInfoRow = rowCount++;
         }
 
-        AndroidUtilities.updateViewVisibilityAnimated(buttonContainer, !getUserConfig().isPremium() || currentSubscriptionTier != null && currentSubscriptionTier.getMonths() < subscriptionTiers.get(selectedTierIndex).getMonths() && !forcePremium, 1f, false);
+        final boolean showSubscribeButton = !(isEvePremiumTransformEnabled() && type == FEATURES_PREMIUM)
+                && (!getUserConfig().isPremium() || currentSubscriptionTier != null && !subscriptionTiers.isEmpty() && selectedTierIndex >= 0 && selectedTierIndex < subscriptionTiers.size() && currentSubscriptionTier.getMonths() < subscriptionTiers.get(selectedTierIndex).getMonths() && !forcePremium);
+        AndroidUtilities.updateViewVisibilityAnimated(buttonContainer, showSubscribeButton, 1f, false);
 
         int buttonHeight = buttonContainer.getVisibility() == View.VISIBLE ? dp(64) : 0;
         layoutManager.setAdditionalHeight(buttonHeight + statusBarHeight - dp(16));
@@ -1613,6 +1622,8 @@ public class PremiumPreviewFragment extends BaseFragment implements Notification
                     }), true));
                 } else if (position == statusRow && type == FEATURES_BUSINESS) {
                     privacyCell.setText(getString(R.string.PremiumPreviewMoreBusinessFeaturesInfo));
+                } else if (position == statusRow && isEvePremiumTransformEnabled()) {
+                    privacyCell.setText(getString(R.string.EvePremiumFooterInfo));
                 } else if (position == statusRow) {
                     TLRPC.TL_help_premiumPromo premiumPromo = getMediaDataController().getPremiumPromo();
                     if (premiumPromo == null) {
@@ -2057,14 +2068,19 @@ public class PremiumPreviewFragment extends BaseFragment implements Notification
         private boolean tierListViewVisible;
         public void updateText() {
             if (type == FEATURES_PREMIUM) {
-                titleView.setText(getString(forcePremium ? R.string.TelegramPremiumSubscribedTitle : R.string.TelegramPremium));
-                subtitleView.setText(AndroidUtilities.replaceTags(getString(getUserConfig().isPremium() || forcePremium ? R.string.TelegramPremiumSubscribedSubtitle : R.string.TelegramPremiumSubtitle)));
+                if (isEvePremiumTransformEnabled()) {
+                    titleView.setText(getString(R.string.EvePremium));
+                    subtitleView.setText(AndroidUtilities.replaceTags(getString(R.string.EvePremiumSubtitle)));
+                } else {
+                    titleView.setText(getString(forcePremium ? R.string.TelegramPremiumSubscribedTitle : R.string.TelegramPremium));
+                    subtitleView.setText(AndroidUtilities.replaceTags(getString(getUserConfig().isPremium() || forcePremium ? R.string.TelegramPremiumSubscribedSubtitle : R.string.TelegramPremiumSubtitle)));
+                }
             } else if (type == FEATURES_BUSINESS) {
                 titleView.setText(getString(forcePremium ? R.string.TelegramPremiumSubscribedTitle : R.string.TelegramBusiness));
                 subtitleView.setText(AndroidUtilities.replaceTags(getString(getUserConfig().isPremium() || forcePremium ? R.string.TelegramBusinessSubscribedSubtitleTemp : R.string.TelegramBusinessSubtitleTemp)));
             }
             subtitleView.getLayoutParams().width = Math.min(AndroidUtilities.displaySize.x - dp(42), HintView2.cutInFancyHalf(subtitleView.getText(), subtitleView.getPaint()));
-            boolean tierNotVisible = forcePremium || BuildVars.IS_BILLING_UNAVAILABLE || IS_PREMIUM_TIERS_UNAVAILABLE || subscriptionTiers.size() <= 1;
+            boolean tierNotVisible = (isEvePremiumTransformEnabled() && type == FEATURES_PREMIUM) || forcePremium || BuildVars.IS_BILLING_UNAVAILABLE || IS_PREMIUM_TIERS_UNAVAILABLE || subscriptionTiers.size() <= 1;
             if (!setTierListViewVisibility || !tierNotVisible) {
                 tierListView.setVisibility(tierNotVisible ? GONE : VISIBLE);
                 setTierListViewVisibility = true;

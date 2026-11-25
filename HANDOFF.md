@@ -13,10 +13,11 @@ Read `EVE_PROJECT_STATE.md` for the permanent record and NEXT ACTION. Developmen
 - Mission 2 (`63ba35d`, [run 45621367786](https://github.com/vishu762701/eve-app/actions/runs/45621367786)): Chats -> Exams backed by Worker API (`Eve-debug-apk` `15026278212`).
 - Mission 3 (`ac93600`, [run 45628596616](https://github.com/vishu762701/eve-app/actions/runs/45628596616)): Account cleanup in `UserInfoActivity` (`Eve-debug-apk` `15031321621`).
 - Mission 4 (`85e4baa`, [run 45631733282](https://github.com/vishu762701/eve-app/actions/runs/45631733282)): Exam Settings cleanup in `ThemeActivity` (`Eve-debug-apk` `15032148596`).
-- Mission 5 (English-only): `LocaleController` locked to `"en"`/`"English"` + `LanguageSelectActivity` single `"English"` entry while keeping translation & system locale intact (`EveEnglishOnlyLanguageTest`).
+- Mission 5 (`953d972`, [run 45635757790](https://github.com/vishu762701/eve-app/actions/runs/45635757790)): English-only locale lock (`Eve-debug-apk` `15033762124`).
+- Mission 6 (Settings & EVE Premium): `Telegram Features` removed (`SettingsActivity`), `EVE Premium` branding (`PremiumPreviewFragment`/`ProfileActivity`) preserving 3D star & `StarParticlesView` animations (`EveSettingsAndPremiumTest`).
 
 ## Next
-- Verify Mission 5 CI green run on `main`, then execute Mission 6 (Settings cleanup and EVE Premium in `SettingsActivity.java` and `PremiumPreviewFragment.java`).
+- Verify Mission 6 CI green run on `main`, then execute Mission 7 (audit legacy `app/` + backend/D1/Firebase and build EVE Admin Control Center).
 
 ## Open decisions
 - Legacy Firebase retirement and production D1 migration remain separate from normal CI. No production deployment is authorized by this handoff.

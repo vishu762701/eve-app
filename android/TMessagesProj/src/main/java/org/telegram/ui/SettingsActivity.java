@@ -813,8 +813,9 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
             items.add(UItem.asShadow(null));
         }
 
-        if (!getMessagesController().premiumFeaturesBlocked()) {
-            items.add(SettingCell.Factory.of(11, 0xFFB659FF, 0xFF617CFF, R.drawable.settings_premium, getString(R.string.TelegramPremium)));
+        // EVE-PATCH: Mission 6 - Rebrand Settings entry to EVE Premium while preserving settings_premium star icon.
+        if (isEveSettingsItemEnabled(EVE_SETTINGS_ITEM_PREMIUM) && !getMessagesController().premiumFeaturesBlocked()) {
+            items.add(SettingCell.Factory.of(EVE_SETTINGS_ITEM_PREMIUM, 0xFFB659FF, 0xFF617CFF, R.drawable.settings_premium, getString(R.string.EvePremium)));
         }
         if (items.get(items.size() - 1).viewType != UniversalAdapter.VIEW_TYPE_SHADOW)
             items.add(UItem.asShadow(null));
@@ -822,7 +823,9 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
         items.add(UItem.asHeader(getString(R.string.SettingsHelp)));
         items.add(SettingCell.Factory.of(17, IconBackgroundColors.ORANGE.top, IconBackgroundColors.ORANGE.bottom, R.drawable.settings_ask, getString(R.string.AskAQuestion)));
         items.add(SettingCell.Factory.of(18, IconBackgroundColors.BLUE_LIGHT.top, IconBackgroundColors.BLUE_LIGHT.bottom, R.drawable.settings_faq, getString(R.string.TelegramFAQ)));
-        items.add(SettingCell.Factory.of(23, IconBackgroundColors.PURPLE.top, IconBackgroundColors.PURPLE.bottom, R.drawable.settings_features, getString(R.string.TelegramFeatures)));
+        if (isEveSettingsItemEnabled(EVE_SETTINGS_ITEM_TELEGRAM_FEATURES)) {
+            items.add(SettingCell.Factory.of(EVE_SETTINGS_ITEM_TELEGRAM_FEATURES, IconBackgroundColors.PURPLE.top, IconBackgroundColors.PURPLE.bottom, R.drawable.settings_features, getString(R.string.TelegramFeatures)));
+        }
         items.add(SettingCell.Factory.of(19, IconBackgroundColors.GREEN.top, IconBackgroundColors.GREEN.bottom, R.drawable.settings_policy, getString(R.string.PrivacyPolicy)));
 
         if (SharedSettings.experimentalSettingsAllowed.get()) {
@@ -842,6 +845,14 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
         }
 
         items.add(UItem.asCustomShadow(versionView));
+    }
+
+    public static final int EVE_SETTINGS_ITEM_PREMIUM = 11;
+    public static final int EVE_SETTINGS_ITEM_TELEGRAM_FEATURES = 23;
+
+    // EVE-PATCH: Mission 6 - Remove Telegram Features while keeping remaining Settings sections intact.
+    public static boolean isEveSettingsItemEnabled(int itemId) {
+        return itemId != EVE_SETTINGS_ITEM_TELEGRAM_FEATURES;
     }
 
     private void presentSettingFragment(BaseFragment fragment) {
@@ -954,11 +965,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
                 FileLog.cleanupLogs();
                 break;
             case 23: {
-                if (MessagesController.getInstance(currentAccount).isFrozen()) {
-                    AccountFrozenAlert.show(currentAccount);
-                } else {
-                    Browser.openUrl(getContext(), LocaleController.getString(R.string.TelegramFeaturesUrl));
-                }
+                // EVE-PATCH: Mission 6 - Navigation to Telegram Features promotional page removed.
                 break;
             }
             case 24: {

@@ -93,10 +93,17 @@ Statuses describe the new delivery effort, not the absence of existing code.
   - Edited `android/TMessagesProj/src/main/res/values/strings.xml`, `ThemeActivity.java`, and `ProfileActivity.java`, plus added `EveExamSettingsTest.java`.
   - Pending: owner runtime phone screenshot/video acceptance on Exam Settings.
 
-- **2026-11-25 — Mission 5: English-Only Language (implemented)**
-  - Edited `android/TMessagesProj/src/main/java/org/telegram/messenger/LocaleController.java`: locked permanent default application language to `"en"` / `"English"` (`isEnglishOnlyMode()`, `isAllowedApplicationLocale()`, `applyLanguage` safeguard, `getCurrentLanguageName()` returning `"English"`) while preserving `systemDefaultLocale` and Android configuration/system locale handling and keeping all upstream localization resource files intact.
-  - Edited `android/TMessagesProj/src/main/java/org/telegram/ui/LanguageSelectActivity.java`: restricted `fillLanguages()` via `filterSelectableLanguages(...)` to `"English"` only, hid the language search/switching controls and remote language loading, and preserved Translation controls (`Show Translate Button`, `Translate Entire Chats`, `Do Not Translate`).
-  - Added `android/TMessagesProj/src/test/java/org/telegram/ui/eve/EveEnglishOnlyLanguageTest.java`.
+- **2026-11-25 — Mission 5: English-Only Language (`953d97223244fac485b0d81fa6ef3803c2db5c11`, CI GREEN)**
+  - CI verification: [`953d97223244fac485b0d81fa6ef3803c2db5c11`](https://github.com/vishu762701/eve-app/actions/runs/45635757790) (`Build Eve APK` run `45635757790` succeeded across all 4 jobs; `Eve-debug-apk` artifact `15033762124`, `72,109,232` bytes).
+  - Edited `LocaleController.java`, `LanguageSelectActivity.java`, plus added `EveEnglishOnlyLanguageTest.java`.
+  - Pending: owner runtime phone screenshot/video acceptance on Language screen & English Settings label.
+
+- **2026-11-25 — Mission 6: Settings Cleanup & EVE Premium (implemented)**
+  - Edited `android/TMessagesProj/src/main/res/values/strings.xml`: added `EvePremium`, `EvePremiumSubtitle`, and `EvePremiumFooterInfo`.
+  - Edited `android/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java`: completely removed `Telegram Features` (entry `23` and `TelegramFeaturesUrl` browser navigation via `isEveSettingsItemEnabled(...)`), renamed item `11` to `R.string.EvePremium` while preserving `R.drawable.settings_premium` star icon, and left all other Settings sections unchanged.
+  - Edited `android/TMessagesProj/src/main/java/org/telegram/ui/PremiumPreviewFragment.java`: removed Telegram Premium promotional list/subtitle/footer/subscription tiers/subscribe button via `isEvePremiumTransformEnabled()`, while preserving the original `GLIconTextureView` (`Icon3D.TYPE_STAR`), `StarParticlesView`, and gradient animations intact.
+  - Edited `android/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java`: renamed `premiumRow`/`SearchResult(800)` to `R.string.EvePremium` and removed Telegram Premium marketing feature search entries `801..813`.
+  - Added `android/TMessagesProj/src/test/java/org/telegram/ui/eve/EveSettingsAndPremiumTest.java`.
 
 ## F. Active bugs
 - PROFILE-001, IN PROGRESS: owner reports a crash on tapping Profile. Two authenticated Robolectric tests reproduce `ProfileActivity.onCreate:187 -> ProfileTelegramViewTree.<init>:153 -> createCellValue:389`. `valueViews.add(this)` precedes the field initializer at line 241. This is the proven JVM cause; the exact phone event is not correlated. No main fix commit. The prepared change moves only the field, updates its EVE `NEW` hash and adds a four-row theme registration test. Post-fix Android and phone checks outstanding; not T7.
@@ -104,7 +111,7 @@ Statuses describe the new delivery effort, not the absence of existing code.
 - SMOKE-001, IN PROGRESS: the existing smoke test can fall back to one screen and accept a generic nonempty host. The prepared S2 change requires a packaged six-host inventory, attached fragment classes, live layout and fresh evidence.
 
 ## G. Current work position
-**NEXT ACTION:** Verify Mission 5 CI green run on `main`, then execute Mission 6 (Settings cleanup and EVE Premium in `SettingsActivity.java` and `PremiumPreviewFragment.java`).
+**NEXT ACTION:** Verify Mission 6 CI green run on `main`, then execute Mission 7 (audit legacy `app/` & backend/D1/Firebase rules and evolve `EveAdminControlCenterActivity` + Worker routes into the real EVE Admin Control Center).
 
 Historical legacy-`app/` notes (pre-handover):
 - Offline fixture `ef2666ce97a833bf21deb4e0f954e1423cd606e3` and `a2ee6ef5d0e05314705a28c140586e64e8ce8be4` in `app/` remain preserved untouched in `app/`.
