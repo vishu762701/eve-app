@@ -144,7 +144,7 @@ public class LogoutActivity extends BaseFragment {
                     freeAccounts -= (UserConfig.MAX_ACCOUNT_COUNT - UserConfig.MAX_ACCOUNT_DEFAULT_COUNT);
                 }
                 if (freeAccounts > 0 && availableAccount != null) {
-                    presentFragment(new org.telegram.ui.eve.auth.EveAuthFragment());
+                    presentFragment(new LoginActivity(availableAccount));
                 } else if (!UserConfig.hasPremiumOnAccounts()) {
                     LimitReachedBottomSheet limitReachedBottomSheet = new LimitReachedBottomSheet(this, getContext(), TYPE_ACCOUNTS, currentAccount, null);
                     showDialog(limitReachedBottomSheet);
@@ -185,7 +185,7 @@ public class LogoutActivity extends BaseFragment {
         AlertDialog.Builder builder = new AlertDialog.Builder(context);
         builder.setMessage(LocaleController.getString(R.string.AreYouSureLogout));
         builder.setTitle(LocaleController.getString(R.string.LogOut));
-        builder.setPositiveButton(LocaleController.getString(R.string.LogOut), (dialogInterface, i) -> org.telegram.ui.eve.auth.EveAuthManager.getInstance().signOut(context, () -> MessagesController.getInstance(currentAccount).performLogout(1)));
+        builder.setPositiveButton(LocaleController.getString(R.string.LogOut), (dialogInterface, i) -> MessagesController.getInstance(currentAccount).performLogout(1));
         builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
         AlertDialog alertDialog = builder.create();
         TextView button = (TextView) alertDialog.getButton(DialogInterface.BUTTON_POSITIVE);
@@ -200,7 +200,7 @@ public class LogoutActivity extends BaseFragment {
             .setTitle(getString(R.string.LogOut))
             .setMessage(AndroidUtilities.replaceTags(getString(R.string.AreYouSureLogout)))
             .setPositiveButton(getString(R.string.LogOut), (dialogInterface, i) -> {
-                org.telegram.ui.eve.auth.EveAuthManager.getInstance().signOut(getParentActivity(), () -> MessagesController.getInstance(currentAccount).performLogout(1));
+                MessagesController.getInstance(currentAccount).performLogout(1);
             })
             .setNegativeButton(getString(R.string.Cancel), null)
             .makeRed(DialogInterface.BUTTON_POSITIVE)

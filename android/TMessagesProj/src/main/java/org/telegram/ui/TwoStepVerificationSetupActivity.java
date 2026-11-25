@@ -857,7 +857,7 @@ public class TwoStepVerificationSetupActivity extends BaseFragment {
                         processNext();
                     }
                 };
-                codeFieldContainer.setNumbersCount(6, 1);
+                codeFieldContainer.setNumbersCount(6, LoginActivity.AUTH_TYPE_MESSAGE);
                 for (CodeNumberField f : codeFieldContainer.codeField) {
                     f.setShowSoftInputOnFocusCompat(!isCustomKeyboardVisible());
                     f.addTextChangedListener(new TextWatcher() {

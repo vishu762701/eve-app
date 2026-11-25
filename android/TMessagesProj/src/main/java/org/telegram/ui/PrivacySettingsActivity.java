@@ -454,7 +454,19 @@ public class PrivacySettingsActivity extends BaseFragment implements Notificatio
                 new AlertDialog.Builder(context)
                         .setTitle(spannable)
                         .setMessage(getString(R.string.EmailLoginChangeMessage))
-                        .setPositiveButton(getString(R.string.OK), null)
+                        .setPositiveButton(getString(R.string.ChangeEmail), (dialog, which) -> presentFragment(new LoginActivity().changeEmail(() -> {
+                            Bulletin.LottieLayout layout = new Bulletin.LottieLayout(getContext(), null);
+                            layout.setAnimation(R.raw.email_check_inbox);
+                            layout.textView.setText(getString(R.string.YourLoginEmailChangedSuccess));
+                            int duration = Bulletin.DURATION_SHORT;
+                            Bulletin.make(PrivacySettingsActivity.this, layout, duration).show();
+
+                            try {
+                                fragmentView.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING);
+                            } catch (Exception ignored) {}
+
+                            loadPasswordSettings();
+                        })))
                         .setNegativeButton(getString(R.string.Cancel), null)
                         .show();
             } else if (position == passwordRow) {

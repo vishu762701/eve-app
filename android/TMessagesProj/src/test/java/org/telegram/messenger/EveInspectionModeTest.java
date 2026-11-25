@@ -10,12 +10,12 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 
 /**
- * Automated JVM verification suite for Mission 11:
- *  1. DEBUG-only UI Inspection Mode enabled in debug builds and strictly disabled in release builds.
- *  2. LaunchActivity opens original Telegram MainTabsActivity directly without login or EVE Dashboard.
- *  3. Mission 10 unauthorized EVE Mock-Test Dashboard package is completely removed.
- *  4. ConnectionsManager blocks unauthenticated MTProto requests during inspection mode.
- *  5. Missions 01-06 feature removals and legacy Telegram phone auth removals remain preserved.
+ * Automated JVM verification suite for Mission T0 + Mission 11/12 invariants:
+ *  1. DEBUG-only UI Inspection Mode helper remains strictly disabled in release builds.
+ *  2. LaunchActivity routes unactivated sessions to official Telegram IntroActivity / LoginActivity.
+ *  3. Mission 10 unauthorized EVE Mock-Test Dashboard package remains removed.
+ *  4. ConnectionsManager does not block unauthenticated MTProto login requests.
+ *  5. Official Telegram Login files are restored while M01-M05 removals remain preserved.
  */
 public class EveInspectionModeTest {
 
@@ -34,16 +34,16 @@ public class EveInspectionModeTest {
     }
 
     @Test
-    public void launchActivity_routesDirectlyToOriginalTelegramMainTabsInDebugMode() throws Exception {
+    public void launchActivity_routesToOfficialTelegramIntroAndLoginWhenNotActivated() throws Exception {
         File moduleDir = getModuleDir();
         String launch = new String(Files.readAllBytes(
                 new File(moduleDir, "src/main/java/org/telegram/ui/LaunchActivity.java").toPath()), StandardCharsets.UTF_8);
 
-        assertTrue(launch.contains("if (org.telegram.messenger.EveInspectionMode.isEnabledForCurrentBuild())"));
-        assertTrue(launch.contains("return new MainTabsActivity();"));
+        assertFalse(launch.contains("EveInspectionMode.isEnabledForCurrentBuild()"));
+        assertFalse(launch.contains("EveAuthFragment"));
         assertFalse(launch.contains("EveDashboardFragment"));
-        assertFalse(launch.contains("LoginActivity"));
-        assertFalse(launch.contains("new IntroActivity"));
+        assertTrue(launch.contains("new LoginActivity()"));
+        assertTrue(launch.contains("new IntroActivity()"));
     }
 
     @Test
@@ -54,25 +54,28 @@ public class EveInspectionModeTest {
     }
 
     @Test
-    public void connectionsManager_blocksUnauthenticatedRequestsInInspectionMode() throws Exception {
+    public void connectionsManager_allowsOfficialTelegramLoginRequests() throws Exception {
         File moduleDir = getModuleDir();
         String cm = new String(Files.readAllBytes(
                 new File(moduleDir, "src/main/java/org/telegram/tgnet/ConnectionsManager.java").toPath()), StandardCharsets.UTF_8);
 
-        assertTrue(cm.contains("if (org.telegram.messenger.EveInspectionMode.isActive(currentAccount))"));
-        assertTrue(cm.contains("LOCAL_UI_INSPECTION_MODE"));
+        assertFalse(cm.contains("LOCAL_UI_INSPECTION_MODE"));
+        assertFalse(cm.contains("EveInspectionMode.isActive"));
+        assertTrue(cm.contains("LoginActivity.errorString"));
     }
 
     @Test
-    public void priorSixRemovalMissionsAndLegacyPhoneAuthRemainRemoved() throws Exception {
+    public void priorSixRemovalMissionsRemainRemovedAndOfficialLoginRestored() throws Exception {
         File moduleDir = getModuleDir();
-        // M01 Contacts, M02 Calls, M03 Bots/Business, M04 Stories, M05 Wallet/Stars, M08 Phone Auth
+        // M01 Contacts, M02 Calls, M04 Stories remain removed; T0 official Telegram Login restored
         assertFalse(new File(moduleDir, "src/main/java/org/telegram/ui/ContactsActivity.java").exists());
-        assertFalse(new File(moduleDir, "src/main/java/org/telegram/ui/LoginActivity.java").exists());
-        assertFalse(new File(moduleDir, "src/main/java/org/telegram/ui/IntroActivity.java").exists());
-        assertFalse(new File(moduleDir, "src/main/java/org/telegram/messenger/SmsReceiver.java").exists());
-        assertFalse(new File(moduleDir, "src/main/java/org/telegram/messenger/CallReceiver.java").exists());
         assertFalse(new File(moduleDir, "src/main/java/org/telegram/messenger/voip/VoIPService.java").exists());
         assertFalse(new File(moduleDir, "src/main/java/org/telegram/ui/Stories/StoriesController.java").exists());
+        assertTrue(new File(moduleDir, "src/main/java/org/telegram/ui/LoginActivity.java").exists());
+        assertTrue(new File(moduleDir, "src/main/java/org/telegram/ui/IntroActivity.java").exists());
+        assertTrue(new File(moduleDir, "src/main/java/org/telegram/messenger/SmsReceiver.java").exists());
+        assertTrue(new File(moduleDir, "src/main/java/org/telegram/messenger/CallReceiver.java").exists());
+        assertTrue(new File(moduleDir, "src/main/java/org/telegram/messenger/AuthTokensHelper.java").exists());
+        assertTrue(new File(moduleDir, "src/main/java/org/telegram/messenger/FirebasePhoneNumberVerificationHelper.java").exists());
     }
 }

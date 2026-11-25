@@ -132,6 +132,7 @@ import org.telegram.ui.Components.Forum.ForumUtilities;
 import org.telegram.ui.Components.Premium.LimitReachedBottomSheet;
 import org.telegram.ui.LanguageSelectActivity;
 import org.telegram.ui.LaunchActivity;
+import org.telegram.ui.LoginActivity;
 import org.telegram.ui.NotificationsCustomSettingsActivity;
 import org.telegram.ui.NotificationsSettingsActivity;
 import org.telegram.ui.PhotoViewer;
@@ -622,7 +623,7 @@ public class AlertsCreator {
             }
         } else if (request instanceof TL_account.sendChangePhoneCode) {
             if (error.text.contains("PHONE_NUMBER_INVALID")) {
-                showSimpleAlert(fragment, LocaleController.getString(R.string.InvalidPhoneNumber));
+                LoginActivity.needShowInvalidAlert(fragment, (String) args[0], false);
             } else if (error.text.contains("PHONE_CODE_EMPTY") || error.text.contains("PHONE_CODE_INVALID")) {
                 showSimpleAlert(fragment, LocaleController.getString(R.string.InvalidCode));
             } else if (error.text.contains("PHONE_CODE_EXPIRED")) {
@@ -632,7 +633,7 @@ public class AlertsCreator {
             } else if (error.text.startsWith("PHONE_NUMBER_OCCUPIED")) {
                 showSimpleAlert(fragment, LocaleController.formatString("ChangePhoneNumberOccupied", R.string.ChangePhoneNumberOccupied, args[0]));
             } else if (error.text.startsWith("PHONE_NUMBER_BANNED")) {
-                showSimpleAlert(fragment, LocaleController.getString(R.string.BannedPhoneNumber));
+                LoginActivity.needShowInvalidAlert(fragment, (String) args[0], true);
             } else {
                 showSimpleAlert(fragment, LocaleController.getString(R.string.ErrorOccurred));
             }

@@ -16102,7 +16102,13 @@ public class MessagesController extends BaseController implements NotificationCe
             TLRPC.TL_auth_logOut req = new TLRPC.TL_auth_logOut();
             getConnectionsManager().sendRequest(req, (response, error) -> {
                 getConnectionsManager().cleanup(false);
-                // EVE uses Firebase Authentication; Telegram future_auth_token persistence removed.
+                AndroidUtilities.runOnUIThread(() -> {
+                    if (response instanceof TLRPC.TL_auth_loggedOut) {
+                        if (((TLRPC.TL_auth_loggedOut) response).future_auth_token != null) {
+                            AuthTokensHelper.addLogOutToken((TLRPC.TL_auth_loggedOut) response);
+                        }
+                    }
+                });
             });
         } else {
             getConnectionsManager().cleanup(type == 2);

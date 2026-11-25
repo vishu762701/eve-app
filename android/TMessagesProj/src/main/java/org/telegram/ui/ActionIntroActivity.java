@@ -556,7 +556,7 @@ public class ActionIntroActivity extends BaseFragment implements LocationControl
                     AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
                     builder.setTitle(LocaleController.getString(R.string.PhoneNumberChangeTitle));
                     builder.setMessage(LocaleController.getString(R.string.PhoneNumberAlert));
-                    builder.setPositiveButton(LocaleController.getString(R.string.OK), (dialogInterface, i) -> finishFragment());
+                    builder.setPositiveButton(LocaleController.getString(R.string.Change), (dialogInterface, i) -> presentFragment(new LoginActivity().changePhoneNumber(), true));
                     builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
                     showDialog(builder.create());
                     break;

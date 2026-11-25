@@ -12759,7 +12759,26 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     }
 
     private void checkEmailConfig() {
-        // Managed by EVE Firebase Authentication.
+        final int emailSuggestion = getMessagesController().checkEmailSuggestion();
+
+        if (emailSuggestion != MessagesController.EMAIL_SUGGESTION_FALSE) {
+            final LoginActivity loginActivity = new LoginActivity().changeEmail(() -> {
+                Bulletin.LottieLayout layout = new Bulletin.LottieLayout(getContext(), resourceProvider);
+                layout.setAnimation(R.raw.email_check_inbox);
+                layout.textView.setText(getString(R.string.YourLoginEmailChangedSuccess));
+                int duration = Bulletin.DURATION_LONG;
+
+                Bulletin.make(DialogsActivity.this, layout, duration).show();
+                try {
+                    fragmentView.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING);
+                } catch (Exception ignored) {}
+
+            }, () -> getMessagesController().removeSuggestion(0, "SETUP_LOGIN_EMAIL"),
+                emailSuggestion == MessagesController.EMAIL_SUGGESTION_TRUE_FORCED);
+
+            presentFragment(loginActivity);
+            getMessagesController().markEmailSuggestionAsShown();
+        }
     }
 
     @Override

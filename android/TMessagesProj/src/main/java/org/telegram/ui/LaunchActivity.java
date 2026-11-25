@@ -1066,10 +1066,10 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
     }
 
     private BaseFragment getClientNotActivatedFragment() {
-        if (org.telegram.messenger.EveInspectionMode.isEnabledForCurrentBuild()) {
-            return new MainTabsActivity();
+        if (LoginActivity.loadCurrentState(false, currentAccount).getInt("currentViewNum", 0) != 0) {
+            return new LoginActivity();
         }
-        return new org.telegram.ui.eve.auth.EveAuthFragment();
+        return new IntroActivity();
     }
 
     public FireworksOverlay getFireworksOverlay() {
@@ -1234,12 +1234,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                 layersActionBarLayout.rebuildLogout();
                 rightActionBarLayout.rebuildLogout();
             }
-            if (org.telegram.messenger.EveInspectionMode.isEnabledForCurrentBuild()) {
-                presentFragment(new MainTabsActivity());
-            } else {
-                org.telegram.ui.eve.auth.EveAuthManager.getInstance().signOut(this, null);
-                presentFragment(new org.telegram.ui.eve.auth.EveAuthFragment());
-            }
+            presentFragment(new IntroActivity().setOnLogout());
         }
     }
 
@@ -2802,7 +2797,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                                 ConnectionsManager.getInstance(currentAccount).sendRequest(req, (response, error) -> AndroidUtilities.runOnUIThread(() -> {
                                     cancelDeleteProgressDialog.dismiss();
                                     if (error == null) {
-                                        presentFragment(new org.telegram.ui.eve.auth.EveAuthFragment());
+                                        presentFragment(new LoginActivity().cancelAccountDeletion(finalPhone, params, (TLRPC.TL_auth_sentCode) response));
                                     } else {
                                         AlertsCreator.processError(currentAccount, error, getActionBarLayout().getLastFragment(), req);
                                     }
@@ -3206,7 +3201,42 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
     }
 
     public void openEmailSettings(TL_account.Password currentPassword) {
-        // Managed by EVE Firebase Authentication.
+        final LoginActivity loginActivity = new LoginActivity().changeEmail(() -> {
+            Bulletin.LottieLayout layout = new Bulletin.LottieLayout(this, null);
+            layout.setAnimation(R.raw.email_check_inbox);
+            layout.textView.setText(LocaleController.getString(R.string.YourLoginEmailChangedSuccess));
+            int duration = Bulletin.DURATION_SHORT;
+
+            BaseFragment fragment = getLastFragment();
+            if (fragment != null) {
+                Bulletin.make(fragment, layout, duration).show();
+                try {
+                    fragment.fragmentView.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING);
+                } catch (Exception ignored) {}
+            }
+        });
+
+        if (currentPassword != null && currentPassword.login_email_pattern != null) {
+            SpannableStringBuilder spannable = SpannableStringBuilder.valueOf(currentPassword.login_email_pattern);
+            int startIndex = currentPassword.login_email_pattern.indexOf('*');
+            int endIndex = currentPassword.login_email_pattern.lastIndexOf('*');
+            if (startIndex != endIndex && startIndex != -1 && endIndex != -1) {
+                TextStyleSpan.TextStyleRun run = new TextStyleSpan.TextStyleRun();
+                run.flags |= TextStyleSpan.FLAG_STYLE_SPOILER;
+                run.start = startIndex;
+                run.end = endIndex + 1;
+                spannable.setSpan(new TextStyleSpan(run), startIndex, endIndex + 1, 0);
+            }
+
+            new AlertDialog.Builder(this)
+                    .setTitle(spannable)
+                    .setMessage(LocaleController.getString(R.string.EmailLoginChangeMessage))
+                    .setPositiveButton(LocaleController.getString(R.string.ChangeEmail), (dialog, which) -> presentFragment(loginActivity))
+                    .setNegativeButton(LocaleController.getString(R.string.Cancel), null)
+                    .show();
+        } else {
+            presentFragment(loginActivity);
+        }
     }
 
     private static Pattern timestampPattern;
@@ -8015,7 +8045,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                     }
                 }
 
-                if (fragment instanceof org.telegram.ui.eve.auth.EveAuthFragment && account == -1) {
+                if (fragment instanceof LoginActivity && account == -1) {
                     backgroundTablet.setVisibility(View.VISIBLE);
                     shadowTablet.setBackgroundColor(0x00000000);
                 } else {
@@ -8088,7 +8118,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                     }
                 }
 
-                if (fragment instanceof org.telegram.ui.eve.auth.EveAuthFragment && account == -1) {
+                if (fragment instanceof LoginActivity && account == -1) {
                     backgroundTablet.setVisibility(View.VISIBLE);
                     shadowTablet.setBackgroundColor(0x00000000);
                 } else {

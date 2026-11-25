@@ -361,27 +361,28 @@ public class EveAuthSuiteTest {
     }
 
     @Test
-    public void telegramLegacyAuthFilesAndManifestEntriesAreRemoved() throws Exception {
+    public void officialTelegramLoginFilesAndManifestEntriesAreRestored() throws Exception {
         File moduleDir = new File(System.getProperty("user.dir"));
         if (!new File(moduleDir, "src/main/AndroidManifest.xml").exists()) {
             moduleDir = new File("/home/spark/telegram-baseline/TMessagesProj");
         }
-        assertFalse(new File(moduleDir, "src/main/java/org/telegram/ui/LoginActivity.java").exists());
-        assertFalse(new File(moduleDir, "src/main/java/org/telegram/ui/IntroActivity.java").exists());
-        assertFalse(new File(moduleDir, "src/main/java/org/telegram/messenger/SmsReceiver.java").exists());
-        assertFalse(new File(moduleDir, "src/main/java/org/telegram/messenger/CallReceiver.java").exists());
-        assertFalse(new File(moduleDir, "src/main/java/org/telegram/messenger/FirebasePhoneNumberVerificationHelper.java").exists());
-        assertFalse(new File(moduleDir, "src/main/java/org/telegram/messenger/AuthTokensHelper.java").exists());
+        assertTrue(new File(moduleDir, "src/main/java/org/telegram/ui/LoginActivity.java").exists());
+        assertTrue(new File(moduleDir, "src/main/java/org/telegram/ui/IntroActivity.java").exists());
+        assertTrue(new File(moduleDir, "src/main/java/org/telegram/messenger/SmsReceiver.java").exists());
+        assertTrue(new File(moduleDir, "src/main/java/org/telegram/messenger/CallReceiver.java").exists());
+        assertTrue(new File(moduleDir, "src/main/java/org/telegram/messenger/FirebasePhoneNumberVerificationHelper.java").exists());
+        assertTrue(new File(moduleDir, "src/main/java/org/telegram/messenger/AuthTokensHelper.java").exists());
+        assertFalse(new File(moduleDir, "src/main/java/org/telegram/ui/eve/auth/EveAuthFragment.java").exists());
 
         String manifest = new String(Files.readAllBytes(new File(moduleDir, "src/main/AndroidManifest.xml").toPath()), StandardCharsets.UTF_8);
-        assertFalse(manifest.contains("SmsReceiver"));
-        assertFalse(manifest.contains("CallReceiver"));
-        assertFalse(manifest.contains("READ_PHONE_NUMBERS"));
-        assertFalse(manifest.contains("READ_PHONE_STATE"));
+        assertTrue(manifest.contains("SmsReceiver"));
+        assertTrue(manifest.contains("CallReceiver"));
+        assertTrue(manifest.contains("READ_PHONE_NUMBERS"));
+        assertTrue(manifest.contains("READ_PHONE_STATE"));
 
         String gradle = new String(Files.readAllBytes(new File(moduleDir, "build.gradle").toPath()), StandardCharsets.UTF_8);
         assertTrue(gradle.contains("com.google.firebase:firebase-auth"));
         assertTrue(gradle.contains("com.google.android.libraries.identity.googleid:googleid"));
-        assertFalse(gradle.contains("implementation \"com.google.firebase:firebase-pnv\""));
+        assertTrue(gradle.contains("implementation \"com.google.firebase:firebase-pnv\""));
     }
 }

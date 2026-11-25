@@ -22,6 +22,7 @@ import androidx.collection.LongSparseArray;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
+import org.telegram.messenger.AuthTokensHelper;
 import org.telegram.messenger.BuildVars;
 import org.telegram.messenger.ChatThemeController;
 import org.telegram.messenger.FileLog;
@@ -382,7 +383,7 @@ public class DebugSettingsActivity extends UniversalFragment {
                 SharedConfig.toggleUseCamera2(currentAccount);
                 break;
             case ID_CLEAR_LOGIN_TOKENS:
-                // Removed with Telegram phone auth.
+                AuthTokensHelper.clearLogInTokens();
                 break;
             case ID_NEW_BLUR:
                 SharedConfig.toggleUseNewBlur();

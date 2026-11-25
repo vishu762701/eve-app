@@ -270,7 +270,7 @@ public class ExternalActionActivity extends Activity implements INavigationLayou
                     passcodeSaveIntentAccount = intentAccount;
                     passcodeSaveIntentState = state;
 
-                    org.telegram.ui.eve.auth.EveAuthFragment fragment = new org.telegram.ui.eve.auth.EveAuthFragment();
+                    LoginActivity fragment = new LoginActivity();
                     if (AndroidUtilities.isTablet()) {
                         layersActionBarLayout.addFragmentToStack(fragment);
                     } else {

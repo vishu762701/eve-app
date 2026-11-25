@@ -50,6 +50,7 @@ import org.telegram.utils.proxy.WebProxyConnectionTester;
 import org.telegram.utils.proxy.WebProxyTransport;
 import org.telegram.utils.proxy.ProxySettings;
 import org.telegram.ui.Components.VideoPlayer;
+import org.telegram.ui.LoginActivity;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -419,18 +420,6 @@ public class ConnectionsManager extends BaseController {
     }
 
     private void sendRequestInternal(TLObject object, RequestDelegate onComplete, RequestDelegateTimestamp onCompleteTimestamp, QuickAckDelegate onQuickAck, WriteToSocketDelegate onWriteToSocket, int flags, int datacenterId, int connectionType, boolean immediate, int requestToken) {
-        if (org.telegram.messenger.EveInspectionMode.isActive(currentAccount)) {
-            TLRPC.TL_error localErr = new TLRPC.TL_error();
-            localErr.code = -401;
-            localErr.text = "LOCAL_UI_INSPECTION_MODE";
-            if (onComplete != null) {
-                onComplete.run(null, localErr);
-            }
-            if (onCompleteTimestamp != null) {
-                onCompleteTimestamp.run(null, localErr, 0);
-            }
-            return;
-        }
         if (BuildVars.LOGS_ENABLED) {
             FileLog.d("send request " + object + " with token = " + requestToken);
         }
@@ -1586,7 +1575,7 @@ public class ConnectionsManager extends BaseController {
                 })
                 .addOnFailureListener(e -> {
                     FileLog.e("account"+currentAccount+": integrity check failed to give a token in " + (System.currentTimeMillis() - start) + "ms", e);
-                    native_receivedIntegrityCheckClassic(currentAccount, requestToken, nonce, "PLAYINTEGRITY_FAILED_EXCEPTION_" + (e != null ? e.getClass().getSimpleName() + ":" + e.getMessage() : "null"));
+                    native_receivedIntegrityCheckClassic(currentAccount, requestToken, nonce, "PLAYINTEGRITY_FAILED_EXCEPTION_" + LoginActivity.errorString(e));
                 });
         });
     }

@@ -131,6 +131,7 @@ import org.telegram.PhoneFormat.PhoneFormat;
 import org.telegram.messenger.AccountInstance;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
+import org.telegram.messenger.AuthTokensHelper;
 import org.telegram.messenger.BillingController;
 import org.telegram.messenger.BirthdayController;
 import org.telegram.messenger.BuildVars;
@@ -4841,7 +4842,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                                 SharedConfig.toggleUseCamera2(currentAccount);
                             } else if (which == 29) {
                             } else if (which == 30) {
-                                // Removed with Telegram phone auth.
+                                AuthTokensHelper.clearLogInTokens();
                             } else if (which == 31) {
                                 SharedConfig.toggleUseNewBlur();
                             } else if (which == 32) {
@@ -14231,7 +14232,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                             }
                         }
                         if (freeAccount >= 0) {
-                            f.presentFragment(new org.telegram.ui.eve.auth.EveAuthFragment());
+                            f.presentFragment(new LoginActivity(freeAccount));
                         }
                     }).withLink("tg://settings/edit/add-account"),
                     // TODO:

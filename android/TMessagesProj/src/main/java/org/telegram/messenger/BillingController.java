@@ -33,6 +33,7 @@ import org.telegram.tgnet.tl.TL_update;
 import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.LaunchActivity;
+import org.telegram.ui.LoginActivity;
 import org.telegram.ui.PremiumPreviewFragment;
 
 import java.text.NumberFormat;
@@ -372,7 +373,21 @@ public class BillingController implements PurchasesUpdatedListener, BillingClien
                             if (response instanceof TLRPC.Updates) {
                                 FileLog.d("BillingController.onPurchasesUpdatedInternal: " + purchase.getOrderId() + " purchase is purchased and now assigned");
 
-
+                                if (req.purpose instanceof TLRPC.TL_inputStorePaymentAuthCode) {
+                                    for (TL_update.TL_updateSentPhoneCode u : findUpdatesAndRemove((TLRPC.Updates) response, TL_update.TL_updateSentPhoneCode.class)) {
+                                        AndroidUtilities.runOnUIThread(() -> {
+                                            LoginActivity fragment = LaunchActivity.findFragment(LoginActivity.class);
+                                            if (fragment == null) {
+                                                fragment = new LoginActivity(acc.getCurrentAccount());
+                                                BaseFragment lastFragment = LaunchActivity.getSafeLastFragment();
+                                                if (lastFragment != null) {
+                                                    lastFragment.presentFragment(fragment);
+                                                }
+                                            }
+                                            fragment.open(((TLRPC.TL_inputStorePaymentAuthCode) req.purpose).phone_number, u.sent_code);
+                                        });
+                                    }
+                                }
 
                                 acc.getMessagesController().processUpdates((TLRPC.Updates) response, false);
 
