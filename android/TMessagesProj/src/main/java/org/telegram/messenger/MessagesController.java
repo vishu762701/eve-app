@@ -9594,28 +9594,6 @@ public class MessagesController extends BaseController implements NotificationCe
         serverDialogsEndReached.put(0, true);
     }
 
-    public void markInspectionDialogsEmpty() {
-        if (!EveInspectionMode.isActive(currentAccount)) {
-            return;
-        }
-        dialogsLoaded = true;
-        dialogsEndReached.put(0, true);
-        dialogsEndReached.put(1, true);
-        serverDialogsEndReached.put(0, true);
-        serverDialogsEndReached.put(1, true);
-        loadingDialogs.put(0, false);
-        loadingDialogs.put(1, false);
-        EveLoadingTracker.record("Chats", EveLoadingTracker.Outcome.EMPTY, "Local inspection mode (no server account)");
-        AndroidUtilities.runOnUIThread(() -> getNotificationCenter().postNotificationName(NotificationCenter.dialogsNeedReload));
-    }
-
-    public void putLocalInspectionUserFull(long userId, TLRPC.UserFull info) {
-        if (!EveInspectionMode.isActive(currentAccount) || info == null) {
-            return;
-        }
-        fullUsers.put(userId, info);
-    }
-
     public boolean isDialogsEndReached(int folderId) {
         return dialogsEndReached.get(folderId);
     }
@@ -10422,9 +10400,6 @@ public class MessagesController extends BaseController implements NotificationCe
 
     public void loadUserInfo(TLRPC.User user, boolean force, int classGuid, int fromMessageId) {
         if (user == null) {
-            return;
-        }
-        if (EveInspectionMode.isActive(currentAccount) && EveInspectionMode.isLocalInspectionUser(user.id)) {
             return;
         }
         getMessagesStorage().loadUserInfo(user, force, classGuid, fromMessageId);

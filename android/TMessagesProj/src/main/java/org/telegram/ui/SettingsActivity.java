@@ -514,21 +514,16 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
 
         avatarDrawable.setInfo(user);
         avatarView.setForUserOrChat(user, avatarDrawable);
-        if (user == null && org.telegram.messenger.EveInspectionMode.isActive(currentAccount)) {
-            titleView.setText("EVE");
-            subtitleView.setText("UI Inspection Mode (Local)");
-        } else {
-            titleView.setText(UserObject.getUserName(user));
-            final StringBuilder sb = new StringBuilder();
-            if (user != null) {
-                sb.append(PhoneFormat.getInstance().format("+" + user.phone));
-            }
-            final String username = UserObject.getPublicUsername(user);
-            if (username != null) {
-                sb.append(" • @").append(username);
-            }
-            subtitleView.setText(sb);
+        titleView.setText(UserObject.getUserName(user));
+        final StringBuilder sb = new StringBuilder();
+        if (user != null) {
+            sb.append(PhoneFormat.getInstance().format("+" + user.phone));
         }
+        final String username = UserObject.getPublicUsername(user);
+        if (username != null) {
+            sb.append(" • @").append(username);
+        }
+        subtitleView.setText(sb);
 
         versionView.setText(getVersionName());
     }

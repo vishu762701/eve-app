@@ -2864,11 +2864,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
     public static void loadDialogs(AccountInstance accountInstance) {
         int currentAccount = accountInstance.getCurrentAccount();
-        if (org.telegram.messenger.EveInspectionMode.isActive(currentAccount)) {
-            accountInstance.getMessagesController().markInspectionDialogsEmpty();
-            dialogsLoaded[currentAccount] = true;
-            return;
-        }
         if (!dialogsLoaded[currentAccount]) {
             MessagesController messagesController = accountInstance.getMessagesController();
             messagesController.loadGlobalNotificationsSettings();

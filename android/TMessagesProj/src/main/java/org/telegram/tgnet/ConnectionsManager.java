@@ -419,6 +419,10 @@ public class ConnectionsManager extends BaseController {
         return requestToken;
     }
 
+    public static boolean isInspectionNetworkGateActive(int account) {
+        return org.telegram.messenger.EveInspectionMode.isActive(account);
+    }
+
     private void sendRequestInternal(TLObject object, RequestDelegate onComplete, RequestDelegateTimestamp onCompleteTimestamp, QuickAckDelegate onQuickAck, WriteToSocketDelegate onWriteToSocket, int flags, int datacenterId, int connectionType, boolean immediate, int requestToken) {
         if (BuildVars.LOGS_ENABLED) {
             FileLog.d("send request " + object + " with token = " + requestToken);

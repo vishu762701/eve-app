@@ -303,9 +303,13 @@ public class EveAdminControlCenterActivity extends BaseFragment {
                 switchMainTab(1);
                 break;
             case ID_NAV_PROFILE: {
-                EveInspectionMode.ensureLocalInspectionUser(currentAccount);
+                long clientUserId = UserConfig.getInstance(currentAccount).getClientUserId();
+                if (clientUserId == 0) {
+                    BulletinFactory.of(this).createSimpleBulletin(R.raw.info, "No authenticated Telegram account.").show();
+                    break;
+                }
                 Bundle args = new Bundle();
-                args.putLong("user_id", EveInspectionMode.LOCAL_INSPECTION_USER_ID);
+                args.putLong("user_id", clientUserId);
                 args.putBoolean("my_profile", true);
                 presentFragment(new ProfileActivity(args));
                 break;

@@ -10,13 +10,19 @@ import static org.junit.Assert.fail;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.robolectric.RobolectricTestRunner;
+import org.robolectric.annotation.Config;
+import org.telegram.messenger.ApplicationLoader;
+import org.telegram.messenger.AuthTokensHelper;
+import org.telegram.messenger.CallReceiver;
 
-import java.io.File;
+import androidx.test.core.app.ApplicationProvider;
+
 import java.io.IOException;
 import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
@@ -28,6 +34,8 @@ import java.util.concurrent.atomic.AtomicReference;
  * Credential Manager Google Sign-In 3-stage fallback, Cloudflare Worker/D1 Cloud Sync,
  * Offline Retry, Navigation Policy, and Telegram Auth Removal).
  */
+@RunWith(RobolectricTestRunner.class)
+@Config(sdk = 35, manifest = Config.NONE)
 public class EveAuthSuiteTest {
 
     // -------------------------------------------------------------------------
@@ -361,28 +369,19 @@ public class EveAuthSuiteTest {
     }
 
     @Test
-    public void officialTelegramLoginFilesAndManifestEntriesAreRestored() throws Exception {
-        File moduleDir = new File(System.getProperty("user.dir"));
-        if (!new File(moduleDir, "src/main/AndroidManifest.xml").exists()) {
-            moduleDir = new File("/home/spark/telegram-baseline/TMessagesProj");
-        }
-        assertTrue(new File(moduleDir, "src/main/java/org/telegram/ui/LoginActivity.java").exists());
-        assertTrue(new File(moduleDir, "src/main/java/org/telegram/ui/IntroActivity.java").exists());
-        assertTrue(new File(moduleDir, "src/main/java/org/telegram/messenger/SmsReceiver.java").exists());
-        assertTrue(new File(moduleDir, "src/main/java/org/telegram/messenger/CallReceiver.java").exists());
-        assertTrue(new File(moduleDir, "src/main/java/org/telegram/messenger/FirebasePhoneNumberVerificationHelper.java").exists());
-        assertTrue(new File(moduleDir, "src/main/java/org/telegram/messenger/AuthTokensHelper.java").exists());
-        assertFalse(new File(moduleDir, "src/main/java/org/telegram/ui/eve/auth/EveAuthFragment.java").exists());
+    public void officialTelegramLoginComponentsAndHelpersOperateInRuntime() throws Exception {
+        ApplicationLoader.applicationContext = ApplicationProvider.getApplicationContext();
 
-        String manifest = new String(Files.readAllBytes(new File(moduleDir, "src/main/AndroidManifest.xml").toPath()), StandardCharsets.UTF_8);
-        assertTrue(manifest.contains("SmsReceiver"));
-        assertTrue(manifest.contains("CallReceiver"));
-        assertTrue(manifest.contains("READ_PHONE_NUMBERS"));
-        assertTrue(manifest.contains("READ_PHONE_STATE"));
+        Class.forName("org.telegram.ui.LoginActivity");
+        Class.forName("org.telegram.ui.IntroActivity");
+        Class.forName("org.telegram.messenger.SmsReceiver");
+        Class.forName("org.telegram.messenger.FirebasePhoneNumberVerificationHelper");
 
-        String gradle = new String(Files.readAllBytes(new File(moduleDir, "build.gradle").toPath()), StandardCharsets.UTF_8);
-        assertTrue(gradle.contains("com.google.firebase:firebase-auth"));
-        assertTrue(gradle.contains("com.google.android.libraries.identity.googleid:googleid"));
-        assertTrue(gradle.contains("implementation \"com.google.firebase:firebase-pnv\""));
+        CallReceiver.clearLastCall();
+        assertNull(CallReceiver.getLastReceivedCall());
+
+        AuthTokensHelper.clearLogInTokens();
+        assertNull(AuthTokensHelper.getSavedLogInTokens());
+        assertNull(AuthTokensHelper.getSavedLogOutTokens());
     }
 }

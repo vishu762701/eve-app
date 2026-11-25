@@ -41,18 +41,12 @@ public final class EveInspectionMode {
     }
 
     /**
-     * Returns true when running in DEBUG-only UI inspection mode without an
-     * activated Telegram account (UserConfig.isClientActivated() remains false).
+     * Local UI inspection session bypass is disabled on the real authentication/client path.
+     * Unauthenticated sessions must route through official Telegram IntroActivity / LoginActivity
+     * and never fabricate a synthetic user or block MTProto requests.
      */
     public static boolean isActive(int account) {
-        if (!isEnabledForCurrentBuild()) {
-            return false;
-        }
-        try {
-            return !UserConfig.getInstance(account).isClientActivated();
-        } catch (Throwable t) {
-            return true;
-        }
+        return false;
     }
 
     public static boolean isLocalInspectionUser(long userId) {
@@ -115,19 +109,14 @@ public final class EveInspectionMode {
     }
 
     /**
-     * Resets local in-memory preview state cleanly.
+     * Resets local preview diagnostics cleanly without fabricating any Telegram user or dialogs.
      */
     public static void resetLocalPreviewState(int account) {
-        if (!isActive(account)) {
+        if (!isEnabledForCurrentBuild()) {
             return;
         }
         try {
-            MessagesController mc = MessagesController.getInstance(account);
-            mc.putUser(buildLocalInspectionUser(), true);
-            mc.putLocalInspectionUserFull(LOCAL_INSPECTION_USER_ID, buildLocalInspectionUserFull());
-            mc.markInspectionDialogsEmpty();
             EveLoadingTracker.clear();
-            EveLoadingTracker.record("Chats", EveLoadingTracker.Outcome.EMPTY, "Local inspection mode (reset)");
         } catch (Throwable t) {
             FileLog.e(t);
         }

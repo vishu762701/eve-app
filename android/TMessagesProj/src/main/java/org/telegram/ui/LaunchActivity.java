@@ -1065,11 +1065,19 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         onUserLeaveHintListeners.remove(callback);
     }
 
-    private BaseFragment getClientNotActivatedFragment() {
-        if (LoginActivity.loadCurrentState(false, currentAccount).getInt("currentViewNum", 0) != 0) {
+    public static BaseFragment createClientNotActivatedFragment(int account) {
+        if (LoginActivity.loadCurrentState(false, account).getInt("currentViewNum", 0) != 0) {
             return new LoginActivity();
         }
         return new IntroActivity();
+    }
+
+    public static IntroActivity createLogoutIntroFragment() {
+        return new IntroActivity().setOnLogout();
+    }
+
+    private BaseFragment getClientNotActivatedFragment() {
+        return createClientNotActivatedFragment(currentAccount);
     }
 
     public FireworksOverlay getFireworksOverlay() {
@@ -1234,7 +1242,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                 layersActionBarLayout.rebuildLogout();
                 rightActionBarLayout.rebuildLogout();
             }
-            presentFragment(new IntroActivity().setOnLogout());
+            presentFragment(createLogoutIntroFragment());
         }
     }
 

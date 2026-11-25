@@ -179,12 +179,6 @@ public class ContactsController extends BaseController {
     }
 
     public void loadGlobalPrivacySetting() {
-        if (EveInspectionMode.isActive(currentAccount)) {
-            loadingGlobalSettings = 2;
-            EveLoadingTracker.record("Privacy & Security", EveLoadingTracker.Outcome.OFFLINE, "Local inspection mode (offline)");
-            AndroidUtilities.runOnUIThread(() -> getNotificationCenter().postNotificationName(NotificationCenter.privacyRulesUpdated));
-            return;
-        }
         if (loadingGlobalSettings == 0) {
             loadingGlobalSettings = 1;
             TL_account.getGlobalPrivacySettings req = new TL_account.getGlobalPrivacySettings();
@@ -204,16 +198,6 @@ public class ContactsController extends BaseController {
         loadPrivacySettings(false);
     }
     public void loadPrivacySettings(boolean force) {
-        if (EveInspectionMode.isActive(currentAccount)) {
-            loadingDeleteInfo = 2;
-            loadingGlobalSettings = 2;
-            for (int a = 0; a < loadingPrivacyInfo.length; a++) {
-                loadingPrivacyInfo[a] = 2;
-            }
-            EveLoadingTracker.record("Privacy & Security", EveLoadingTracker.Outcome.OFFLINE, "Local inspection mode (offline)");
-            AndroidUtilities.runOnUIThread(() -> getNotificationCenter().postNotificationName(NotificationCenter.privacyRulesUpdated));
-            return;
-        }
         if (loadingDeleteInfo == 0) {
             loadingDeleteInfo = 1;
             TL_account.getAccountTTL req = new TL_account.getAccountTTL();

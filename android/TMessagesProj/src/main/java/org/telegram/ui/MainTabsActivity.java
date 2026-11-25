@@ -626,7 +626,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
                     freeAccounts -= (UserConfig.MAX_ACCOUNT_COUNT - UserConfig.MAX_ACCOUNT_DEFAULT_COUNT);
                 }
                 if (freeAccounts > 0 && availableAccount != null) {
-                    presentFragment(new LoginActivity(availableAccount));
+                    presentFragment(createAddAccountLoginFragment(availableAccount));
                 } else if (!UserConfig.hasPremiumOnAccounts()) {
                     showDialog(new LimitReachedBottomSheet(this, getContext(), TYPE_ACCOUNTS, currentAccount, null));
                 }
@@ -665,16 +665,16 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         return true;
     }
 
+    public static LoginActivity createAddAccountLoginFragment(int availableAccount) {
+        return new LoginActivity(availableAccount);
+    }
+
     public LinearLayout accountView(int account, boolean selected) {
         final LinearLayout btn = new LinearLayout(getContext());
         btn.setOrientation(LinearLayout.HORIZONTAL);
         ThemeBind.selectorBackground(btn, Theme.createRadSelectorDrawable(getThemedColor(Theme.key_listSelector), 0, 0), null, ThemeBind.of(Theme.key_listSelector), getResourceProvider());
 
-        TLRPC.User resolvedUser = UserConfig.getInstance(account).getCurrentUser();
-        if (resolvedUser == null && org.telegram.messenger.EveInspectionMode.isActive(account)) {
-            resolvedUser = org.telegram.messenger.EveInspectionMode.ensureLocalInspectionUser(account);
-        }
-        final TLRPC.User user = resolvedUser;
+        final TLRPC.User user = UserConfig.getInstance(account).getCurrentUser();
 
         final AvatarDrawable avatarDrawable = new AvatarDrawable();
         avatarDrawable.setInfo(user);
@@ -812,12 +812,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
             return dialogsActivity;
         } else if (position == POSITION_PROFILE) {
             Bundle args = new Bundle();
-            long clientUserId = UserConfig.getInstance(currentAccount).getClientUserId();
-            if (clientUserId == 0 && org.telegram.messenger.EveInspectionMode.isActive(currentAccount)) {
-                org.telegram.messenger.EveInspectionMode.ensureLocalInspectionUser(currentAccount);
-                clientUserId = org.telegram.messenger.EveInspectionMode.LOCAL_INSPECTION_USER_ID;
-            }
-            args.putLong("user_id", clientUserId);
+            args.putLong("user_id", UserConfig.getInstance(currentAccount).getClientUserId());
             args.putBoolean("my_profile", true);
             // args.putBoolean("expandPhoto", true);
             args.putBoolean("hasMainTabs", true);

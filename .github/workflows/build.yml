@@ -153,6 +153,9 @@ jobs:
 
       - name: Build authoritative debug APK (:TMessagesProj_App:assembleAfatDebug)
         working-directory: android
+        env:
+          EVE_TELEGRAM_APP_ID: ${{ secrets.EVE_TELEGRAM_APP_ID }}
+          EVE_TELEGRAM_APP_HASH: ${{ secrets.EVE_TELEGRAM_APP_HASH }}
         run: |
           set -euo pipefail
           ./gradlew :TMessagesProj_App:assembleAfatDebug --stacktrace --console=plain 2>&1 | tee ../ci-android-build.log

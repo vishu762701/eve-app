@@ -653,24 +653,6 @@ public class SessionsActivity extends BaseFragment implements NotificationCenter
     }
 
     public void loadSessions(boolean silent) {
-        if (org.telegram.messenger.EveInspectionMode.isActive(currentAccount)) {
-            loading = false;
-            repeatLoad = 0;
-            sessions.clear();
-            passwordSessions.clear();
-            if (currentType == 0 && currentSession == null) {
-                currentSession = createLocalSession();
-            }
-            updateRows();
-            if (listAdapter != null) {
-                listAdapter.notifyDataSetChanged();
-            }
-            if (delegate != null) {
-                delegate.sessionsLoaded();
-            }
-            org.telegram.messenger.EveLoadingTracker.record("Devices", org.telegram.messenger.EveLoadingTracker.Outcome.OFFLINE, "Local device session preview (offline)");
-            return;
-        }
         if (loading) {
             return;
         }

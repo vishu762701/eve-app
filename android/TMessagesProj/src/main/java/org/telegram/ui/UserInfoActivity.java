@@ -600,12 +600,7 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
     private void setValue() {
         if (valueSet) return;
 
-        long selfId = getUserConfig().getClientUserId();
-        if (selfId == 0 && org.telegram.messenger.EveInspectionMode.isActive(currentAccount)) {
-            org.telegram.messenger.EveInspectionMode.ensureLocalInspectionUser(currentAccount);
-            selfId = org.telegram.messenger.EveInspectionMode.LOCAL_INSPECTION_USER_ID;
-            org.telegram.messenger.EveLoadingTracker.record("Account", org.telegram.messenger.EveLoadingTracker.Outcome.OFFLINE, "Local inspection identity (read-only)");
-        }
+        final long selfId = getUserConfig().getClientUserId();
         TLRPC.UserFull userFull = getMessagesController().getUserFull(selfId);
         if (userFull == null) {
             if (getUserConfig().getCurrentUser() != null) {
@@ -617,9 +612,6 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
         TLRPC.User user = userFull.user;
         if (user == null) {
             user = getUserConfig().getCurrentUser();
-        }
-        if (user == null && org.telegram.messenger.EveInspectionMode.isActive(currentAccount)) {
-            user = org.telegram.messenger.EveInspectionMode.ensureLocalInspectionUser(currentAccount);
         }
 
         if (user == null) {

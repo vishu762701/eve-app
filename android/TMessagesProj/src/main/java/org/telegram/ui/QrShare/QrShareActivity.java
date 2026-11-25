@@ -320,7 +320,7 @@ public class QrShareActivity extends BaseFragment {
                     return;
                 }
                 org.telegram.messenger.EveLoadingTracker.record("QR Scanner", org.telegram.messenger.EveLoadingTracker.Outcome.SUCCESS, "QR code scanned");
-                if (org.telegram.messenger.EveInspectionMode.isActive(currentAccount) || (link != null && link.startsWith("eve://"))) {
+                if (link != null && link.startsWith("eve://")) {
                     new AlertDialog.Builder(getParentActivity())
                         .setTitle("QR Code Scanned")
                         .setMessage(link)

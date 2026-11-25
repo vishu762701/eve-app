@@ -91,6 +91,8 @@ dependencies {
     implementation 'com.google.firebase:firebase-appindexing:20.0.0'
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.json:json:20231013'
+    testImplementation 'org.robolectric:robolectric:4.14.1'
+    testImplementation 'androidx.test:core:1.6.1'
 
     implementation "io.noties.markwon:core:4.6.2"
     implementation "io.noties.markwon:ext-strikethrough:4.6.2"
@@ -152,6 +154,23 @@ android {
         vectorDrawables.generatedDensities = ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi']
 
         multiDexEnabled true
+
+        def rawAppId = resolveTelegramCredential("EVE_TELEGRAM_APP_ID", "TELEGRAM_APP_ID")
+        def rawAppHash = resolveTelegramCredential("EVE_TELEGRAM_APP_HASH", "TELEGRAM_APP_HASH")
+        def parsedAppId = 0
+        try {
+            if (rawAppId != null && !rawAppId.trim().isEmpty()) {
+                parsedAppId = Integer.parseInt(rawAppId.trim())
+            }
+        } catch (NumberFormatException ignored) {
+            parsedAppId = 0
+        }
+        def cleanAppHash = rawAppHash != null ? rawAppHash.trim() : ""
+        def hasCustomTelegramApiCredentials = parsedAppId > 0 && parsedAppId != 4 && !cleanAppHash.isEmpty() && !cleanAppHash.equals("014b35b6184100b085b0d0572f9b5103")
+        def escapedAppHash = hasCustomTelegramApiCredentials ? cleanAppHash.replace("\\", "\\\\").replace("\"", "\\\"") : ""
+        buildConfigField "int", "TELEGRAM_APP_ID", hasCustomTelegramApiCredentials ? "${parsedAppId}" : "0"
+        buildConfigField "String", "TELEGRAM_APP_HASH", "\"${escapedAppHash}\""
+        buildConfigField "boolean", "HAS_CUSTOM_TELEGRAM_API_CREDENTIALS", "${hasCustomTelegramApiCredentials}"
 
         externalNativeBuild {
             cmake {
@@ -243,6 +262,36 @@ android {
     }
 
     namespace 'org.telegram.messenger'
+
+    testOptions {
+        unitTests.returnDefaultValues = true
+        unitTests.includeAndroidResources = true
+        unitTests.all {
+            maxHeapSize = "2048m"
+            jvmArgs("--add-opens=java.base/java.io=ALL-UNNAMED")
+            systemProperty("robolectric.dependency.repo.url", "https://repo.maven.apache.org/maven2")
+        }
+    }
+}
+
+def resolveTelegramCredential(String primaryKey, String fallbackKey) {
+    if (project.hasProperty(primaryKey)) {
+        def v = project.property(primaryKey)
+        if (v != null && !v.toString().trim().isEmpty()) return v.toString().trim()
+    }
+    if (project.hasProperty(fallbackKey)) {
+        def v = project.property(fallbackKey)
+        if (v != null && !v.toString().trim().isEmpty()) return v.toString().trim()
+    }
+    def envPrimary = System.getenv(primaryKey)
+    if (envPrimary != null && !envPrimary.trim().isEmpty()) return envPrimary.trim()
+    def envFallback = System.getenv(fallbackKey)
+    if (envFallback != null && !envFallback.trim().isEmpty()) return envFallback.trim()
+    def localPrimary = getProps(primaryKey)
+    if (localPrimary != null && !localPrimary.toString().trim().isEmpty()) return localPrimary.toString().trim()
+    def localFallback = getProps(fallbackKey)
+    if (localFallback != null && !localFallback.toString().trim().isEmpty()) return localFallback.toString().trim()
+    return ""
 }
 
 
@@ -266,6 +315,22 @@ task checkVisibility {
         def isPublicAllowed = !project.hasProperty("IS_PRIVATE") || !project.property("IS_PRIVATE").toBoolean()
         if (!isPrivateBuild && !isPublicAllowed) {
             throw new GradleException("Building public version of private code!")
+        }
+        def isEndUserRelease = project.gradle.startParameter.taskNames.find {
+            it.contains("Release") || it.contains("Standalone") || it.contains("bundle")
+        }
+        if (isEndUserRelease) {
+            def rawAppId = resolveTelegramCredential("EVE_TELEGRAM_APP_ID", "TELEGRAM_APP_ID")
+            def rawAppHash = resolveTelegramCredential("EVE_TELEGRAM_APP_HASH", "TELEGRAM_APP_HASH")
+            def parsedId = 0
+            try {
+                if (rawAppId) parsedId = Integer.parseInt(rawAppId.trim())
+            } catch (NumberFormatException ignored) {
+                parsedId = 0
+            }
+            if (parsedId <= 0 || parsedId == 4 || !rawAppHash || rawAppHash == "014b35b6184100b085b0d0572f9b5103") {
+                throw new GradleException("BLOCKED_CREDENTIALS: Configure owner-provided EVE_TELEGRAM_APP_ID and EVE_TELEGRAM_APP_HASH in android/local.properties, Gradle properties, or environment variables before building release/standalone.")
+            }
         }
     }
     doLast {

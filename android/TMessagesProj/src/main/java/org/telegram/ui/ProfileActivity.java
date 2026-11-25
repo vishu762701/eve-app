@@ -2086,18 +2086,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 flagSecure.invalidate();
             }
             TLRPC.User user = getMessagesController().getUser(userId);
-            if (user == null && org.telegram.messenger.EveInspectionMode.isActive(currentAccount) && (myProfile || org.telegram.messenger.EveInspectionMode.isLocalInspectionUser(userId))) {
-                user = org.telegram.messenger.EveInspectionMode.ensureLocalInspectionUser(currentAccount);
-                if (user != null) {
-                    userId = user.id;
-                }
-            }
             if (user == null) {
                 org.telegram.messenger.EveCrashDiagnostics.recordEvent("NAVIGATION", "ProfileActivity aborted: null user for id=" + userId);
                 return false;
-            }
-            if (org.telegram.messenger.EveInspectionMode.isLocalInspectionUser(userId)) {
-                org.telegram.messenger.EveLoadingTracker.record("Profile", org.telegram.messenger.EveLoadingTracker.Outcome.SUCCESS, "Local inspection profile loaded");
             }
 
             getNotificationCenter().addWeakObserver(this, NotificationCenter.contactsDidLoad);

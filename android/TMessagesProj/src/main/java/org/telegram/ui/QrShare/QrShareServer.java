@@ -114,9 +114,6 @@ final class QrShareServer implements NotificationCenter.NotificationCenterDelega
             }
             return new Link(prefix, chat != null ? chat.title : "", false, false, false, -chatId, false);
         }
-        if (org.telegram.messenger.EveInspectionMode.isActive(account) && (userId == 0 || userId == UserConfig.getInstance(account).getClientUserId() || org.telegram.messenger.EveInspectionMode.isLocalInspectionUser(userId))) {
-            return new Link(org.telegram.messenger.EveInspectionMode.getLocalInspectionQrUrl(), org.telegram.messenger.EveInspectionMode.getLocalInspectionQrCaption(), false, false, true, org.telegram.messenger.EveInspectionMode.LOCAL_INSPECTION_USER_ID, true);
-        }
         final boolean self = userId == UserConfig.getInstance(account).getClientUserId();
         final TLRPC.User user = controller.getUser(userId);
         final String username = user != null ? UserObject.getPublicUsername(user) : null;
@@ -154,11 +151,6 @@ final class QrShareServer implements NotificationCenter.NotificationCenterDelega
         view.setThemeEditable(link.themeEditable);
         if (link.themeEditable) {
             view.setGiftsOwner(link.peerId);
-        }
-        if (org.telegram.messenger.EveInspectionMode.isActive(account)) {
-            view.setFeeStars(0);
-            org.telegram.messenger.EveLoadingTracker.record("QR Generator", org.telegram.messenger.EveLoadingTracker.Outcome.SUCCESS, "Local inspection QR rendered");
-            return;
         }
         if (!link.self) {
             // someone else's code: the link and its owner's theme, set only for a chat one administers
