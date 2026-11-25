@@ -2365,7 +2365,7 @@
     <string name="AddAnExplanation">Add an explanation</string>
     <string name="AddAnExplanationInfo">Users will see this text after choosing the wrong answer, good for educational purposes.</string>
     <string name="EnableAnimations">Enable Animations</string>
-    <string name="ChatSettings">Chat Settings</string>
+    <string name="ChatSettings">Exam Settings</string>
     <string name="Devices">Devices</string>
     <string name="SettingsHelp">Help</string>
     <string name="SettingsDebug">Debug</string>
@@ -10645,7 +10645,7 @@
     <string name="SettingsAccount">Account</string>
     <string name="SettingsAccounts">Accounts</string>
     <string name="SettingsAccountInfo">Number, Username, Bio</string>
-    <string name="SettingsChat">Chat Settings</string>
+    <string name="SettingsChat">Exam Settings</string>
     <string name="SettingsChatInfo">Wallpaper, Night Mode, Animations</string>
     <string name="SettingsPrivacySecurity">Privacy &amp; Security</string>
     <string name="SettingsPrivacySecurityInfo">Last Seen, Devices, Passkeys</string>

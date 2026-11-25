@@ -82,9 +82,17 @@ Statuses describe the new delivery effort, not the absence of existing code.
   - Changed `android/TMessagesProj/src/main/java/org/telegram/ui/eve/auth/EveBackendClient.java`, `MainTabsActivity.java`, `DialogsActivity.java`, `DialogsAdapter.java`, `DialogsEmptyCell.java`, `res/values/strings.xml`, plus new `org.telegram.ui.eve.exams.*` adapters and `EveExamsMainScreenTest.java`.
   - Pending: owner runtime phone screenshot/video acceptance on Exams list, search, empty states, and `EveExamTestsFragment`.
 
-- **2026-11-25 — Mission 3: Account Screen Cleanup (implemented)**
+- **2026-11-25 — Mission 3: Account Screen Cleanup (`ac93600266d5919f84fab181f95bcd572b3b4eab`, CI GREEN)**
+  - CI verification: [`ac93600266d5919f84fab181f95bcd572b3b4eab`](https://github.com/vishu762701/eve-app/actions/runs/45628596616) (`Build Eve APK` run `45628596616` succeeded across all 4 jobs; `Eve-debug-apk` artifact `15031321621`, `72,110,156` bytes). Initial push `290c619` (run `45627140195`) failed `EveAccountCleanupTest` compile on package-private `ChooseChannelFragment` import and was fixed in `ac93600` via `Class.forName`.
   - Edited `android/TMessagesProj/src/main/java/org/telegram/ui/UserInfoActivity.java`: removed user-facing entries and navigation routes for Personal channel (`BUTTON_CHANNEL`), Chat Automation (`BUTTON_AI` + `EditProfileChatAutomationInfo`), and Add Account (`BUTTON_ADD_ACCOUNT` + Telegram Premium multi-account upsell shadow), while preserving Account title, First/Last name, Bio, Your Info, Phone, Username, Birthday + privacy settings, saved session switching (`AccountCell` if already present), Log Out (`LogoutActivity`), and keeping original Telegram classes (`ChooseChannelFragment`, `LoginActivity`, `AdminedChannelsFetcher`) undeleted.
   - Added `android/TMessagesProj/src/test/java/org/telegram/ui/eve/EveAccountCleanupTest.java`.
+  - Pending: owner runtime phone screenshot/video acceptance on cleaned Account screen.
+
+- **2026-11-25 — Mission 4: Chat Settings -> Exam Settings (implemented)**
+  - Edited `android/TMessagesProj/src/main/res/values/strings.xml`: renamed `ChatSettings` and `SettingsChat` to `"Exam Settings"`.
+  - Edited `android/TMessagesProj/src/main/java/org/telegram/ui/ThemeActivity.java`: gated off `appIconHeaderRow`/`appIconSelectorRow`/`appIconShadowRow` and `swipeGestureHeaderRow`/`swipeGestureRow`/`swipeGestureInfoRow` via `isEveExamSettingSectionEnabled(...)`, preserving Message corners, Chat list view, Message text size, Compact Mode, Change Chat Wallpaper, Change Name Color, Color theme, and Auto-Night Mode.
+  - Edited `android/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java`: removed stale `ChatListSwipeGesture` and `AppIcon` search index entries from `SearchResult`.
+  - Added `android/TMessagesProj/src/test/java/org/telegram/ui/eve/EveExamSettingsTest.java`.
 
 ## F. Active bugs
 - PROFILE-001, IN PROGRESS: owner reports a crash on tapping Profile. Two authenticated Robolectric tests reproduce `ProfileActivity.onCreate:187 -> ProfileTelegramViewTree.<init>:153 -> createCellValue:389`. `valueViews.add(this)` precedes the field initializer at line 241. This is the proven JVM cause; the exact phone event is not correlated. No main fix commit. The prepared change moves only the field, updates its EVE `NEW` hash and adds a four-row theme registration test. Post-fix Android and phone checks outstanding; not T7.
@@ -92,7 +100,7 @@ Statuses describe the new delivery effort, not the absence of existing code.
 - SMOKE-001, IN PROGRESS: the existing smoke test can fall back to one screen and accept a generic nonempty host. The prepared S2 change requires a packaged six-host inventory, attached fragment classes, live layout and fresh evidence.
 
 ## G. Current work position
-**NEXT ACTION:** Verify Mission 3 CI green run on `main`, then execute Mission 4 (Chat Settings -> Exam Settings in `ThemeActivity.java` and `SettingsActivity.java`).
+**NEXT ACTION:** Verify Mission 4 CI green run on `main`, then execute Mission 5 (English-only language in `LanguageSelectActivity.java` and `LocaleController.java`).
 
 Historical legacy-`app/` notes (pre-handover):
 - Offline fixture `ef2666ce97a833bf21deb4e0f954e1423cd606e3` and `a2ee6ef5d0e05314705a28c140586e64e8ce8be4` in `app/` remain preserved untouched in `app/`.

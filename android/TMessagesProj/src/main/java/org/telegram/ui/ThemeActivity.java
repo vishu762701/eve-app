@@ -558,6 +558,22 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
         }
     }
 
+    public static final String EVE_SECTION_APP_ICON = "app_icon";
+    public static final String EVE_SECTION_CHAT_LIST_SWIPE = "chat_list_swipe";
+    public static final String EVE_SECTION_MESSAGE_CORNERS = "message_corners";
+    public static final String EVE_SECTION_CHAT_LIST_VIEW = "chat_list_view";
+    public static final String EVE_SECTION_MESSAGE_TEXT_SIZE = "message_text_size";
+    public static final String EVE_SECTION_COMPACT_MODE = "compact_mode";
+    public static final String EVE_SECTION_WALLPAPER = "wallpaper";
+    public static final String EVE_SECTION_NAME_COLOR = "name_color";
+    public static final String EVE_SECTION_COLOR_THEME = "color_theme";
+    public static final String EVE_SECTION_AUTO_NIGHT_MODE = "auto_night_mode";
+
+    public static boolean isEveExamSettingSectionEnabled(String sectionKey) {
+        return !EVE_SECTION_APP_ICON.equals(sectionKey)
+                && !EVE_SECTION_CHAT_LIST_SWIPE.equals(sectionKey);
+    }
+
     public ThemeActivity(int type) {
         super();
         currentType = type;
@@ -775,13 +791,18 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
             chatListRow = rowCount++;
             chatListInfoRow = rowCount++;
 
-            appIconHeaderRow = rowCount++;
-            appIconSelectorRow = rowCount++;
-            appIconShadowRow = rowCount++;
+            // EVE-PATCH: Mission 4 - Remove App Icon and Chat list swipe gesture from visible EVE Exam Settings.
+            if (isEveExamSettingSectionEnabled(EVE_SECTION_APP_ICON)) {
+                appIconHeaderRow = rowCount++;
+                appIconSelectorRow = rowCount++;
+                appIconShadowRow = rowCount++;
+            }
 
-            swipeGestureHeaderRow = rowCount++;
-            swipeGestureRow = rowCount++;
-            swipeGestureInfoRow = rowCount++;
+            if (isEveExamSettingSectionEnabled(EVE_SECTION_CHAT_LIST_SWIPE)) {
+                swipeGestureHeaderRow = rowCount++;
+                swipeGestureRow = rowCount++;
+                swipeGestureInfoRow = rowCount++;
+            }
 
             nightThemeRow = rowCount++;
             browserRow = rowCount++;
