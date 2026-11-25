@@ -80,8 +80,7 @@ open class QrShareActivity : EveBaseActivity() {
             contentDescription = "QR code for public EVE username, at " + username +
                 ". This shared card does not verify account ownership."
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
-            val defaultPalette = (0 until paletteCount).firstOrNull { paletteName(it) == "Neon Blue" } ?: 0
-            setPalette(savedInstanceState?.getInt("qr_palette", defaultPalette) ?: defaultPalette)
+            setPalette(savedInstanceState?.getInt("qr_palette", 0) ?: 0)
             val keys = savedInstanceState?.getStringArrayList("qr_emoji_keys")
             val alts = savedInstanceState?.getStringArrayList("qr_emoji_alts")
             val sources = savedInstanceState?.getStringArrayList("qr_emoji_sources")
@@ -89,12 +88,7 @@ open class QrShareActivity : EveBaseActivity() {
                 keys.size == alts.size && alts.size == sources.size) {
                 setEmojiChoices(keys.indices.map { QrEmojiChoice(keys[it], alts[it], sources[it]) })
             } else {
-                val savedEmoji = savedInstanceState?.getString("qr_emoji")
-                if (!savedEmoji.isNullOrBlank()) {
-                    setEmoji(savedEmoji)
-                } else {
-                    setEmojiChoices(listOf(QrEmojiPattern.standard("✨")))
-                }
+                setEmoji(savedInstanceState?.getString("qr_emoji"))
             }
             if (savedInstanceState?.getBoolean("qr_playback_paused") == true) {
                 pausePlayback()

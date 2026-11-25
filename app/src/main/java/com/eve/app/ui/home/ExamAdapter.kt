@@ -99,8 +99,15 @@ class ExamAdapter(
 
     inner class HeaderVH(private val cell: HeaderCell) : RecyclerView.ViewHolder(cell) {
         fun bind(header: HomeListItem.Header) {
-            cell.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite))
+            val palette = com.eve.app.theme.TelegramThemeEngine.resolveCurrentPalette(cell.context)
+            cell.setBackgroundColor(palette.surface)
             cell.setText(header.title)
+            cell.textView.setTextColor(
+                com.eve.app.theme.TelegramColorRoles.accessibleForeground(
+                    Theme.getColor(Theme.key_windowBackgroundWhiteBlueHeader),
+                    listOf(palette.surface)
+                )
+            )
             val categoryEmoji = com.eve.app.ui.admin.emoji.EmojiRenderer.getCategoryEmoji(header.title)
             com.eve.app.ui.admin.emoji.EmojiRenderer.attachEmoji(cell.textView, header.title, categoryEmoji)
         }
@@ -122,7 +129,16 @@ class ExamAdapter(
         fun bind(exam: Exam, attempted: Boolean, isPinned: Boolean, attempt: TestAttempt?, position: Int) {
             currentExamId = exam.id
             val ctx = container.context
-            container.background = Theme.getSelectorDrawable(true)
+            val palette = com.eve.app.theme.TelegramThemeEngine.resolveCurrentPalette(ctx)
+            container.background = Theme.getSelectorDrawable(
+                true,
+                object : Theme.ResourcesProvider {
+                    override fun getColor(key: Int): Int = when (key) {
+                        Theme.key_windowBackgroundWhite -> palette.surface
+                        else -> Theme.getColor(key)
+                    }
+                }
+            )
 
             com.eve.app.ui.admin.emoji.EmojiRenderer.attachEmoji(tvExamName, exam.examName, exam.emoji)
             tvExamTime.text = if (attempted) {
@@ -131,10 +147,13 @@ class ExamAdapter(
                 ctx.getString(R.string.exam_time_category, exam.timeLimitMinutes, exam.categoryOrOther)
             }
 
-            tvExamName.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText))
+            tvExamName.setTextColor(palette.textPrimary)
             tvExamTime.setTextColor(
-                if (attempted) Theme.getColor(Theme.key_windowBackgroundWhiteGreenText2)
-                else Theme.getColor(Theme.key_windowBackgroundWhiteGrayText)
+                if (attempted) com.eve.app.theme.TelegramColorRoles.accessibleForeground(
+                    Theme.getColor(Theme.key_windowBackgroundWhiteGreenText2),
+                    listOf(palette.surface)
+                )
+                else palette.textSecondary
             )
             divider.setBackgroundColor(Theme.getColor(Theme.key_divider))
             ivPinned.imageTintList = ColorStateList.valueOf(Theme.getColor(Theme.key_chats_pinnedIcon))
@@ -238,13 +257,14 @@ class ExamAdapter(
     ) : RecyclerView.ViewHolder(container) {
         fun bind(post: FeedbackPost) {
             val ctx = container.context
-            container.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite))
+            val palette = com.eve.app.theme.TelegramThemeEngine.resolveCurrentPalette(ctx)
+            container.setBackgroundColor(palette.surface)
             tvTitle.text = post.title
-            tvTitle.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText))
+            tvTitle.setTextColor(palette.textPrimary)
             tvMessage.text = post.message
-            tvMessage.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText))
+            tvMessage.setTextColor(palette.textPrimary)
             tvDate.text = formatTimestamp(post.timestamp)
-            tvDate.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText))
+            tvDate.setTextColor(palette.textSecondary)
             etReply.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText))
             etReply.setHintTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteHintText))
             etReply.setCursorColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText))
@@ -319,6 +339,7 @@ class ExamAdapter(
     private fun createExamVH(ctx: Context): ExamVH {
         val root = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
+            minimumHeight = dp(72f)
             layoutParams = RecyclerView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
@@ -346,12 +367,14 @@ class ExamAdapter(
             setPadding(dp(12f), 0, dp(8f), 0)
         }
         val tvName = TextView(ctx).apply {
+            id = R.id.tvExamName
             setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16f)
             typeface = mediumFont()
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
         }
         val tvTime = TextView(ctx).apply {
+            id = R.id.tvExamTime
             setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14f)
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
