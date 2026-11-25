@@ -1,6 +1,7 @@
 name: Build Eve APK
 
-# Normal push: compile debug app only. FULL runs only via explicit manual dispatch.
+# Authoritative Android build targets android/ (:TMessagesProj_App:assembleAfatDebug).
+# Backend, Firebase rules, and port-integrity gates run on every push and manual dispatch.
 on:
   push:
     branches: [ main ]
@@ -18,9 +19,6 @@ on:
 concurrency:
   group: eve-build-${{ github.event_name }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
   cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
-
-env:
-  APP_VERSION_CODE: ${{ github.run_number }}
 
 jobs:
   telegram-port-integrity:
@@ -52,254 +50,7 @@ jobs:
         run: |
           python3 eve-repo/.github/scripts/verify_telegram_port.py --repo-root eve-repo --upstream-root telegram-upstream
 
-  build:
-    needs: [telegram-port-integrity]
-    runs-on: ubuntu-latest
-    outputs:
-      apk_sha256: ${{ steps.apk_digest.outputs.sha256 }}
-      test_apk_sha256: ${{ steps.apk_digest.outputs.test_sha256 }}
-      full: ${{ steps.verification_profile.outputs.full }}
-      port_smoke_needed: ${{ steps.port_smoke_check.outputs.port_smoke_needed }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          filter: blob:none
-
-      # Only an explicit Run workflow dispatch enables the complete verification matrix.
-      - name: Resolve FAST or FULL verification profile
-        id: verification_profile
-        run: |
-          set -euo pipefail
-          full=false
-          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
-            full=true
-          fi
-          echo "full=$full" >> "$GITHUB_OUTPUT"
-          echo "Verification profile: $([[ "$full" == true ]] && echo FULL || echo FAST)"
-          if [[ "$full" == true ]]; then
-            echo "Manual FULL: unit, security, native UI, backend, functions, lint, and APK integrity." >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "Automatic FAST: compile :app:assembleDebug only; no verification suites." >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 21
-
-      # Historical feature retirements are not a permanent veto on owner-authorized UI work.
-
-      - name: Check google-services.json
-        run: |
-          if [ ! -f app/google-services.json ]; then
-            echo "ERROR: app/google-services.json missing. Firebase console se download karke app/ folder me daalo."
-            exit 1
-          fi
-
-      - name: Accept Android SDK licenses and install Platform 36
-        run: |
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
-          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-36" "build-tools;36.0.0"
-
-      - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: 8.7
-
-      # Robolectric downloads instrumented Android SDK jars outside Gradle dependency
-      # caching. Reuse genuine jars across CI runs rather than fetching every time.
-      - name: Cache Robolectric runtime SDK jars
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2/repository/org/robolectric/android-all-instrumented
-          key: robolectric-ubuntu-4.14.1-instrumented
-
-      # Exercise the same optimized CPU/C API feature set used by the JNI build.
-      # Serial scheduling keeps per-frame wall-clock DoS budgets independent of
-      # test-worker contention; assertions and upstream time/memory caps stay intact.
-      - name: Verify pinned native renderer security and C API tests (manual FULL only)
-        if: ${{ steps.verification_profile.outputs.full == 'true' }}
-        run: cargo +1.99.1 test --locked --release --lib --features c-api --manifest-path app/src/main/cpp/vendor/tlottie/Cargo.toml -- --test-threads=1
-
-      - name: Prepare pinned Telegram QR native renderer toolchain
-        env:
-          EVE_ALL_ABIS: ${{ steps.verification_profile.outputs.full == 'true' }}
-        run: bash .github/scripts/prepare-qr-native.sh
-
-      # Normal pushes compile only. Manual FULL exercises all checks below.
-      - name: FAST compile debug APK only
-        run: |
-          set -euo pipefail
-          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
-            # Manual FULL keeps the complete four-ABI artifact for both emulators and release evidence.
-            gradle :app:assembleDebug --stacktrace --console=plain 2>&1 | tee ci-fast-gradle.log
-          elif [[ "${{ steps.port_smoke_check.outputs.port_smoke_needed }}" == "true" ]]; then
-            # Port smoke runs on x86_64 emulator; assemble all ABIs and androidTest APK
-            gradle :app:assembleDebug -Peve.nativeAbis=arm64-v8a,x86_64 :app:assembleDebugAndroidTest -Peve.nativeAbis=arm64-v8a,x86_64 :app:lintDebug --stacktrace --console=plain 2>&1 | tee ci-fast-gradle.log
-          else
-            # The owner's normal development build targets ARM64 phones only.
-            gradle :app:assembleDebug -Peve.nativeAbis=arm64-v8a :app:compileDebugAndroidTestKotlin :app:lintDebug --stacktrace --console=plain 2>&1 | tee ci-fast-gradle.log
-          fi
-
-      - name: Upload FAST push debug APK artifact
-        if: ${{ steps.verification_profile.outputs.full != 'true' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: Eve-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: FULL test lint and compile AndroidTest sources
-        id: full_gradle
-        if: ${{ steps.verification_profile.outputs.full == 'true' }}
-        run: |
-          set -euo pipefail
-          gradle :app:compileDebugUnitTestKotlin :app:compileDebugAndroidTestKotlin :app:assembleDebugAndroidTest :app:lintDebug :app:testDebugUnitTest --continue --stacktrace --console=plain 2>&1 | tee ci-full-gradle.log
-
-      - name: Archive failed FULL unit test evidence
-        if: ${{ failure() && steps.full_gradle.outcome == 'failure' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: full-unit-evidence-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            ci-full-gradle.log
-            app/build/test-results/testDebugUnitTest/**/*.xml
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Summarize failed FULL unit tests
-        if: ${{ failure() && steps.full_gradle.outcome == 'failure' }}
-        run: python3 .github/scripts/ci_failure_report.py --unit app/build/test-results/testDebugUnitTest --gradle-log ci-full-gradle.log
-
-      - name: Verify missing release credentials are rejected
-        if: ${{ steps.verification_profile.outputs.full == 'true' }}
-        run: |
-          set -euo pipefail
-          if env -u RELEASE_STORE_FILE -u RELEASE_STORE_PASSWORD -u RELEASE_KEY_ALIAS -u RELEASE_KEY_PASSWORD gradle :app:assembleRelease --dry-run --console=plain > release-signing-preflight.log 2>&1; then
-            echo "::error::Release task accepted missing credentials."
-            exit 1
-          fi
-          if ! grep -Fq "Refusing release build: a real RELEASE_STORE_FILE" release-signing-preflight.log; then
-            echo "::error::Signing verification failed for an unexpected reason."
-            tail -n 60 release-signing-preflight.log
-            exit 1
-          fi
-
-      - name: Fingerprint built APK
-        if: ${{ steps.verification_profile.outputs.full == 'true' || steps.port_smoke_check.outputs.port_smoke_needed == 'true' }}
-        id: apk_digest
-        run: |
-          set -euo pipefail
-          test -s app/build/outputs/apk/debug/app-debug.apk
-          test -s app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-          echo "sha256=$(sha256sum app/build/outputs/apk/debug/app-debug.apk | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
-          echo "test_sha256=$(sha256sum app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
-
-      # Internal immutable handoff, stable across rerun-failed-jobs attempts.
-      - name: Save candidate APK for gated publication
-        if: ${{ steps.verification_profile.outputs.full == 'true' || steps.port_smoke_check.outputs.port_smoke_needed == 'true' }}
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            app/build/outputs/apk/debug/app-debug.apk
-            app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-          key: eve-apk-${{ github.run_id }}-${{ github.sha }}
-
-
-  native-ui:
-    name: Native UI (${{ matrix.navigation }})
-    # Keep both modes; skip expensive emulators if Android, backend or Functions gates fail.
-    needs: [build, backend, firebase-functions]
-    if: ${{ needs.build.outputs.full == 'true' && success() }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        navigation: [gesture, three-button]
-    # Both navigation modes must pass before the verified APK can be published.
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          filter: blob:none
-      - name: Restore prebuilt app and instrumentation APKs
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            app/build/outputs/apk/debug/app-debug.apk
-            app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-          key: eve-apk-${{ github.run_id }}-${{ github.sha }}
-          fail-on-cache-miss: true
-      - name: Verify original APK checksums
-        env:
-          APP_SHA256: ${{ needs.build.outputs.apk_sha256 }}
-          TEST_SHA256: ${{ needs.build.outputs.test_apk_sha256 }}
-        run: |
-          set -euo pipefail
-          test -n "$APP_SHA256"
-          test -n "$TEST_SHA256"
-          echo "$APP_SHA256  app/build/outputs/apk/debug/app-debug.apk" | sha256sum --check --status
-          echo "$TEST_SHA256  app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk" | sha256sum --check --status
-      - name: Enable KVM for native UI verification
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-
-      - name: Verify approved native UI behavior
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 35
-          arch: x86_64
-          target: google_apis
-          profile: pixel_2
-          # 37.2.13 (build 16740729) repeatedly lost the three-button guest
-          # in the actual QR JNI picker, including with software GPU; host
-          # logs showed invalid ColorBuffer then TCP 5554 connection refused.
-          # Pin the preceding official 37.2.12 stable build for BOTH modes.
-          emulator-build: 16428233
-          # Keep native QR JNI and every visual test enabled. Emulator
-          # graphics/AVD is an infrastructure compatibility experiment,
-          # never evidence of exact Telegram runtime parity.
-          # Diagnose recurrent QEMU guest exit under the genuine JNI QR picker.
-          # Both prior software and SwiftShader GLES profiles lost the guest,
-          # without a terminal JUnit assertion. Android Emulator officially
-          # supports swangle (SwiftShader through ANGLE); isolate this backend
-          # without dropping any native test or changing emulator/API/nav modes.
-          # This is a CI compatibility hypothesis, NOT proven app/device parity.
-          emulator-options: -no-window -gpu swangle -no-snapshot -noaudio -no-boot-anim -feature -Vulkan
-          ram-size: 3072M
-          heap-size: 512M
-          disable-animations: false
-          script: bash .github/scripts/verify-native-ui.sh ${{ matrix.navigation }}
-      - name: Generate visual gallery and XML review inventory
-        if: always()
-        run: |
-          python3 .github/scripts/eve_visual_review.py --captures ui-renderings --source app/src/main/res --output ui-renderings
-          echo "### Eve Visual Evidence" >> "$GITHUB_STEP_SUMMARY"
-          echo "The runner generates visual-review.html and visual-review.json; selected fixture PNGs are emitted in job logs. Only the verified APK is uploaded." >> "$GITHUB_STEP_SUMMARY"
-      - name: Enforce complete theme evidence when native tests pass
-        if: success()
-        run: python3 .github/scripts/eve_visual_review.py --captures ui-renderings --source app/src/main/res --output ui-renderings --enforce
-
-      - name: Summarize failing instrumentation assertions
-        if: ${{ failure() }}
-        run: python3 .github/scripts/ci_failure_report.py --native app/build/outputs/androidTest-results/connected ui-renderings
-
-      - name: Archive native UI instrumentation logs and test reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: native-ui-results-${{ matrix.navigation }}
-          path: |
-            ui-renderings/*.log
-            ui-renderings/*.html
-            ui-renderings/*.json
-            app/build/outputs/androidTest-results/
-          if-no-files-found: ignore
-
   backend:
-    if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -318,7 +69,6 @@ jobs:
           npm test
 
   firebase-functions:
-    if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -342,74 +92,135 @@ jobs:
           npm install --no-package-lock
           npm test
 
-  port-smoke:
-    name: Port Smoke (API 35 x86_64 gesture)
-    needs: [build]
-    if: ${{ (needs.build.outputs.port_smoke_needed == 'true' || needs.build.outputs.full == 'true') && success() }}
+  build:
+    name: Build New Android App (android/)
+    needs: [telegram-port-integrity]
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 60
+    outputs:
+      apk_sha256: ${{ steps.apk_digest.outputs.sha256 }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          filter: blob:none
-      - name: Restore prebuilt app and instrumentation APKs
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            app/build/outputs/apk/debug/app-debug.apk
-            app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-          key: eve-apk-${{ github.run_id }}-${{ github.sha }}
-          fail-on-cache-miss: true
-      - name: Verify original APK checksums
-        env:
-          APP_SHA256: ${{ needs.build.outputs.apk_sha256 }}
-          TEST_SHA256: ${{ needs.build.outputs.test_apk_sha256 }}
+      - name: Checkout EVE repository
+        uses: actions/checkout@v4
+
+      - name: Initialize git submodules at exact pinned commits
         run: |
           set -euo pipefail
-          test -n "$APP_SHA256"
-          test -n "$TEST_SHA256"
-          echo "$APP_SHA256  app/build/outputs/apk/debug/app-debug.apk" | sha256sum --check --status
-          echo "$TEST_SHA256  app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk" | sha256sum --check --status
-      - name: Enable KVM for port smoke verification
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-      - name: Run Ported Screens Smoke Test on Emulator
-        uses: reactivecircus/android-emulator-runner@v2
+          git submodule sync --recursive
+          git submodule update --init --recursive --jobs 4
+          git submodule status --recursive
+          if git submodule status --recursive | grep -qE '^[-+U]'; then
+            echo "::error::Uninitialized, mismatched, or conflicted git submodule detected."
+            exit 1
+          fi
+
+      - uses: actions/setup-java@v4
         with:
-          api-level: 35
-          arch: x86_64
-          target: google_apis
-          profile: pixel_2
-          emulator-build: 16428233
-          emulator-options: -no-window -gpu swangle -no-snapshot -noaudio -no-boot-anim -feature -Vulkan
-          ram-size: 3072M
-          heap-size: 512M
-          disable-animations: false
-          script: bash .github/scripts/verify-port-smoke.sh
-      - name: Upload port smoke screenshots
-        if: always()
+          distribution: temurin
+          java-version: 17
+
+      - name: Install native build tools (nasm)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nasm
+
+      - name: Check google-services.json
+        run: |
+          test -s android/TMessagesProj/google-services.json
+          test -s android/TMessagesProj_App/google-services.json
+
+      - name: Accept Android SDK licenses and install Platform 36, NDK, and CMake
+        run: |
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
+            "ndk;27.2.12479018" \
+            "cmake;3.22.1"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Verify pinned native renderer security and C API tests (manual dispatch)
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: cargo +1.99.1 test --locked --release --lib --features c-api --manifest-path app/src/main/cpp/vendor/tlottie/Cargo.toml -- --test-threads=1
+
+      - name: Verify Gradle tasks in android/
+        working-directory: android
+        run: |
+          set -euo pipefail
+          ./gradlew :TMessagesProj_App:tasks --all --console=plain > ../ci-android-tasks.log
+          grep -F "assembleAfatDebug" ../ci-android-tasks.log
+
+      - name: Build authoritative debug APK (:TMessagesProj_App:assembleAfatDebug)
+        working-directory: android
+        run: |
+          set -euo pipefail
+          ./gradlew :TMessagesProj_App:assembleAfatDebug --stacktrace --console=plain 2>&1 | tee ../ci-android-build.log
+
+      - name: Run Android project JVM unit tests (:TMessagesProj:testDebugUnitTest)
+        working-directory: android
+        run: |
+          set -euo pipefail
+          ./gradlew :TMessagesProj:testDebugUnitTest --stacktrace --console=plain 2>&1 | tee ../ci-android-unit.log
+
+      - name: Verify APK output and package ID (com.eve.app)
+        id: apk_digest
+        run: |
+          set -euo pipefail
+          APK_PATH="android/TMessagesProj_App/build/outputs/apk/afat/debug/app.apk"
+          if [ ! -s "$APK_PATH" ]; then
+            echo "::error::Expected APK not found at $APK_PATH"
+            find android/TMessagesProj_App/build/outputs -type f || true
+            exit 1
+          fi
+          "$ANDROID_HOME/build-tools/36.0.0/aapt2" dump badging "$APK_PATH" > apk-badging.txt
+          head -n 20 apk-badging.txt
+          if ! grep -Fq "package: name='com.eve.app'" apk-badging.txt; then
+            echo "::error::Built APK package ID is not com.eve.app"
+            exit 1
+          fi
+          echo "sha256=$(sha256sum "$APK_PATH" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload build failure logs
+        if: ${{ failure() }}
         uses: actions/upload-artifact@v4
         with:
-          name: port-smoke-screenshots
+          name: android-build-logs-${{ github.run_id }}
           path: |
-            ui-renderings/port-*.png
-            ui-renderings/*.log
+            ci-android-tasks.log
+            ci-android-build.log
+            ci-android-unit.log
+            apk-badging.txt
+            android/TMessagesProj/build/test-results/
           if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Upload authoritative debug APK artifact
+        if: ${{ github.event_name != 'workflow_dispatch' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: Eve-debug-apk
+          path: android/TMessagesProj_App/build/outputs/apk/afat/debug/app.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Save candidate APK for gated publication
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        uses: actions/cache/save@v4
+        with:
+          path: android/TMessagesProj_App/build/outputs/apk/afat/debug/app.apk
+          key: eve-apk-${{ github.run_id }}-${{ github.sha }}
 
   publish-apk:
     name: Publish verified debug APK
-    needs: [build, native-ui, backend, firebase-functions]
-    if: ${{ needs.build.outputs.full == 'true' && success() && github.event_name == 'workflow_dispatch' && inputs.publish_verified_apk == true }}
+    needs: [build, backend, firebase-functions]
+    if: ${{ success() && github.event_name == 'workflow_dispatch' && inputs.publish_verified_apk == true }}
     runs-on: ubuntu-latest
     steps:
       - name: Restore exact candidate APK without recompilation
         uses: actions/cache/restore@v4
         with:
-          path: |
-            app/build/outputs/apk/debug/app-debug.apk
-            app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+          path: android/TMessagesProj_App/build/outputs/apk/afat/debug/app.apk
           key: eve-apk-${{ github.run_id }}-${{ github.sha }}
           fail-on-cache-miss: true
 
@@ -419,12 +230,12 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$EXPECTED_SHA256"
-          echo "$EXPECTED_SHA256  app/build/outputs/apk/debug/app-debug.apk" | sha256sum --check --status
+          echo "$EXPECTED_SHA256  android/TMessagesProj_App/build/outputs/apk/afat/debug/app.apk" | sha256sum --check --status
           echo "Publishing exact APK compiled for $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload verified debug APK
         uses: actions/upload-artifact@v4
         with:
           name: Eve-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: android/TMessagesProj_App/build/outputs/apk/afat/debug/app.apk
           if-no-files-found: error
