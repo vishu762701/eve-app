@@ -21,7 +21,6 @@ import org.robolectric.annotation.Config;
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.R;
 import org.telegram.ui.Cells.DialogCell;
-import org.telegram.ui.Cells.DialogsEmptyCell;
 import org.telegram.ui.eve.auth.EveBackendClient;
 import org.telegram.ui.eve.exams.EveExamDialogsMapper;
 import org.telegram.ui.eve.exams.EveExamModels;
@@ -116,12 +115,28 @@ public class EveExamsMainScreenTest {
     }
 
     @Test
-    public void dialogsEmptyCell_rendersEveEmptyAndActionStatesWithoutTelegramCopy() {
-        DialogsEmptyCell emptyCell = new DialogsEmptyCell(appContext);
-        AtomicBoolean clicked = new AtomicBoolean(false);
-        emptyCell.setEveExamState(EveExamModels.LoadState.AUTH_REQUIRED, "", "", () -> clicked.set(true));
-        emptyCell.performClick();
-        assertTrue(clicked.get());
-        assertNotNull(emptyCell);
+    public void emptyStateResolution_mapsLoadStatesToEveCopyWithoutTelegramStrings() {
+        EveExamDialogsMapper.EmptyStateSpec loading = EveExamDialogsMapper.resolveEmptyState(
+                EveExamModels.LoadState.LOADING, "", "");
+        assertNotNull(loading);
+        assertTrue(loading.autoRepeat);
+        assertEquals(R.string.EveExamsLoadingTitle, loading.titleRes);
+        assertFalse(appContext.getString(loading.titleRes).toLowerCase().contains("telegram"));
+
+        EveExamDialogsMapper.EmptyStateSpec auth = EveExamDialogsMapper.resolveEmptyState(
+                EveExamModels.LoadState.AUTH_REQUIRED, "", "");
+        assertFalse(auth.autoRepeat);
+        assertEquals(R.string.EveExamsAuthTitle, auth.titleRes);
+        assertFalse(appContext.getString(auth.helpRes).toLowerCase().contains("telegram"));
+
+        EveExamDialogsMapper.EmptyStateSpec searchEmpty = EveExamDialogsMapper.resolveEmptyState(
+                EveExamModels.LoadState.READY, "ssc", "");
+        assertEquals(R.string.EveExamsSearchEmptyTitle, searchEmpty.titleRes);
+        assertFalse(appContext.getString(searchEmpty.helpRes).toLowerCase().contains("telegram"));
+
+        EveExamDialogsMapper.EmptyStateSpec error = EveExamDialogsMapper.resolveEmptyState(
+                EveExamModels.LoadState.ERROR, "", "HTTP 503");
+        assertEquals(R.string.EveExamsErrorTitle, error.titleRes);
+        assertEquals("HTTP 503", error.errorPrefix);
     }
 }

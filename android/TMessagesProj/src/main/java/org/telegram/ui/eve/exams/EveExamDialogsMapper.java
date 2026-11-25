@@ -1,5 +1,6 @@
 package org.telegram.ui.eve.exams;
 
+import org.telegram.messenger.R;
 import org.telegram.ui.Cells.DialogCell;
 
 import java.util.ArrayList;
@@ -90,5 +91,69 @@ public final class EveExamDialogsMapper {
         custom.isMedia = false;
         custom.sent = -1;
         return custom;
+    }
+
+    public static final class EmptyStateSpec {
+        public final int iconRes;
+        public final int titleRes;
+        public final int helpRes;
+        public final boolean autoRepeat;
+        public final String errorPrefix;
+
+        public EmptyStateSpec(int iconRes, int titleRes, int helpRes, boolean autoRepeat, String errorPrefix) {
+            this.iconRes = iconRes;
+            this.titleRes = titleRes;
+            this.helpRes = helpRes;
+            this.autoRepeat = autoRepeat;
+            this.errorPrefix = errorPrefix == null ? "" : errorPrefix;
+        }
+    }
+
+    public static EmptyStateSpec resolveEmptyState(
+            EveExamModels.LoadState state,
+            String searchQuery,
+            String errorMessage) {
+        boolean hasQuery = searchQuery != null && !searchQuery.trim().isEmpty();
+        if (hasQuery) {
+            return new EmptyStateSpec(
+                    R.raw.filter_no_chats,
+                    R.string.EveExamsSearchEmptyTitle,
+                    R.string.EveExamsSearchEmptyHelp,
+                    false,
+                    "");
+        }
+        if (state == EveExamModels.LoadState.LOADING) {
+            return new EmptyStateSpec(
+                    R.raw.utyan_newborn,
+                    R.string.EveExamsLoadingTitle,
+                    R.string.EveExamsLoadingHelp,
+                    true,
+                    "");
+        }
+        if (state == EveExamModels.LoadState.AUTH_REQUIRED) {
+            return new EmptyStateSpec(
+                    R.raw.utyan_newborn,
+                    R.string.EveExamsAuthTitle,
+                    R.string.EveExamsAuthHelp,
+                    false,
+                    "");
+        }
+        if (state == EveExamModels.LoadState.ERROR) {
+            String prefix = (errorMessage != null && !errorMessage.trim().isEmpty())
+                    ? errorMessage.trim()
+                    : "";
+            return new EmptyStateSpec(
+                    R.raw.filter_no_chats,
+                    R.string.EveExamsErrorTitle,
+                    R.string.EveExamsErrorHelp,
+                    false,
+                    prefix);
+        }
+        return new EmptyStateSpec(
+                R.raw.filter_no_chats,
+                R.string.EveExamsEmptyTitle,
+                R.string.EveExamsEmptyHelp,
+                false,
+                "");
     }
 }
