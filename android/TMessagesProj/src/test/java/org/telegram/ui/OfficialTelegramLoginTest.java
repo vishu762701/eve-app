@@ -31,7 +31,11 @@ import org.telegram.ui.eve.auth.EveAuthCoordinator;
 import org.telegram.ui.eve.auth.EveAuthValidator;
 import org.telegram.ui.eve.auth.EveUserProfile;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.HashMap;
 
 /**
  * Behavioral JVM regression suite for Mission T0 (Official Telegram Login restoration).
@@ -152,5 +156,63 @@ public class OfficialTelegramLoginTest {
                 true, EveUserProfile.STATUS_ACTIVE, false, "", "General", "",
                 1L, 1L, 1L, true);
         assertEquals("EV-11AA22", profile.eveId);
+    }
+
+    @Test
+    public void defaultCountryFallback_resolvesIndia91AndMatchesIsoEvenWhenLocalized() throws Exception {
+        ArrayList<CountrySelectActivity.Country> countries = new ArrayList<>();
+        HashMap<String, String> languageMap = new HashMap<>();
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(appContext.getAssets().open("countries.txt")))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                String[] args = line.split(";");
+                CountrySelectActivity.Country country = new CountrySelectActivity.Country();
+                country.code = args[0];
+                country.shortname = args[1];
+                country.name = args[2];
+                countries.add(country);
+                languageMap.put(args[1], args[2]);
+            }
+        }
+
+        assertEquals("IN", LoginActivity.resolveInitialCountryIso(null, languageMap));
+        assertEquals("IN", LoginActivity.resolveInitialCountryIso("", languageMap));
+        assertEquals("IN", LoginActivity.resolveInitialCountryIso("zz", languageMap));
+        assertEquals("IN", LoginActivity.resolveInitialCountryIso("in", languageMap));
+        assertEquals("GB", LoginActivity.resolveInitialCountryIso("gb", languageMap));
+
+        CountrySelectActivity.Country india = LoginActivity.findCountryByIso(countries, languageMap, "IN");
+        assertNotNull(india);
+        assertEquals("91", india.code);
+        assertEquals("IN", india.shortname);
+
+        // Localized country name must still resolve by ISO shortname/defaultName.
+        india.defaultName = india.name;
+        india.name = "\u092d\u093e\u0930\u0924";
+        CountrySelectActivity.Country localizedIndia = LoginActivity.findCountryByIso(countries, languageMap, "IN");
+        assertNotNull(localizedIndia);
+        assertEquals("91", localizedIndia.code);
+    }
+
+    @Test
+    public void telegramApiCredentialGuard_rejectsUnconfiguredCredentialsAndAcceptsValidOnes() {
+        int originalAppId = BuildVars.APP_ID;
+        String originalAppHash = BuildVars.APP_HASH;
+        try {
+            BuildVars.APP_ID = 0;
+            BuildVars.APP_HASH = "";
+            assertFalse(LoginActivity.hasConfiguredTelegramApiCredentials());
+
+            BuildVars.APP_ID = 123456;
+            BuildVars.APP_HASH = "";
+            assertFalse(LoginActivity.hasConfiguredTelegramApiCredentials());
+
+            BuildVars.APP_ID = 123456;
+            BuildVars.APP_HASH = "configured_test_hash_value";
+            assertTrue(LoginActivity.hasConfiguredTelegramApiCredentials());
+        } finally {
+            BuildVars.APP_ID = originalAppId;
+            BuildVars.APP_HASH = originalAppHash;
+        }
     }
 }

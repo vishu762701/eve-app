@@ -1193,6 +1193,51 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
         showDialog(builder.create());
     }
 
+    // EVE-PATCH: Default country fallback (India +91), ISO country lookup fix, and Telegram API credential guard.
+    static final String DEFAULT_COUNTRY_ISO = "IN";
+
+    static boolean hasConfiguredTelegramApiCredentials() {
+        return BuildVars.APP_ID > 0 && !TextUtils.isEmpty(BuildVars.APP_HASH);
+    }
+
+    static String resolveInitialCountryIso(String simCountryIso, java.util.Map<String, String> languageMap) {
+        if (!TextUtils.isEmpty(simCountryIso)) {
+            String normalized = simCountryIso.trim().toUpperCase(Locale.US);
+            if (languageMap == null || languageMap.containsKey(normalized)) {
+                return normalized;
+            }
+        }
+        return DEFAULT_COUNTRY_ISO;
+    }
+
+    static CountrySelectActivity.Country findCountryByIso(List<CountrySelectActivity.Country> countries, java.util.Map<String, String> languageMap, String countryIso) {
+        if (countries == null || TextUtils.isEmpty(countryIso)) {
+            return null;
+        }
+        String normalizedIso = countryIso.trim().toUpperCase(Locale.US);
+        String defaultName = languageMap != null ? languageMap.get(normalizedIso) : null;
+        CountrySelectActivity.Country fallbackByName = null;
+        for (int i = 0; i < countries.size(); i++) {
+            CountrySelectActivity.Country candidate = countries.get(i);
+            if (candidate == null) {
+                continue;
+            }
+            if (candidate.shortname != null && candidate.shortname.equalsIgnoreCase(normalizedIso)) {
+                return candidate;
+            }
+            if (fallbackByName == null && defaultName != null && (defaultName.equals(candidate.name) || defaultName.equals(candidate.defaultName))) {
+                fallbackByName = candidate;
+            }
+        }
+        return fallbackByName;
+    }
+
+    private void showMissingTelegramCredentialsAlert(String serverError) {
+        String message = "Telegram login requires owner API credentials (EVE_TELEGRAM_APP_ID and EVE_TELEGRAM_APP_HASH from my.telegram.org). They are not configured in this build"
+                + (TextUtils.isEmpty(serverError) ? "." : " (" + serverError + ").");
+        needShowAlert(getString(R.string.AppName), message);
+    }
+
     private void onFieldError(View view, boolean allowErrorSelection) {
         try {
             view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING);
@@ -2582,15 +2627,18 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             try {
                 TelephonyManager telephonyManager = (TelephonyManager) ApplicationLoader.applicationContext.getSystemService(Context.TELEPHONY_SERVICE);
                 if (telephonyManager != null) {
-                    country = null;//telephonyManager.getSimCountryIso().toUpperCase();
+                    country = telephonyManager.getSimCountryIso();
                 }
             } catch (Exception e) {
                 FileLog.e(e);
             }
+            // EVE-PATCH: Use SIM ISO when valid and default to India (+91) instead of leaving country blank.
+            country = resolveInitialCountryIso(country, languageMap);
 
             if (country != null) {
-                setCountry(languageMap, country.toUpperCase());
-            } else {
+                setCountry(languageMap, country.toUpperCase(Locale.US));
+            }
+            if (codeField.length() == 0) {
                 TLRPC.TL_help_getNearestDc req = new TLRPC.TL_help_getNearestDc();
                 getAccountInstance().getConnectionsManager().sendRequest(req, (response, error) -> AndroidUtilities.runOnUIThread(() -> {
                     if (response == null) {
@@ -2853,19 +2901,10 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
         }
 
         private void setCountry(HashMap<String, String> languageMap, String country) {
-            String name = languageMap.get(country);
-            if (name != null && countriesArray != null) {
-                CountrySelectActivity.Country countryWithCode = null;
-                for (int i = 0; i < countriesArray.size(); i++) {
-                    if (countriesArray.get(i) != null && countriesArray.get(i).name.equals(country)) {
-                        countryWithCode = countriesArray.get(i);
-                        break;
-                    }
-                }
-                if (countryWithCode != null) {
-                    codeField.setText(countryWithCode.code);
-                    countryState = COUNTRY_STATE_NOT_SET_OR_VALID;
-                }
+            // EVE-PATCH: Upstream compared Country.name ("India") against ISO code ("IN"); match via shortname/name and apply full country hint.
+            CountrySelectActivity.Country countryWithCode = findCountryByIso(countriesArray, languageMap, country);
+            if (countryWithCode != null) {
+                selectCountry(countryWithCode);
             }
         }
 
@@ -3188,6 +3227,13 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                 changePhoneCode.settings = settings;
                 req = changePhoneCode;
             } else {
+                // EVE-PATCH: Fail fast with an actionable alert instead of sending APP_ID=0 to Telegram servers.
+                if (!hasConfiguredTelegramApiCredentials()) {
+                    nextPressed = false;
+                    needHideProgress(false);
+                    showMissingTelegramCredentialsAlert("APP_ID=" + BuildVars.APP_ID);
+                    return;
+                }
                 ConnectionsManager.getInstance(currentAccount).cleanup(false);
 
                 TLRPC.TL_auth_sendCode sendCode = new TLRPC.TL_auth_sendCode();
@@ -3272,7 +3318,12 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                         } else if (error.text.startsWith("FLOOD_WAIT")) {
                             needShowAlert(getString(R.string.RestorePasswordNoEmailTitle), getString("FloodWait", R.string.FloodWait));
                         } else if (error.code != -1000) {
-                            AlertsCreator.processError(currentAccount, error, LoginActivity.this, req, phoneInputData.phoneNumber);
+                            // EVE-PATCH: Show API_ID errors and unhandled auth.sendCode errors because AlertsCreator.processError returns null for them.
+                            if (error.text.contains("API_ID_INVALID") || error.text.contains("API_ID_PUBLISHED_FLOOD")) {
+                                showMissingTelegramCredentialsAlert(error.text);
+                            } else if (AlertsCreator.processError(currentAccount, error, LoginActivity.this, req, phoneInputData.phoneNumber) == null) {
+                                needShowAlert(getString(R.string.RestorePasswordNoEmailTitle), getString(R.string.ErrorOccurred) + "\n" + error.text);
+                            }
                         }
                     }
                 }
