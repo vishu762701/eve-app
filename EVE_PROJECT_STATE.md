@@ -103,13 +103,14 @@ Statuses describe the new delivery effort, not the absence of existing code.
   - Edited `SettingsActivity.java`, `PremiumPreviewFragment.java`, `ProfileActivity.java`, `res/values/strings.xml`, plus added `EveSettingsAndPremiumTest.java`.
   - Pending: owner runtime phone screenshot/video acceptance on Settings & EVE Premium showcase star animation.
 
-- **2026-11-25 — Mission 7: EVE Admin Control Center (implemented)**
-  - Audited legacy `app/` admin/exam/payment workflows, Cloudflare Worker routes (`backend/src/routes/{admin,exams,generatedTests,questions,premium,reports}.ts`), D1 schema (`0001..0031`), `backend/src/auth.ts` RBAC, and `firestore.rules` (`isAdmin() = false`).
-  - Edited `EveBackendClient.java`: added authenticated `getJsonRoot`, `postJsonRoot`, `putJsonRoot`, `deleteJsonRoot` JSON transport methods.
-  - Edited `EveAdminConfig.java`: enforced verified D1 admin session detection (`isServerAdminProfile`, `isServerAdminSession`, `hasRight`), preserving `EveInspectionMode` fallback strictly for DEBUG local diagnostics with zero backend privileges.
-  - Added `EveAdminModels.java`, `EveAdminRepository.java`, and `EveAdminDialogs.java` wiring Overview metrics (`/api/admin/me`, `/api/admin/stats/users`, `/api/exams`, `/api/generated-tests`, `/api/admin/analytics/exams`, `/api/admin/premium/transactions`, `/api/admin/audit-log`), Exam CRUD + AI Test Generation (`/api/generated-tests/generate-now` + test publish/pause/delete), Question Bank CRUD (`/api/questions/*`), Student search/attempts/ban/Premium grant+revoke (`/api/admin/users/*`, `/api/admin/premium/users/*`), Pricing + UPI/QR Merchant VPA management (`/api/admin/premium/config`), and Admin RBAC management (`/api/admin/admins/*`).
-  - Updated `EveAdminControlCenterActivity.java` and `SettingsActivity.java` (`EVE Admin Control Center` dynamic subtitle), keeping DEBUG local diagnostic probes intact inside DEBUG builds.
-  - Added `android/TMessagesProj/src/test/java/org/telegram/ui/eve/EveAdminControlCenterTest.java`.
+- **2026-11-25 — Mission 7: EVE Admin Control Center (`28b6bae64984c797fa4667648b069aee20c3f514`, CI GREEN)**
+  - CI verification: [`28b6bae64984c797fa4667648b069aee20c3f514`](https://github.com/vishu762701/eve-app/actions/runs/45645287608) (`Build Eve APK` run `45645287608` succeeded across all 4 jobs; `Eve-debug-apk` artifact `15039206873`, `72,138,590` bytes).
+  - Audited `backend/`, `functions/`, `firestore.rules`, and legacy `app/`; added `EveAdminModels.java`, `EveAdminRepository.java`, `EveAdminDialogs.java`, updated `EveBackendClient.java`, `EveAdminConfig.java`, `EveAdminControlCenterActivity.java`, `SettingsActivity.java`, plus added `EveAdminControlCenterTest.java`.
+  - Pending: owner runtime phone screenshot/video acceptance on Admin Control Center (signed in with D1 admin account).
+
+- **2026-11-25 — Mission 8: Integration Architecture & Final Regression Verification (implemented)**
+  - Verified clean separation: Telegram MTProto (`ConnectionsManager`, `LoginActivity`, `LogoutActivity`) handles Telegram authentication, saved sessions, and messaging; Cloudflare Worker + D1 handles EVE students, exams, generated tests, questions, attempts, scoring, leaderboards, entitlements, UPI/QR config, payments, admin roles, and atomic audit logs; `firestore.rules` enforces `isAdmin() = false`.
+  - Added `android/TMessagesProj/src/test/java/org/telegram/ui/eve/EveIntegrationRegressionTest.java` verifying all Missions 1..7 invariants simultaneously alongside MTProto & Worker integration boundaries.
 
 ## F. Active bugs
 - PROFILE-001, IN PROGRESS: owner reports a crash on tapping Profile. Two authenticated Robolectric tests reproduce `ProfileActivity.onCreate:187 -> ProfileTelegramViewTree.<init>:153 -> createCellValue:389`. `valueViews.add(this)` precedes the field initializer at line 241. This is the proven JVM cause; the exact phone event is not correlated. No main fix commit. The prepared change moves only the field, updates its EVE `NEW` hash and adds a four-row theme registration test. Post-fix Android and phone checks outstanding; not T7.
@@ -117,7 +118,7 @@ Statuses describe the new delivery effort, not the absence of existing code.
 - SMOKE-001, IN PROGRESS: the existing smoke test can fall back to one screen and accept a generic nonempty host. The prepared S2 change requires a packaged six-host inventory, attached fragment classes, live layout and fresh evidence.
 
 ## G. Current work position
-**NEXT ACTION:** Verify Mission 7 CI green run on `main`, then execute Mission 8 (Integration Architecture & Final Regression Verification across auth, exams, attempts/leaderboard boundaries, and build/integrity checks).
+**NEXT ACTION:** Verify final Mission 8 CI green run on `main`, then owner performs physical device installation of latest `Eve-debug-apk` and runtime screenshot/video verification across Missions 1..8.
 
 Historical legacy-`app/` notes (pre-handover):
 - Offline fixture `ef2666ce97a833bf21deb4e0f954e1423cd606e3` and `a2ee6ef5d0e05314705a28c140586e64e8ce8be4` in `app/` remain preserved untouched in `app/`.
