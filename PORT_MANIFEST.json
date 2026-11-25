@@ -304,7 +304,7 @@
       "upstream_sha256": null,
       "mode": "NEW",
       "reason": "Eve host/screen/adapter referencing Telegram components",
-      "eve_sha256": "e8b801ffec8c52b8d0413bcbc71004aa2ae47440eb6cc81f7bdc7ecf3efbb72b"
+      "eve_sha256": "727d9f19bc6440e1f8cbc9485da0b2fe0f89c4a64be194a680f59333a4ede5de"
     },
     {
       "path": "app/src/main/java/com/eve/app/ui/admin/AdminDeleteFlow.kt",
@@ -408,7 +408,7 @@
       "upstream_sha256": null,
       "mode": "NEW",
       "reason": "Eve host/screen/adapter referencing Telegram components",
-      "eve_sha256": "2061a25c39c7994b61ce93ba3e8d04ed0e9db17b0df68c2e328527f12440d9d7"
+      "eve_sha256": "7009fb9838f4d4a1b20bb4ad0ad34f1a40f30579cf9b11a9e8b423693265dc78"
     },
     {
       "path": "app/src/main/java/com/eve/app/ui/admin/GeneratedTestsActivity.kt",
@@ -824,7 +824,7 @@
       "upstream_sha256": null,
       "mode": "NEW",
       "reason": "Eve host/screen/adapter referencing Telegram components",
-      "eve_sha256": "f53c32ca5dd354ad1092acce7878d14c58acebcbb410559c05ea3661d978ea2e"
+      "eve_sha256": "b5bb286080be10a16772bebb54c5d1e48abc1c3ea9e36b5995eb8d80ae1477f5"
     },
     {
       "path": "app/src/main/java/com/eve/app/ui/profile/ChangePhoneActivity.kt",
@@ -896,7 +896,7 @@
       "upstream_sha256": null,
       "mode": "NEW",
       "reason": "Eve host/screen/adapter referencing Telegram components",
-      "eve_sha256": "cee21125bf34a5832dbf5149f74f4825e2bd289fa719cc2bb2b8a2461399b5f8"
+      "eve_sha256": "3169d77bea3d44143e134728f2eb6fc3a45775bc67b50cfe92fcc17381927df4"
     },
     {
       "path": "app/src/main/java/com/eve/app/ui/profile/QrShareActivity.kt",

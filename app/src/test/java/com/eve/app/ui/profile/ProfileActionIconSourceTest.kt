@@ -47,8 +47,8 @@ class ProfileActionIconSourceTest {
         assertTrue(light.settings != dark.settings)
         val source = File("src/main/java/com/eve/app/ui/profile/ProfileActivity.kt").readText()
         assertTrue(source.contains("override fun onApplyThemePalette("))
-        assertTrue(source.contains("ProfileActionIcons.applyTo("))
-        assertTrue(source.contains("R.color.category_pill_unselected_bg"))
+        assertTrue(source.contains("binding = ProfileTelegramViewTree(this)"))
+        assertTrue(source.contains("binding.applyTelegramTheme()"))
         assertTrue(source.contains("super.onApplyThemePalette(palette)"))
     }
 }

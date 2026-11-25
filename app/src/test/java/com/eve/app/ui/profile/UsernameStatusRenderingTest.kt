@@ -21,7 +21,7 @@ import org.robolectric.util.ReflectionHelpers
 import org.robolectric.util.ReflectionHelpers.ClassParameter
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk=[35],application=Application::class,shadows=[ProfileEditorAuthFixture.ShadowAuth::class])
+@Config(sdk=[35],shadows=[ProfileEditorAuthFixture.ShadowAuth::class])
 class UsernameStatusRenderingTest {
     @Before fun before() { ProfileEditorAuthFixture.reset(); ProfileEditorAuthFixture.setOwner("owner-a") }
     @After fun after() { ProfileEditorAuthFixture.reset() }

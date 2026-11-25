@@ -72,8 +72,10 @@ class ButtonBounceTest {
     @Test
     fun testTelegramButtonBounceAndCanonicalInterpolatorCoverage() {
         val pollAdmin = java.io.File("src/main/java/com/eve/app/ui/admin/ManagePollsActivity.kt").readText()
-        assertTrue(pollAdmin.contains("DesignPress.bind(binding.btnBack)"))
-        assertTrue(pollAdmin.contains("DesignPress.bind(binding.btnCreatePollDialog)"))
+        assertTrue(pollAdmin.contains("ActionBar(this)"))
+        assertTrue(pollAdmin.contains("setBackButtonImage(R.drawable.ic_ab_back)"))
+        assertTrue(pollAdmin.contains("ButtonWithCounterView(this, null)"))
+        assertTrue(pollAdmin.contains("btnCreatePoll"))
 
         val testActivity = java.io.File("src/main/java/com/eve/app/ui/test/TestActivity.kt").readText()
         assertTrue(testActivity.contains("DesignPress.bind(binding.btnPrev)"))

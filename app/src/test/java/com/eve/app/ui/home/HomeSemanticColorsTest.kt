@@ -243,7 +243,7 @@ class HomeSemanticColorsTest {
         val layout = source("src/main/res/layout/item_exam.xml")
         val adapter = source("src/main/java/com/eve/app/ui/home/ExamAdapter.kt")
         assertTrue(layout.contains("@style/Widget.Eve.Token.Card") || layout.contains("examIconContainer"))
-        assertTrue(adapter.contains("HomeAppearance.applyCard"))
+        assertTrue(adapter.contains("Theme.getColor(Theme.key_windowBackgroundWhiteBlackText)"))
 
         val light = loadColors("src/main/res/values/design_colors.xml")
         val dark = loadColors("src/main/res/values-night/design_colors.xml")

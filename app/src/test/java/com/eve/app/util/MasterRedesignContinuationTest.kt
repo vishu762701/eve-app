@@ -47,7 +47,7 @@ class MasterRedesignContinuationTest {
         // The drawer remains opaque, but its Night surface is an explicit owner override.
         // Guard the actual dedicated resource, not the superseded shared-surface caller.
         assertTrue("Home drawer must use its dedicated opaque surface",
-            home.contains("ContextCompat.getColor(this, R.color.home_drawer_background)"))
+            home.contains("HomeTelegramViewTree(this)"))
         assertEquals("@color/surface", loadColors("src/main/res/values/design_colors.xml")["home_drawer_background"])
         assertEquals("#FF000000", loadColors("src/main/res/values-night/design_colors.xml")["home_drawer_background"])
     }

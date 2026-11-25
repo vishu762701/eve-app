@@ -145,7 +145,7 @@ class TelegramThemeEngineTest {
 
     @Test
     fun fixedBuiltInsDoNotExposeLegacyAccentOverrides() {
-        assertEquals(setOf("day", "night"), TelegramThemeEngine.BUILT_IN_THEMES.map { it.id }.toSet())
+        assertEquals(setOf("day", "night", "darkblue", "arctic", "bluebubbles"), TelegramThemeEngine.BUILT_IN_THEMES.map { it.id }.toSet())
         for (theme in TelegramThemeEngine.BUILT_IN_THEMES) {
             assertEquals(0, theme.defaultAccentId)
             assertEquals(listOf(0), theme.accentOptions.map { it.id })
@@ -411,7 +411,7 @@ class TelegramThemeEngineTest {
 
     @Test
     fun fixedSourceThemeAssetsExist() {
-        assertEquals(setOf("day", "night"), TelegramThemeEngine.BUILT_IN_THEMES.map { it.id }.toSet())
+        assertEquals(setOf("day", "night", "darkblue", "arctic", "bluebubbles"), TelegramThemeEngine.BUILT_IN_THEMES.map { it.id }.toSet())
         for (theme in TelegramThemeEngine.BUILT_IN_THEMES) {
             val file = java.io.File("src/main/assets/themes/${theme.assetName}")
             assertTrue("Fixed source role asset exists: $file", file.isFile && file.length() > 0)

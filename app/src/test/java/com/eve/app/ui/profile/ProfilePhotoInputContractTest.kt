@@ -13,7 +13,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [35], application = Application::class)
+@Config(sdk = [35])
 class ProfilePhotoInputContractTest {
 
     @Test fun sourceMenuAlwaysOffersCameraThenGalleryAndDeleteOnlyWithAvatar() {
@@ -55,7 +55,7 @@ class ProfilePhotoInputContractTest {
         assertTrue(source.contains("ActivityResultContracts.StartActivityForResult()"))
         assertTrue(source.contains("FileProvider.getUriForFile"))
         assertTrue(source.contains("launchAvatarCrop(cameraPhotoUri!!)"))
-        assertTrue(source.contains("AvatarCropActivity.intent(this, uri)"))
+        assertTrue(source.contains("PhotoCropActivity.intent(this, uri)"))
         assertTrue(source.contains("STATE_CAMERA_URI"))
         assertTrue(source.contains("STATE_CAMERA_FILE"))
         assertTrue(source.contains("isChangingConfigurations"))
