@@ -8,14 +8,13 @@ Read `EVE_PROJECT_STATE.md` for the permanent record and NEXT ACTION. Developmen
 - Existing systems intact: Cloudflare Worker + D1, Firebase Auth, Firestore, Firebase Functions, and security rules.
 
 ## Done
-- Handover & submodule sync: old workspaces (`eve-mock-test-app` @ `82918aec`, `eve-app-migration-push` @ `8a69126f`) verified clean; `android/` git submodules initialized recursively.
-- CI & first build recovery (`02f9f73c86f2918c8a3615ea13a53857339e5059`, [run 45560197466](https://github.com/vishu762701/eve-app/actions/runs/45560197466)):
-  - `.github/workflows/build.yml` now builds `android/` (`:TMessagesProj_App:assembleAfatDebug` + `:TMessagesProj:testDebugUnitTest`), initializes exact pinned submodules, installs SDK 36 + NDK `27.2.12479018` + CMake `3.22.1` + `nasm`, verifies `aapt2` `package: name='com.eve.app' versionCode='73039' versionName='13.2.2'`, and uploads `Eve-debug-apk` (`71,945,434` bytes).
-  - All 4 CI jobs passed: `Telegram Port Integrity`, `firebase-functions`, `backend`, and `Build New Android App (android/)`.
+- Handover & base build (`02f9f73`, [run 45560197466](https://github.com/vishu762701/eve-app/actions/runs/45560197466)): `android/` authoritative APK + 4 green CI jobs.
+- Mission T0 official Telegram login restoration (`ef335a5`..`0dc1192`, [run 45591878290](https://github.com/vishu762701/eve-app/actions/runs/45591878290)): restored `IntroActivity`/`LoginActivity`/auth closures, removed `EveInspectionMode` auth bypass, added `OfficialTelegramLoginTest.java` and credential injection.
+- Credential preflight & India default (`LoginActivity.java`, `android/TMessagesProj/build.gradle`, `.github/workflows/build.yml`): deterministic India (`IN`, `+91`) country default without SIM/`getNearestDc` + async reload preservation, fail-fast credential preflight for authoritative APK builds, and masked `BuildConfig` verification.
 
 ## Next
-- Verify `Eve-debug-apk` from `android/TMessagesProj_App` on owner's phone.
-- Begin migrating EVE domain features (auth, exam catalogue, mock test engine, scoring, results, leaderboards, practice, admin, notifications) from `app/` into `android/` via EVE adapters while keeping Telegram Java UI classes in charge of UI/interactions.
+- Owner configures `EVE_TELEGRAM_APP_ID` and `EVE_TELEGRAM_APP_HASH` in GitHub Repository Secrets (`Settings -> Secrets and variables -> Actions`) — currently `no secrets found` (`BLOCKED_CREDENTIALS`, root cause of `CONNECTION_API_ID_INVALID`).
+- Re-run `Build Eve APK` to publish credential-enabled `Eve-debug-apk`, then verify real Telegram phone -> OTP -> 2FA -> logout flow on device before EVE domain feature migration.
 
 ## Open decisions
 - Legacy Firebase retirement and production D1 migration remain separate from normal CI. No production deployment is authorized by this handoff.

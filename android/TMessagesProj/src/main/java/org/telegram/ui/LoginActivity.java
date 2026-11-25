@@ -1200,14 +1200,27 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
         return BuildVars.APP_ID > 0 && !TextUtils.isEmpty(BuildVars.APP_HASH);
     }
 
-    static String resolveInitialCountryIso(String simCountryIso, java.util.Map<String, String> languageMap) {
-        if (!TextUtils.isEmpty(simCountryIso)) {
-            String normalized = simCountryIso.trim().toUpperCase(Locale.US);
-            if (languageMap == null || languageMap.containsKey(normalized)) {
-                return normalized;
-            }
-        }
+    static String resolveInitialCountryIso() {
         return DEFAULT_COUNTRY_ISO;
+    }
+
+    static CountrySelectActivity.Country resolvePostRefreshCountry(
+            List<CountrySelectActivity.Country> refreshedCountries,
+            CountrySelectActivity.Country currentSelection,
+            String currentCodeText) {
+        if (refreshedCountries == null || refreshedCountries.isEmpty()) {
+            return null;
+        }
+        if (currentSelection != null && !TextUtils.isEmpty(currentSelection.shortname)) {
+            if (TextUtils.isEmpty(currentCodeText) || TextUtils.equals(currentCodeText, currentSelection.code)) {
+                return findCountryByIso(refreshedCountries, null, currentSelection.shortname);
+            }
+            return null;
+        }
+        if (TextUtils.isEmpty(currentCodeText)) {
+            return findCountryByIso(refreshedCountries, null, DEFAULT_COUNTRY_ISO);
+        }
+        return null;
     }
 
     static CountrySelectActivity.Country findCountryByIso(List<CountrySelectActivity.Country> countries, java.util.Map<String, String> languageMap, String countryIso) {
@@ -2622,34 +2635,9 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
 
             Collections.sort(countriesArray, Comparator.comparing(o -> o.name));
 
-            String country = null;
+            // EVE-PATCH: Always select India (IN, +91) deterministically on fresh login without relying on SIM or help.getNearestDc.
+            setCountry(languageMap, resolveInitialCountryIso());
 
-            try {
-                TelephonyManager telephonyManager = (TelephonyManager) ApplicationLoader.applicationContext.getSystemService(Context.TELEPHONY_SERVICE);
-                if (telephonyManager != null) {
-                    country = telephonyManager.getSimCountryIso();
-                }
-            } catch (Exception e) {
-                FileLog.e(e);
-            }
-            // EVE-PATCH: Use SIM ISO when valid and default to India (+91) instead of leaving country blank.
-            country = resolveInitialCountryIso(country, languageMap);
-
-            if (country != null) {
-                setCountry(languageMap, country.toUpperCase(Locale.US));
-            }
-            if (codeField.length() == 0) {
-                TLRPC.TL_help_getNearestDc req = new TLRPC.TL_help_getNearestDc();
-                getAccountInstance().getConnectionsManager().sendRequest(req, (response, error) -> AndroidUtilities.runOnUIThread(() -> {
-                    if (response == null) {
-                        return;
-                    }
-                    TLRPC.TL_nearestDc res = (TLRPC.TL_nearestDc) response;
-                    if (codeField.length() == 0) {
-                        setCountry(languageMap, res.country.toUpperCase());
-                    }
-                }), ConnectionsManager.RequestFlagWithoutLogin | ConnectionsManager.RequestFlagFailOnServerErrors);
-            }
             if (codeField.length() == 0) {
                 setCountryButtonText(null);
                 phoneField.setHintText(null);
@@ -2671,12 +2659,15 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             req.lang_code = LocaleController.getInstance().getCurrentLocaleInfo() != null ? LocaleController.getInstance().getCurrentLocaleInfo().getLangCode() : Locale.getDefault().getCountry();
             getConnectionsManager().sendRequest(req, (response, error) -> {
                 AndroidUtilities.runOnUIThread(() -> {
-                    if (error == null) {
+                    if (error == null && response instanceof TLRPC.TL_help_countriesList) {
+                        TLRPC.TL_help_countriesList help_countriesList = (TLRPC.TL_help_countriesList) response;
+                        if (help_countriesList.countries == null || help_countriesList.countries.isEmpty()) {
+                            return;
+                        }
                         countriesArray.clear();
                         codesMap.clear();
                         phoneFormatMap.clear();
 
-                        TLRPC.TL_help_countriesList help_countriesList = (TLRPC.TL_help_countriesList) response;
                         for (int i = 0; i < help_countriesList.countries.size(); i++) {
                             TLRPC.TL_help_country c = help_countriesList.countries.get(i);
                             for (int k = 0; k < c.country_codes.size(); k++) {
@@ -2744,6 +2735,22 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                                     if (!ok) {
                                         codeField.setText(number.substring(0, 1));
                                     }
+                                }
+                            }
+                        } else {
+                            // EVE-PATCH: Keep India (+91) or user-selected country intact after async country list reload.
+                            CountrySelectActivity.Country preservedCountry = resolvePostRefreshCountry(
+                                    countriesArray,
+                                    currentCountry,
+                                    codeField.getText().toString()
+                            );
+                            if (preservedCountry != null) {
+                                if (codeField.length() == 0) {
+                                    selectCountry(preservedCountry);
+                                } else {
+                                    currentCountry = preservedCountry;
+                                    setCountryHint(preservedCountry.code, preservedCountry);
+                                    countryState = COUNTRY_STATE_NOT_SET_OR_VALID;
                                 }
                             }
                         }

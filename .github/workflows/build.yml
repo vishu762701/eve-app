@@ -151,6 +151,35 @@ jobs:
           ./gradlew :TMessagesProj_App:tasks --all --console=plain > ../ci-android-tasks.log
           grep -F "assembleAfatDebug" ../ci-android-tasks.log
 
+      - name: Run Android project JVM unit tests (:TMessagesProj:testDebugUnitTest)
+        working-directory: android
+        env:
+          EVE_TELEGRAM_APP_ID: ${{ secrets.EVE_TELEGRAM_APP_ID }}
+          EVE_TELEGRAM_APP_HASH: ${{ secrets.EVE_TELEGRAM_APP_HASH }}
+        run: |
+          set -euo pipefail
+          ./gradlew :TMessagesProj:testDebugUnitTest --stacktrace --console=plain 2>&1 | tee ../ci-android-unit.log
+
+      - name: Credential preflight (authoritative Debug APK)
+        env:
+          EVE_TELEGRAM_APP_ID: ${{ secrets.EVE_TELEGRAM_APP_ID }}
+          EVE_TELEGRAM_APP_HASH: ${{ secrets.EVE_TELEGRAM_APP_HASH }}
+        run: |
+          set -euo pipefail
+          if [ -z "${EVE_TELEGRAM_APP_ID:-}" ] || [ -z "${EVE_TELEGRAM_APP_HASH:-}" ]; then
+            echo "::error::BLOCKED_CREDENTIALS: Missing GitHub Actions secret(s) EVE_TELEGRAM_APP_ID and/or EVE_TELEGRAM_APP_HASH."
+            exit 1
+          fi
+          if ! [[ "${EVE_TELEGRAM_APP_ID}" =~ ^[1-9][0-9]*$ ]] || [ "${EVE_TELEGRAM_APP_ID}" = "4" ]; then
+            echo "::error::BLOCKED_CREDENTIALS: EVE_TELEGRAM_APP_ID must be a nonzero non-sample integer API ID."
+            exit 1
+          fi
+          if ! [[ "${EVE_TELEGRAM_APP_HASH}" =~ ^[0-9a-fA-F]{32}$ ]] || [ "${EVE_TELEGRAM_APP_HASH,,}" = "014b35b6184100b085b0d0572f9b5103" ]; then
+            echo "::error::BLOCKED_CREDENTIALS: EVE_TELEGRAM_APP_HASH must be a valid 32-hex-character non-sample API hash."
+            exit 1
+          fi
+          echo "Telegram API credentials preflight passed (secret values masked)."
+
       - name: Build authoritative debug APK (:TMessagesProj_App:assembleAfatDebug)
         working-directory: android
         env:
@@ -160,11 +189,15 @@ jobs:
           set -euo pipefail
           ./gradlew :TMessagesProj_App:assembleAfatDebug --stacktrace --console=plain 2>&1 | tee ../ci-android-build.log
 
-      - name: Run Android project JVM unit tests (:TMessagesProj:testDebugUnitTest)
-        working-directory: android
+      - name: Verify generated BuildConfig Telegram API credentials (masked)
         run: |
           set -euo pipefail
-          ./gradlew :TMessagesProj:testDebugUnitTest --stacktrace --console=plain 2>&1 | tee ../ci-android-unit.log
+          BC_FILE="android/TMessagesProj/build/generated/source/buildConfig/debug/org/telegram/messenger/BuildConfig.java"
+          test -s "$BC_FILE"
+          grep -Fq "public static final boolean HAS_CUSTOM_TELEGRAM_API_CREDENTIALS = true;" "$BC_FILE"
+          ! grep -Fq "public static final int TELEGRAM_APP_ID = 0;" "$BC_FILE"
+          ! grep -Fq "public static final int TELEGRAM_APP_ID = 4;" "$BC_FILE"
+          echo "Verified BuildConfig contains nonzero non-sample TELEGRAM_APP_ID and HAS_CUSTOM_TELEGRAM_API_CREDENTIALS=true."
 
       - name: Verify APK output and package ID (com.eve.app)
         id: apk_digest

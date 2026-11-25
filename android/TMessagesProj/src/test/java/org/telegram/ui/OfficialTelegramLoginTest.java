@@ -158,10 +158,9 @@ public class OfficialTelegramLoginTest {
         assertEquals("EV-11AA22", profile.eveId);
     }
 
-    @Test
-    public void defaultCountryFallback_resolvesIndia91AndMatchesIsoEvenWhenLocalized() throws Exception {
-        ArrayList<CountrySelectActivity.Country> countries = new ArrayList<>();
-        HashMap<String, String> languageMap = new HashMap<>();
+    private void loadCountriesFromAssets(
+            ArrayList<CountrySelectActivity.Country> countries,
+            HashMap<String, String> languageMap) throws Exception {
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(appContext.getAssets().open("countries.txt")))) {
             String line;
             while ((line = reader.readLine()) != null) {
@@ -174,17 +173,21 @@ public class OfficialTelegramLoginTest {
                 languageMap.put(args[1], args[2]);
             }
         }
+    }
 
-        assertEquals("IN", LoginActivity.resolveInitialCountryIso(null, languageMap));
-        assertEquals("IN", LoginActivity.resolveInitialCountryIso("", languageMap));
-        assertEquals("IN", LoginActivity.resolveInitialCountryIso("zz", languageMap));
-        assertEquals("IN", LoginActivity.resolveInitialCountryIso("in", languageMap));
-        assertEquals("GB", LoginActivity.resolveInitialCountryIso("gb", languageMap));
+    @Test
+    public void defaultCountryFallback_deterministicallySelectsIndia91AndPreservesOnRefresh() throws Exception {
+        ArrayList<CountrySelectActivity.Country> countries = new ArrayList<>();
+        HashMap<String, String> languageMap = new HashMap<>();
+        loadCountriesFromAssets(countries, languageMap);
 
-        CountrySelectActivity.Country india = LoginActivity.findCountryByIso(countries, languageMap, "IN");
+        assertEquals("IN", LoginActivity.resolveInitialCountryIso());
+
+        CountrySelectActivity.Country india = LoginActivity.findCountryByIso(countries, languageMap, LoginActivity.resolveInitialCountryIso());
         assertNotNull(india);
         assertEquals("91", india.code);
         assertEquals("IN", india.shortname);
+        assertEquals("India", india.name);
 
         // Localized country name must still resolve by ISO shortname/defaultName.
         india.defaultName = india.name;
@@ -192,6 +195,35 @@ public class OfficialTelegramLoginTest {
         CountrySelectActivity.Country localizedIndia = LoginActivity.findCountryByIso(countries, languageMap, "IN");
         assertNotNull(localizedIndia);
         assertEquals("91", localizedIndia.code);
+
+        // Async country list reload must preserve India (+91) without reverting or clearing.
+        CountrySelectActivity.Country refreshedIndia = LoginActivity.resolvePostRefreshCountry(countries, india, "91");
+        assertNotNull(refreshedIndia);
+        assertEquals("IN", refreshedIndia.shortname);
+        assertEquals("91", refreshedIndia.code);
+
+        // Failed/empty async reload must return null so existing India default remains untouched.
+        assertNull(LoginActivity.resolvePostRefreshCountry(new ArrayList<>(), india, "91"));
+    }
+
+    @Test
+    public void manualCountrySwitching_overridesIndiaDefaultAndSurvivesRefresh() throws Exception {
+        ArrayList<CountrySelectActivity.Country> countries = new ArrayList<>();
+        HashMap<String, String> languageMap = new HashMap<>();
+        loadCountriesFromAssets(countries, languageMap);
+
+        CountrySelectActivity.Country uk = LoginActivity.findCountryByIso(countries, languageMap, "GB");
+        assertNotNull(uk);
+        assertEquals("44", uk.code);
+        assertEquals("GB", uk.shortname);
+
+        CountrySelectActivity.Country preservedUk = LoginActivity.resolvePostRefreshCountry(countries, uk, "44");
+        assertNotNull(preservedUk);
+        assertEquals("GB", preservedUk.shortname);
+        assertEquals("44", preservedUk.code);
+
+        // If user edited codeField manually to another code, async refresh must not force-overwrite it.
+        assertNull(LoginActivity.resolvePostRefreshCountry(countries, uk, "1"));
     }
 
     @Test
