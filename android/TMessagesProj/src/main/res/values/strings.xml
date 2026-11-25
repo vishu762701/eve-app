@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="AppName">Telegram</string>
-    <string name="AppNameBeta">Telegram Beta</string>
+    <string name="AppName">EVE</string>
+    <string name="AppNameBeta">EVE</string>
     <string name="LanguageName">English</string>
     <string name="English">English</string>
     <string name="LanguageNameInEnglish">English</string>
@@ -2634,7 +2634,8 @@
     <string name="DirectShareInfo">Show recent chats in Android share menu</string>
     <string name="Emoji">Emoji</string>
     <string name="LargeEmoji">Large Emoji</string>
-    <string name="TelegramVersion">Telegram for Android %1$s</string>
+    <string name="TelegramVersion">EVE for Android %1$s</string>
+    <string name="EveThirdPartyApiDisclosure">Independent third-party application using the Telegram API. Not an official Telegram app.</string>
     <string name="DebugMenu">Debug Menu</string>
     <string name="DebugMenuLongPress">Long press again for debug menu</string>
     <string name="DebugSendLogs">Send Logs</string>
@@ -4213,19 +4214,19 @@
     <string name="ViewMessageStatistic">Message Statistic</string>
     <string name="ViewMessage">Open Message</string>
     <!--Intro view-->
-    <string name="Page1Title">Telegram</string>
-    <string name="Page2Title">Fast</string>
-    <string name="Page3Title">Free</string>
+    <string name="Page1Title">EVE</string>
+    <string name="Page2Title">Focused</string>
+    <string name="Page3Title">Structured</string>
     <string name="Page4Title">Secure</string>
-    <string name="Page5Title">Powerful</string>
-    <string name="Page6Title">Cloud-Based</string>
-    <string name="Page1Message">The world\'s **fastest** messaging app.\nIt is **free** and **secure**.</string>
-    <string name="Page2Message">**Telegram** delivers messages faster than\nany other application.</string>
-    <string name="Page3Message">**Telegram** provides free unlimited cloud storage for chats and media.</string>
-    <string name="Page4Message">**Telegram** keeps your messages safe\nfrom hacker attacks.</string>
-    <string name="Page5Message">**Telegram** has no limits on\nthe size of your media and chats.</string>
-    <string name="Page6Message">**Telegram** lets you access your messages\nfrom multiple devices.</string>
-    <string name="StartMessaging">Start Messaging</string>
+    <string name="Page5Title">Exam-Ready</string>
+    <string name="Page6Title">Connected</string>
+    <string name="Page1Message">Independent government-exam preparation app.\nUses the Telegram API (not an official Telegram app).</string>
+    <string name="Page2Message">**EVE** keeps your exam study and mock test updates fast and distraction-free.</string>
+    <string name="Page3Message">**EVE** organizes practice sets, exam alerts, and study resources in one place.</string>
+    <string name="Page4Message">**EVE** uses Telegram API authentication to keep your student session protected.</string>
+    <string name="Page5Message">Prepare with timed mock tests, analytics, and instant score reviews.</string>
+    <string name="Page6Message">Access your **EVE** account and study progress across devices.</string>
+    <string name="StartMessaging">Get Started</string>
     <!-- VoIP -->
     <string name="AccountSettings">Account Settings</string>
     <string name="VoipUseLessData">Use less data for calls</string>

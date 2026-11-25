@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="utf-8"?>
+<animated-vector
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt">
+    <aapt:attr name="android:drawable">
+        <vector
+            android:name="eve_splash"
+            android:width="320dp"
+            android:height="320dp"
+            android:viewportWidth="320"
+            android:viewportHeight="320">
+            <group
+                android:name="circle_group"
+                android:pivotX="160"
+                android:pivotY="160"
+                android:scaleX="0.5"
+                android:scaleY="0.5">
+                <path
+                    android:name="circle"
+                    android:pathData="M 160 60 A 100 100 0 1 1 159.99 60 Z"
+                    android:fillColor="#1A73E8"
+                    android:fillAlpha="0" />
+            </group>
+            <group
+                android:name="emblem_group"
+                android:pivotX="160"
+                android:pivotY="160"
+                android:scaleX="0.5"
+                android:scaleY="0.5">
+                <group
+                    android:translateX="106"
+                    android:translateY="106"
+                    android:scaleX="4.5"
+                    android:scaleY="4.5">
+                    <path
+                        android:name="letter_e_frame"
+                        android:fillColor="#00000000"
+                        android:strokeColor="#FFFFFF"
+                        android:strokeAlpha="0"
+                        android:strokeWidth="2.75"
+                        android:strokeLineCap="round"
+                        android:strokeLineJoin="round"
+                        android:pathData="M17 4h-10v16h10" />
+                    <path
+                        android:name="letter_e_bar"
+                        android:fillColor="#00000000"
+                        android:strokeColor="#FFFFFF"
+                        android:strokeAlpha="0"
+                        android:strokeWidth="2.75"
+                        android:strokeLineCap="round"
+                        android:strokeLineJoin="round"
+                        android:pathData="M7 12l8 0" />
+                </group>
+            </group>
+        </vector>
+    </aapt:attr>
+    <target android:name="circle_group">
+        <aapt:attr name="android:animation">
+            <set>
+                <objectAnimator
+                    android:propertyName="scaleX"
+                    android:startOffset="150"
+                    android:duration="300"
+                    android:valueFrom="0.5"
+                    android:valueTo="1"
+                    android:valueType="floatType"
+                    android:interpolator="@android:anim/overshoot_interpolator" />
+                <objectAnimator
+                    android:propertyName="scaleY"
+                    android:startOffset="150"
+                    android:duration="300"
+                    android:valueFrom="0.5"
+                    android:valueTo="1"
+                    android:valueType="floatType"
+                    android:interpolator="@android:anim/overshoot_interpolator" />
+            </set>
+        </aapt:attr>
+    </target>
+    <target android:name="circle">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:propertyName="fillAlpha"
+                android:startOffset="150"
+                android:duration="120"
+                android:valueFrom="0"
+                android:valueTo="1"
+                android:valueType="floatType"
+                android:interpolator="@android:interpolator/fast_out_slow_in" />
+        </aapt:attr>
+    </target>
+    <target android:name="emblem_group">
+        <aapt:attr name="android:animation">
+            <set>
+                <objectAnimator
+                    android:propertyName="scaleX"
+                    android:startOffset="180"
+                    android:duration="270"
+                    android:valueFrom="0.5"
+                    android:valueTo="1"
+                    android:valueType="floatType"
+                    android:interpolator="@android:anim/overshoot_interpolator" />
+                <objectAnimator
+                    android:propertyName="scaleY"
+                    android:startOffset="180"
+                    android:duration="270"
+                    android:valueFrom="0.5"
+                    android:valueTo="1"
+                    android:valueType="floatType"
+                    android:interpolator="@android:anim/overshoot_interpolator" />
+            </set>
+        </aapt:attr>
+    </target>
+    <target android:name="letter_e_frame">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:propertyName="strokeAlpha"
+                android:startOffset="180"
+                android:duration="120"
+                android:valueFrom="0"
+                android:valueTo="1"
+                android:valueType="floatType"
+                android:interpolator="@android:interpolator/fast_out_slow_in" />
+        </aapt:attr>
+    </target>
+    <target android:name="letter_e_bar">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:propertyName="strokeAlpha"
+                android:startOffset="180"
+                android:duration="120"
+                android:valueFrom="0"
+                android:valueTo="1"
+                android:valueType="floatType"
+                android:interpolator="@android:interpolator/fast_out_slow_in" />
+        </aapt:attr>
+    </target>
+</animated-vector>

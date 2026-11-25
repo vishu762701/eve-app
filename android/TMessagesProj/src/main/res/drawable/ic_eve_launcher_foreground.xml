@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- EVE Adaptive Icon Foreground based on Tabler Icons v3.49.0 / letter-e -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:translateX="24"
+        android:translateY="24"
+        android:scaleX="2.5"
+        android:scaleY="2.5">
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="2.75"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:pathData="M17 4h-10v16h10" />
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="2.75"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:pathData="M7 12l8 0" />
+    </group>
+</vector>

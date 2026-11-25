@@ -154,11 +154,9 @@ public class IntroActivity extends BaseFragment implements NotificationCenter.No
 
     @Override
     public View createView(Context context) {
-        logoDrawable = context.getResources().getDrawable(R.drawable.telegram_logo).mutate();
-        logoDrawable.setBounds(0, dp(8.666f), dp(115), dp(35));
-        SpannableStringBuilder ssb = new SpannableStringBuilder(LocaleController.getString(R.string.Page1Title));
-        ssb.setSpan(new ImageSpan(logoDrawable), 0, ssb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        titles[0] = ssb;
+        // EVE-PATCH: Mission 1 - Use EVE title on Intro page 1 instead of Telegram wordmark drawable.
+        logoDrawable = null;
+        titles[0] = LocaleController.getString(R.string.Page1Title);
 
 
         actionBar.setAddToContainer(false);
@@ -792,10 +790,35 @@ public class IntroActivity extends BaseFragment implements NotificationCenter.No
             loadTexture(R.drawable.intro_powerful_star, 18);
             loadTexture(R.drawable.intro_private_door, 19);
             loadTexture(R.drawable.intro_private_screw, 20);
-            loadTexture(R.drawable.intro_tg_plane, 21);
+            // EVE-PATCH: Mission 1 - Render EVE emblem & brand blue circle in Intro GL texture slots.
+            loadTexture(v -> {
+                int w = dp(82);
+                int h = dp(74);
+                Bitmap bm = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+                Canvas c = new Canvas(bm);
+                Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+                p.setColor(Color.WHITE);
+                p.setStyle(Paint.Style.STROKE);
+                p.setStrokeCap(Paint.Cap.ROUND);
+                p.setStrokeJoin(Paint.Join.ROUND);
+                p.setStrokeWidth(dp(7.5f));
+                float cx = w / 2f - dp(6);
+                float cy = h / 2f + dp(5);
+                float halfW = dp(15);
+                float halfH = dp(21);
+                android.graphics.Path path = new android.graphics.Path();
+                path.moveTo(cx + halfW, cy - halfH);
+                path.lineTo(cx - halfW, cy - halfH);
+                path.lineTo(cx - halfW, cy + halfH);
+                path.lineTo(cx + halfW, cy + halfH);
+                path.moveTo(cx - halfW, cy);
+                path.lineTo(cx + halfW * 0.7f, cy);
+                c.drawPath(path, p);
+                return bm;
+            }, 21);
             loadTexture(v -> {
                 Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-                paint.setColor(ThemeColors.TELEGRAM_COLOR); // It's logo color, it should not be colored by the theme
+                paint.setColor(0xFF1A73E8);
                 int size = dp(ICON_HEIGHT_DP);
                 Bitmap bm = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
                 Canvas c = new Canvas(bm);
@@ -964,7 +987,9 @@ public class IntroActivity extends BaseFragment implements NotificationCenter.No
 
     private void updateColors(boolean fromTheme) {
         startMessagingButtonBackground.setColors(new int[]{getThemedColor(Theme.key_featuredStickers_addButton), getThemedColor(Theme.key_featuredStickers_addButton2)});
-        logoDrawable.setColorFilter(Theme.multAlpha(getThemedColor(Theme.key_actionBarDefaultTitle), 0.9f), PorterDuff.Mode.MULTIPLY);
+        if (logoDrawable != null) {
+            logoDrawable.setColorFilter(Theme.multAlpha(getThemedColor(Theme.key_actionBarDefaultTitle), 0.9f), PorterDuff.Mode.MULTIPLY);
+        }
         fragmentView.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
         switchLanguageTextView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText4));
         startMessagingButton.setTextColor(Theme.getColor(Theme.key_featuredStickers_buttonText));
