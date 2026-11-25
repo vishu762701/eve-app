@@ -4220,7 +4220,7 @@
     <string name="Page4Title">Secure</string>
     <string name="Page5Title">Exam-Ready</string>
     <string name="Page6Title">Connected</string>
-    <string name="Page1Message">Independent government-exam preparation app.\nUses the Telegram API (not an official Telegram app).</string>
+    <string name="Page1Message">Independent **EVE** government-exam preparation app.\nUses the Telegram API (not an official Telegram app).</string>
     <string name="Page2Message">**EVE** keeps your exam study and mock test updates fast and distraction-free.</string>
     <string name="Page3Message">**EVE** organizes practice sets, exam alerts, and study resources in one place.</string>
     <string name="Page4Message">**EVE** uses Telegram API authentication to keep your student session protected.</string>
