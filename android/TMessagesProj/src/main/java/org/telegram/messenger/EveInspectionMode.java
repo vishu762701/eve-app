@@ -82,30 +82,12 @@ public final class EveInspectionMode {
     }
 
     /**
-     * Registers a clearly labeled in-memory local inspection user & UserFull
-     * in MessagesController ONLY while in DEBUG inspection mode.
-     * Never activates UserConfig or fabricates a server session.
+     * Synthetic inspection user registration is disabled on the real authentication/client path.
+     * Never activates UserConfig or registers a fake user in MessagesController.
      */
     @Nullable
     public static TLRPC.User ensureLocalInspectionUser(int account) {
-        if (!isActive(account)) {
-            return null;
-        }
-        try {
-            MessagesController mc = MessagesController.getInstance(account);
-            TLRPC.User existing = mc.getUser(LOCAL_INSPECTION_USER_ID);
-            if (existing == null) {
-                existing = buildLocalInspectionUser();
-                mc.putUser(existing, true);
-            }
-            if (mc.getUserFull(LOCAL_INSPECTION_USER_ID) == null) {
-                mc.putLocalInspectionUserFull(LOCAL_INSPECTION_USER_ID, buildLocalInspectionUserFull());
-            }
-            return existing;
-        } catch (Throwable t) {
-            FileLog.e(t);
-            return null;
-        }
+        return null;
     }
 
     /**
