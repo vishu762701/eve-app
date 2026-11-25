@@ -77,6 +77,8 @@ import org.telegram.ui.Components.PullForegroundDrawable;
 import org.telegram.ui.Components.RecyclerListView;
 import org.telegram.ui.DialogsActivity;
 import org.telegram.ui.community.CommunityUtils;
+import org.telegram.ui.eve.exams.EveExamDialogsMapper;
+import org.telegram.ui.eve.exams.EveExamModels;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -108,7 +110,8 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
             VIEW_TYPE_GRAY_SECTION = 20,
             VIEW_TYPE_FORWARD_TO_STORIES_CELL = 21,
             VIEW_TYPE_HEADER_3 = 22,
-            VIEW_TYPE_DIALOG_COMMUNITY = 23;
+            VIEW_TYPE_DIALOG_COMMUNITY = 23,
+            VIEW_TYPE_EXAM = 24;
 
     private Context mContext;
     private ArchiveHintCell archiveHintCell;
@@ -286,6 +289,14 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
         private boolean isFolder;
         TL_chatlists.TL_chatlists_chatlistUpdates chatlistUpdates;
         private int emptyType;
+        EveExamModels.ExamSummary exam;
+
+        public ItemInternal(EveExamModels.ExamSummary exam) {
+            super(VIEW_TYPE_EXAM, true);
+            this.exam = exam;
+            int hash = exam != null && exam.id != null ? exam.id.hashCode() : 0;
+            this.stableId = hash == 0 ? stableIdPointer++ : hash;
+        }
 
         public ItemInternal(TL_chatlists.TL_chatlists_chatlistUpdates updates) {
             super(VIEW_TYPE_FOLDER_UPDATE_HINT, true);
@@ -432,6 +443,9 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
             if (viewType == VIEW_TYPE_USER) {
                 return contact != null && itemInternal.contact != null && contact.user_id == itemInternal.contact.user_id;
             }
+            if (viewType == VIEW_TYPE_EXAM) {
+                return exam != null && itemInternal.exam != null && Objects.equals(exam.id, itemInternal.exam.id);
+            }
             if (viewType == VIEW_TYPE_EMPTY) {
                 return emptyType == itemInternal.emptyType;
             }
@@ -441,9 +455,27 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
             return true;
         }
 
+        boolean contentsEqual(ItemInternal itemInternal) {
+            if (viewType != itemInternal.viewType) {
+                return false;
+            }
+            if (viewType == VIEW_TYPE_EXAM) {
+                return exam != null && itemInternal.exam != null
+                        && Objects.equals(exam.id, itemInternal.exam.id)
+                        && Objects.equals(exam.examName, itemInternal.exam.examName)
+                        && Objects.equals(exam.category, itemInternal.exam.category)
+                        && exam.timeLimitMinutes == itemInternal.exam.timeLimitMinutes
+                        && exam.questionCount == itemInternal.exam.questionCount
+                        && exam.liveTestCount == itemInternal.exam.liveTestCount
+                        && Objects.equals(exam.nextTestLabel, itemInternal.exam.nextTestLabel)
+                        && exam.latestTestTimestampSec == itemInternal.exam.latestTestTimestampSec;
+            }
+            return true;
+        }
+
         @Override
         public int hashCode() {
-            return Objects.hash(dialog, chat, recentMeUrl, contact, title);
+            return Objects.hash(dialog, chat, recentMeUrl, contact, title, exam);
         }
     }
 
@@ -454,7 +486,9 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
 
         final ItemInternal item = itemInternals.get(i);
 
-        if (item.title != null) {
+        if (item.exam != null) {
+            return item.exam;
+        } else if (item.title != null) {
             return item.title;
         } else if (item.chat != null) {
             return item.chat;
@@ -576,7 +610,7 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
 
             @Override
             public boolean areContentsTheSame(int oldItemPosition, int newItemPosition) {
-                return oldItems.get(oldItemPosition).viewType == newItems.get(newItemPosition).viewType;
+                return oldItems.get(oldItemPosition).contentsEqual(newItems.get(newItemPosition));
             }
         };
         if (itemInternals.size() < 50 || !ALLOW_UPDATE_IN_BACKGROUND) {
@@ -634,6 +668,9 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
     @Override
     public boolean isEnabled(RecyclerView.ViewHolder holder) {
         int viewType = holder.getItemViewType();
+        if (viewType == VIEW_TYPE_EMPTY && parentFragment != null && parentFragment.isEveExamsMode() && parentFragment.isEmptyExamStateActionable()) {
+            return true;
+        }
         return viewType != VIEW_TYPE_FLICKER && viewType != VIEW_TYPE_EMPTY && viewType != VIEW_TYPE_DIVIDER &&
                 viewType != VIEW_TYPE_SHADOW && viewType != VIEW_TYPE_HEADER &&
                 viewType != VIEW_TYPE_LAST_EMPTY && viewType != VIEW_TYPE_NEW_CHAT_HINT && viewType != VIEW_TYPE_CONTACTS_FLICKER &&
@@ -681,6 +718,12 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
                     dialogCell2.insideCommunityListNoDialog = true;
                 }
                 view = dialogCell2;
+                break;
+            case VIEW_TYPE_EXAM:
+                DialogCell examCell = new DialogCell(parentFragment, mContext, true, false, currentAccount, null);
+                examCell.setDialogCellDelegate(this);
+                examCell.setIsTransitionSupport(isTransitionSupport);
+                view = examCell;
                 break;
             case VIEW_TYPE_FORWARD_TO_STORIES_CELL:
             case VIEW_TYPE_DIALOG:
@@ -1065,8 +1108,36 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
                 }
                 break;
             }
+            case VIEW_TYPE_EXAM: {
+                Object item = getItem(i);
+                DialogCell cell = (DialogCell) holder.itemView;
+                cell.useSeparator = false;
+                cell.fullSeparator = false;
+                cell.setCustomMessage(null);
+                if (item instanceof EveExamModels.ExamSummary) {
+                    cell.setDialog(EveExamDialogsMapper.toCustomDialog((EveExamModels.ExamSummary) item));
+                }
+                cell.checkHeight();
+                if (cell.collapsed != collapsedView) {
+                    cell.collapsed = collapsedView;
+                    cell.requestLayout();
+                }
+                break;
+            }
             case VIEW_TYPE_EMPTY: {
                 DialogsEmptyCell cell = (DialogsEmptyCell) holder.itemView;
+                if (parentFragment != null && parentFragment.isEveExamsMode()) {
+                    EveExamModels.ExamCatalogResult result = parentFragment.getCurrentExamCatalogResult();
+                    cell.setEveExamState(
+                            result.state,
+                            parentFragment.getExamSearchQuery(),
+                            result.errorMessage,
+                            () -> parentFragment.handleEmptyExamAction()
+                    );
+                    parentFragment.setContactsAlpha(0f);
+                    parentFragment.setScrollDisabled(false);
+                    break;
+                }
                 int fromDialogsEmptyType = lastDialogsEmptyType;
                 cell.setType(lastDialogsEmptyType = dialogsEmptyType(), isOnlySelect);
                 if (dialogsType != 7 && dialogsType != 8) {
@@ -1623,6 +1694,22 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
     }
 
     private void updateItemList() {
+        if (parentFragment != null && parentFragment.isEveExamsMode()) {
+            itemInternals.clear();
+            java.util.List<EveExamModels.ExamSummary> exams = parentFragment.getFilteredEveExams();
+            dialogsCount = exams.size();
+            if (exams.isEmpty()) {
+                isEmpty = true;
+                itemInternals.add(new ItemInternal(VIEW_TYPE_EMPTY, dialogsEmptyType()));
+            } else {
+                isEmpty = false;
+                for (int k = 0; k < exams.size(); k++) {
+                    itemInternals.add(new ItemInternal(exams.get(k)));
+                }
+                itemInternals.add(new ItemInternal(VIEW_TYPE_LAST_EMPTY));
+            }
+            return;
+        }
         if (communityId != 0) {
             updateItemListForCommunity();
             return;

@@ -256,6 +256,13 @@ import org.telegram.ui.community.CommunityEditActivity;
 import org.telegram.ui.community.CommunityPendingRequestsActivity;
 import org.telegram.ui.community.CommunityUtils;
 import org.telegram.ui.community.cells.CommunityRequestsCell;
+import org.telegram.ui.eve.auth.EveAuthCoordinator;
+import org.telegram.ui.eve.auth.EveAuthManager;
+import org.telegram.ui.eve.auth.EveUserProfile;
+import org.telegram.ui.eve.exams.EveExamDialogsMapper;
+import org.telegram.ui.eve.exams.EveExamModels;
+import org.telegram.ui.eve.exams.EveExamRepository;
+import org.telegram.ui.eve.exams.EveExamTestsFragment;
 import org.telegram.utils.glass.GlassEngine;
 import org.telegram.utils.glass.positions.GlassPositionsMerger;
 
@@ -272,7 +279,67 @@ import me.vkryl.android.animator.FactorAnimator;
 import me.vkryl.android.util.ClickHelper;
 import me.vkryl.core.BitwiseUtils;
 
-public class DialogsActivity extends BaseFragment implements NotificationCenter.NotificationCenterDelegate, FloatingDebugProvider, FactorAnimator.Target, MainTabsActivity.TabFragmentDelegate {
+public class DialogsActivity extends BaseFragment implements NotificationCenter.NotificationCenterDelegate, FloatingDebugProvider, FactorAnimator.Target, MainTabsActivity.TabFragmentDelegate, EveExamRepository.CatalogListener {
+    // EVE-PATCH: Mission 2 - Main Chats screen serves live EVE exams through original DialogCell UI.
+    private String examSearchQuery = "";
+
+    public boolean isEveExamsMode() {
+        return initialDialogsType == DIALOGS_TYPE_DEFAULT && folderId == 0 && communityId == 0 && !onlySelect && searchString == null;
+    }
+
+    public String getExamSearchQuery() {
+        return examSearchQuery;
+    }
+
+    public EveExamModels.ExamCatalogResult getCurrentExamCatalogResult() {
+        return EveExamRepository.getInstance().getCurrentResult();
+    }
+
+    public List<EveExamModels.ExamSummary> getFilteredEveExams() {
+        return EveExamDialogsMapper.filterExams(getCurrentExamCatalogResult().exams, examSearchQuery);
+    }
+
+    public boolean isEmptyExamStateActionable() {
+        EveExamModels.LoadState state = getCurrentExamCatalogResult().state;
+        return state == EveExamModels.LoadState.AUTH_REQUIRED || state == EveExamModels.LoadState.ERROR;
+    }
+
+    public void handleEmptyExamAction() {
+        EveExamModels.LoadState state = getCurrentExamCatalogResult().state;
+        if (state == EveExamModels.LoadState.AUTH_REQUIRED && getParentActivity() != null) {
+            EveAuthManager.getInstance().signInWithGoogle(getParentActivity(), new EveAuthManager.AuthCallback() {
+                @Override
+                public void onSuccess(EveUserProfile profile, EveAuthCoordinator.SyncOutcome syncOutcome) {
+                    EveExamRepository.getInstance().loadExams(true);
+                }
+
+                @Override
+                public void onError(String message, boolean accountDisabled) {
+                    BulletinFactory.of(DialogsActivity.this).createSimpleBulletin(R.raw.error, message).show();
+                }
+            });
+        } else {
+            EveExamRepository.getInstance().loadExams(true);
+        }
+    }
+
+    @Override
+    public void onExamCatalogUpdated(EveExamModels.ExamCatalogResult result) {
+        if (!isEveExamsMode() || viewPages == null) {
+            return;
+        }
+        for (ViewPage viewPage : viewPages) {
+            if (viewPage == null) {
+                continue;
+            }
+            if (viewPage.progressView != null) {
+                viewPage.progressView.setVisibility(View.GONE);
+            }
+            if (viewPage.dialogsAdapter != null) {
+                viewPage.dialogsAdapter.updateList(null);
+            }
+        }
+    }
     private final int ADDITIONAL_LIST_HEIGHT_DP = Build.VERSION.SDK_INT >= 31 ? 48 : 0;
 
     private static final boolean TMP_DISABLE_TOPICS_TWO_COLUMNS = false;
@@ -2767,6 +2834,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             askAboutContacts = MessagesController.getGlobalNotificationsSettings().getBoolean("askAboutContacts", true);
             SharedConfig.loadProxyList();
         }
+        if (isEveExamsMode()) {
+            EveExamRepository.getInstance().addListener(this);
+            EveExamRepository.getInstance().loadExams(false);
+        }
 
         observersGroup = getNotificationCenter().createObserversGroup(this);
 
@@ -2936,6 +3007,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
     @Override
     public void onFragmentDestroy() {
+        EveExamRepository.getInstance().removeListener(this);
         super.onFragmentDestroy();
         if (observersGroup != null) {
             observersGroup.removeAllObservers();
@@ -3188,6 +3260,25 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 if (switchItem != null) {
                     switchItem.setVisibility(View.GONE);
                 }
+                if (isEveExamsMode()) {
+                    if (!onlySelect) {
+                        if (storyHint != null) {
+                            storyHint.hide();
+                        }
+                        if (storyPremiumHint != null) {
+                            storyPremiumHint.hide();
+                        }
+                    }
+                    setScrollY(0);
+                    updateProxyButton(false, false);
+                    actionBar.setBackButtonContentDescription(getString(R.string.AccDescrGoBack));
+                    NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.needCheckSystemBarColors);
+                    glassEngine.invalidate();
+                    fragmentSearchField.setCloseButtonVisible(true);
+                    updateFloatingButtonVisibility(true);
+                    checkUi_mainTabsVisible();
+                    return;
+                }
                 createSearchViewPager();
                 if (viewPages[0] != null) {
                     if (searchString != null) {
@@ -3246,6 +3337,12 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
                 searching = false;
                 searchWas = false;
+                if (isEveExamsMode()) {
+                    examSearchQuery = "";
+                    if (viewPages != null && viewPages[0] != null && viewPages[0].dialogsAdapter != null) {
+                        viewPages[0].dialogsAdapter.updateList(null);
+                    }
+                }
                 if (viewPages[0] != null) {
                     viewPages[0].listView.setEmptyView(folderId == 0 ? viewPages[0].progressView : null);
                     showSearch(false, false, true);
@@ -3261,6 +3358,13 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             @Override
             public void onTextChanged(EditText editText) {
                 String text = editText.getText().toString();
+                if (isEveExamsMode()) {
+                    examSearchQuery = text;
+                    if (viewPages != null && viewPages[0] != null && viewPages[0].dialogsAdapter != null) {
+                        viewPages[0].dialogsAdapter.updateList(null);
+                    }
+                    return;
+                }
                 if (!text.isEmpty() || (searchViewPager != null && searchViewPager.dialogsSearchAdapter != null && searchViewPager.dialogsSearchAdapter.hasRecentSearch()) || searchFiltersWasShowed || hasStories) {
                     searchWas = true;
                     if (!searchIsShowed) {
@@ -3315,8 +3419,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             });
         }
 
-        searchItem.setSearchFieldHint(getString(R.string.Search));
-        searchItem.setContentDescription(getString(R.string.Search));
+        searchItem.setSearchFieldHint(getString(isEveExamsMode() ? R.string.SearchExams : R.string.Search));
+        searchItem.setContentDescription(getString(isEveExamsMode() ? R.string.SearchExams : R.string.Search));
         if (onlySelect) {
             actionBar.setBackButtonImage(R.drawable.ic_ab_back);
             if (initialDialogsType == DIALOGS_TYPE_BOT_SELECT_VERIFY) {
@@ -6612,6 +6716,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             blurredView.setVisibility(View.GONE);
             blurredView.setBackground(null);
         }
+        if (isEveExamsMode()) {
+            EveExamRepository.getInstance().loadExams(false);
+        }
         if (viewPages != null) {
             for (int a = 0; a < viewPages.length; a++) {
                 viewPages[a].dialogsAdapter.notifyDataSetChanged();
@@ -7272,7 +7379,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         if (searchIsShowed) {
             return;
         }
-        animatorFilterTabsVisible.setValue(canShowFilterTabsView, animated);
+        animatorFilterTabsVisible.setValue(!isEveExamsMode() && canShowFilterTabsView, animated);
     }
 
     private void updateSearchActionBarItemsColors() {
@@ -7422,6 +7529,14 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 filterId = dialogFilter == null ? 0 : dialogFilter.id;
             }
             Object object = dialogsAdapter.getItem(position);
+            if (object instanceof EveExamModels.ExamSummary) {
+                presentFragment(new EveExamTestsFragment((EveExamModels.ExamSummary) object));
+                return;
+            }
+            if (isEveExamsMode() && view instanceof DialogsEmptyCell) {
+                handleEmptyExamAction();
+                return;
+            }
             if (delegate != null && dialogsAdapter.isAllowForwardAsStories() && adapter.getItemViewType(position) == DialogsAdapter.VIEW_TYPE_FORWARD_TO_STORIES_CELL) {
                 delegate.didSelectStories(this);
                 return;
@@ -8393,7 +8508,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     }
 
     private void updateFloatingButtonVisibility(boolean animated) {
-        final boolean isVisible = !(onlySelect && initialDialogsType != 10 || folderId != 0 || communityId != 0 || inPreviewMode || (searching && !onlySelect) || floatingButtonHidden);
+        final boolean isVisible = !isEveExamsMode() && !(onlySelect && initialDialogsType != 10 || folderId != 0 || communityId != 0 || inPreviewMode || (searching && !onlySelect) || floatingButtonHidden);
 
         if (floatingButton3 != null) {
             floatingButton3.setButtonVisible(isVisible, animated);
@@ -8444,7 +8559,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     }
 
     public boolean hasHiddenArchive() {
-        return !onlySelect && initialDialogsType == DIALOGS_TYPE_DEFAULT && communityId == 0 && folderId == 0 && getMessagesController().hasHiddenArchive();
+        return !isEveExamsMode() && !onlySelect && initialDialogsType == DIALOGS_TYPE_DEFAULT && communityId == 0 && folderId == 0 && getMessagesController().hasHiddenArchive();
     }
 
     private boolean waitingForDialogsAnimationEnd(ViewPage viewPage) {
@@ -13221,7 +13336,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
     private void checkUi_searchFieldHint() {
         final boolean topics = getRightSlidingProgress() > 0.5f;
-        final String hint = getString(topics ? R.string.SearchTopics : R.string.SearchChats);
+        final String hint = getString(topics ? R.string.SearchTopics : (isEveExamsMode() ? R.string.SearchExams : R.string.SearchChats));
 
         fragmentSearchField.editText.setContentDescription(hint);
         fragmentSearchField.editText.setHint(hint);

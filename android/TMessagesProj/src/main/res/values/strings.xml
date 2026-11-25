@@ -286,6 +286,17 @@
     <string name="SearchContacts">Search Contacts</string>
     <string name="SearchPeopleByUsername">Search people by username</string>
     <string name="SearchChats">Search Chats</string>
+    <string name="SearchExams">Search exams</string>
+    <string name="EveExamsEmptyTitle">No Exams Available</string>
+    <string name="EveExamsEmptyHelp">Published government exams and mock tests from EVE will appear here.</string>
+    <string name="EveExamsLoadingTitle">Loading Exams</string>
+    <string name="EveExamsLoadingHelp">Fetching available exams from EVE Cloud...</string>
+    <string name="EveExamsAuthTitle">Connect EVE Cloud</string>
+    <string name="EveExamsAuthHelp">Tap here to sign in with Google and load available exams.</string>
+    <string name="EveExamsErrorTitle">Could Not Load Exams</string>
+    <string name="EveExamsErrorHelp">Tap here to retry fetching exams from EVE Cloud.</string>
+    <string name="EveExamsSearchEmptyTitle">No Matching Exams</string>
+    <string name="EveExamsSearchEmptyHelp">Try searching by exam name or category.</string>
     <string name="SearchTopics">Search Topics</string>
     <string name="MuteNotifications">Mute forever</string>
     <string name="MuteFor">Mute for %1$s</string>
@@ -10625,6 +10636,7 @@
     <string name="MainTabsContacts">Contacts</string>
     <string name="MainTabsCalls">Calls</string>
     <string name="MainTabsChats">Chats</string>
+    <string name="MainTabsExams">Exams</string>
     <string name="MainTabsProfile">Profile</string>
     <string name="MainTabsSettings">Settings</string>
     <string name="SwitchThemeToDay">Day Mode</string>

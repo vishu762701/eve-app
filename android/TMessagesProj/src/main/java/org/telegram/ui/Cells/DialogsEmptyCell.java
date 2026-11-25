@@ -37,6 +37,7 @@ import org.telegram.ui.Components.Easings;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.RLottieImageView;
 import org.telegram.ui.Components.TextViewSwitcher;
+import org.telegram.ui.eve.exams.EveExamModels;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -79,12 +80,20 @@ public class DialogsEmptyCell extends LinearLayout {
 
     private final int currentAccount = UserConfig.selectedAccount;
 
+    private boolean eveMode;
+    private Runnable eveActionRunnable;
+
     public DialogsEmptyCell(Context context) {
         super(context);
 
         setGravity(Gravity.CENTER);
         setOrientation(VERTICAL);
-        setOnTouchListener((v, event) -> true);
+        setOnTouchListener((v, event) -> !eveMode);
+        setOnClickListener(v -> {
+            if (eveMode && eveActionRunnable != null) {
+                eveActionRunnable.run();
+            }
+        });
 
         imageView = new RLottieImageView(context);
         imageView.setScaleType(ImageView.ScaleType.CENTER);
@@ -183,6 +192,53 @@ public class DialogsEmptyCell extends LinearLayout {
         }
         if (AndroidUtilities.isTablet() && !AndroidUtilities.isSmallTablet()) {
             help = help.replace('\n', ' ');
+        }
+        subtitleView.setText(help, false);
+    }
+
+    // EVE-PATCH: Mission 2 - Bind EVE exam discovery empty/loading/auth/error states into original DialogsEmptyCell.
+    public void setEveExamState(EveExamModels.LoadState state, String searchQuery, String errorMessage, Runnable actionRunnable) {
+        eveMode = true;
+        eveActionRunnable = actionRunnable;
+        currentType = TYPE_UNSPECIFIED;
+        String title;
+        String help;
+        int icon;
+        boolean hasQuery = searchQuery != null && !searchQuery.trim().isEmpty();
+        if (hasQuery) {
+            icon = R.raw.filter_no_chats;
+            title = LocaleController.getString(R.string.EveExamsSearchEmptyTitle);
+            help = LocaleController.getString(R.string.EveExamsSearchEmptyHelp);
+            imageView.setAutoRepeat(false);
+        } else if (state == EveExamModels.LoadState.LOADING) {
+            icon = R.raw.utyan_newborn;
+            title = LocaleController.getString(R.string.EveExamsLoadingTitle);
+            help = LocaleController.getString(R.string.EveExamsLoadingHelp);
+            imageView.setAutoRepeat(true);
+        } else if (state == EveExamModels.LoadState.AUTH_REQUIRED) {
+            icon = R.raw.utyan_newborn;
+            title = LocaleController.getString(R.string.EveExamsAuthTitle);
+            help = LocaleController.getString(R.string.EveExamsAuthHelp);
+            imageView.setAutoRepeat(false);
+        } else if (state == EveExamModels.LoadState.ERROR) {
+            icon = R.raw.filter_no_chats;
+            title = LocaleController.getString(R.string.EveExamsErrorTitle);
+            help = (errorMessage != null && !errorMessage.trim().isEmpty())
+                    ? errorMessage + "\n" + LocaleController.getString(R.string.EveExamsErrorHelp)
+                    : LocaleController.getString(R.string.EveExamsErrorHelp);
+            imageView.setAutoRepeat(false);
+        } else {
+            icon = R.raw.filter_no_chats;
+            title = LocaleController.getString(R.string.EveExamsEmptyTitle);
+            help = LocaleController.getString(R.string.EveExamsEmptyHelp);
+            imageView.setAutoRepeat(false);
+        }
+        titleView.setText(title);
+        imageView.setVisibility(VISIBLE);
+        if (prevIcon != icon) {
+            imageView.setAnimation(icon, 100, 100);
+            imageView.playAnimation();
+            prevIcon = icon;
         }
         subtitleView.setText(help, false);
     }

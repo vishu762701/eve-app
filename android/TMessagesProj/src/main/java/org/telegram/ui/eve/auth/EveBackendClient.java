@@ -1,5 +1,6 @@
 package org.telegram.ui.eve.auth;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -8,9 +9,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.io.UnsupportedEncodingException;
 import java.net.HttpURLConnection;
 import java.net.SocketTimeoutException;
 import java.net.URL;
+import java.net.URLEncoder;
 import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 
@@ -237,6 +240,28 @@ public final class EveBackendClient {
         );
     }
 
+    public JSONArray fetchExamsJson(String firebaseIdToken) throws BackendException {
+        requireToken(firebaseIdToken, "/api/exams");
+        JSONObject root = executeRootJsonRequest("GET", "/api/exams", firebaseIdToken, null);
+        JSONArray arr = root.optJSONArray("data");
+        return arr != null ? arr : new JSONArray();
+    }
+
+    public JSONArray fetchGeneratedTestsJson(String firebaseIdToken, String examId) throws BackendException {
+        String path = "/api/generated-tests";
+        if (examId != null && !examId.trim().isEmpty()) {
+            try {
+                path = "/api/generated-tests?examId=" + URLEncoder.encode(examId.trim(), "UTF-8");
+            } catch (UnsupportedEncodingException ignored) {
+                path = "/api/generated-tests?examId=" + examId.trim();
+            }
+        }
+        requireToken(firebaseIdToken, path);
+        JSONObject root = executeRootJsonRequest("GET", path, firebaseIdToken, null);
+        JSONArray arr = root.optJSONArray("data");
+        return arr != null ? arr : new JSONArray();
+    }
+
     private static String optCleanString(JSONObject obj, String key, String fallback) {
         if (obj == null || obj.isNull(key)) {
             return fallback;
@@ -253,6 +278,12 @@ public final class EveBackendClient {
     }
 
     private JSONObject executeJsonRequest(String method, String path, String token, String jsonBody) throws BackendException {
+        JSONObject parsed = executeRootJsonRequest(method, path, token, jsonBody);
+        JSONObject data = parsed.optJSONObject("data");
+        return data != null ? data : new JSONObject();
+    }
+
+    private JSONObject executeRootJsonRequest(String method, String path, String token, String jsonBody) throws BackendException {
         HttpResponse response;
         try {
             response = transport.execute(method, baseUrl + path, token, jsonBody);
@@ -315,8 +346,7 @@ public final class EveBackendClient {
             throw new BackendException(response.statusCode, path, serverCode.isEmpty() ? "INVALID_PAYLOAD" : serverCode,
                     ErrorKind.INVALID_RESPONSE, err);
         }
-        JSONObject data = parsed.optJSONObject("data");
-        return data != null ? data : new JSONObject();
+        return parsed;
     }
 
     public static final class UrlConnectionTransport implements HttpTransport {
