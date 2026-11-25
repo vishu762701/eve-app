@@ -17,6 +17,8 @@ import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.AuthTokensHelper;
 import org.telegram.messenger.CallReceiver;
 
+import android.app.Application;
+
 import androidx.test.core.app.ApplicationProvider;
 
 import java.io.IOException;
@@ -35,7 +37,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * Offline Retry, Navigation Policy, and Telegram Auth Removal).
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = 35, manifest = Config.NONE)
+@Config(sdk = 35, manifest = Config.NONE, application = Application.class)
 public class EveAuthSuiteTest {
 
     // -------------------------------------------------------------------------

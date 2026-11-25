@@ -5,6 +5,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import android.app.Application;
 import android.os.Handler;
 import android.os.Looper;
 
@@ -29,7 +30,7 @@ import org.telegram.ui.LaunchActivity;
  *  5. Mission 10 unauthorized dashboard package remains absent while official login classes load.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = 35, manifest = Config.NONE)
+@Config(sdk = 35, manifest = Config.NONE, application = Application.class)
 public class EveInspectionModeTest {
 
     @Before

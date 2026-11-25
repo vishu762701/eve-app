@@ -6,6 +6,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import android.app.Application;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Bundle;
@@ -38,7 +39,7 @@ import java.lang.reflect.Field;
  * inspection-mode isolation, network gate state, and preserved EVE Firebase/backend classes.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = 35, manifest = Config.NONE)
+@Config(sdk = 35, manifest = Config.NONE, application = Application.class)
 public class OfficialTelegramLoginTest {
 
     private Context appContext;
