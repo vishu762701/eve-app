@@ -1,0 +1,48 @@
+[submodule "android/TMessagesProj/jni/tlottie"]
+	path = android/TMessagesProj/jni/tlottie
+	url = https://github.com/dkaraush/tlottie.git
+[submodule "android/TMessagesProj/jni/third_party/libvpx"]
+	path = android/TMessagesProj/jni/third_party/libvpx
+	url = https://github.com/webmproject/libvpx.git
+[submodule "android/TMessagesProj/jni/third_party/dav1d"]
+	path = android/TMessagesProj/jni/third_party/dav1d
+	url = https://github.com/videolan/dav1d.git
+[submodule "android/TMessagesProj/jni/third_party/ffmpeg"]
+	path = android/TMessagesProj/jni/third_party/ffmpeg
+	url = https://github.com/FFmpeg/FFmpeg.git
+[submodule "android/TMessagesProj/lib/jlatexmath"]
+	path = android/TMessagesProj/lib/jlatexmath
+	url = https://github.com/dkaraush/jlatexmath-android.git
+[submodule "android/TMessagesProj/jni/third_party/xiph/ogg"]
+	path = android/TMessagesProj/jni/third_party/xiph/ogg
+	url = https://github.com/xiph/ogg.git
+[submodule "android/TMessagesProj/jni/third_party/xiph/opusfile"]
+	path = android/TMessagesProj/jni/third_party/xiph/opusfile
+	url = https://github.com/xiph/opusfile.git
+[submodule "android/TMessagesProj/jni/third_party/xiph/opus"]
+	path = android/TMessagesProj/jni/third_party/xiph/opus
+	url = https://github.com/xiph/opus.git
+[submodule "android/TMessagesProj/jni/third_party/libyuv"]
+	path = android/TMessagesProj/jni/third_party/libyuv
+	url = https://chromium.googlesource.com/libyuv/libyuv
+[submodule "android/TMessagesProj/jni/third_party/boringssl"]
+	path = android/TMessagesProj/jni/third_party/boringssl
+	url = https://github.com/google/boringssl.git
+[submodule "android/TMessagesProj_Modules/media"]
+	path = android/TMessagesProj_Modules/media
+	url = https://github.com/Arseny271/media.git
+[submodule "android/TMessagesProj/jni/third_party/wamr"]
+	path = android/TMessagesProj/jni/third_party/wamr
+	url = https://github.com/wasm-micro-runtime/wasm-micro-runtime.git
+[submodule "android/TMessagesProj/jni/third_party/boost-regex"]
+	path = android/TMessagesProj/jni/third_party/boost-regex
+	url = https://github.com/boostorg/regex.git
+[submodule "android/TMessagesProj/jni/third_party/libprisma"]
+	path = android/TMessagesProj/jni/third_party/libprisma
+	url = https://github.com/TelegramMessenger/libprisma.git
+[submodule "android/TMessagesProj/jni/twidget/twidget"]
+	path = android/TMessagesProj/jni/twidget/twidget
+	url = https://github.com/TelegramMessenger/twidget.git
+[submodule "android/TMessagesProj/jni/twidget/widget-sandbox"]
+	path = android/TMessagesProj/jni/twidget/widget-sandbox
+	url = https://github.com/TelegramMessenger/widget-sandbox.git
