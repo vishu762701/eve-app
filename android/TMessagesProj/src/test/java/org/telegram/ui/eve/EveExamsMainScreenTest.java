@@ -130,9 +130,14 @@ public class EveExamsMainScreenTest {
         assertFalse(appContext.getString(auth.helpRes).toLowerCase().contains("telegram"));
 
         EveExamDialogsMapper.EmptyStateSpec searchEmpty = EveExamDialogsMapper.resolveEmptyState(
-                EveExamModels.LoadState.READY, "ssc", "");
+                EveExamModels.LoadState.LOADED, "ssc", "");
         assertEquals(R.string.EveExamsSearchEmptyTitle, searchEmpty.titleRes);
         assertFalse(appContext.getString(searchEmpty.helpRes).toLowerCase().contains("telegram"));
+
+        EveExamDialogsMapper.EmptyStateSpec empty = EveExamDialogsMapper.resolveEmptyState(
+                EveExamModels.LoadState.EMPTY, "", "");
+        assertEquals(R.string.EveExamsEmptyTitle, empty.titleRes);
+        assertFalse(appContext.getString(empty.helpRes).toLowerCase().contains("telegram"));
 
         EveExamDialogsMapper.EmptyStateSpec error = EveExamDialogsMapper.resolveEmptyState(
                 EveExamModels.LoadState.ERROR, "", "HTTP 503");
