@@ -20,7 +20,6 @@ import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 import org.telegram.messenger.ApplicationLoader;
-import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.R;
 import org.telegram.ui.LauncherIconController;
 
@@ -56,7 +55,7 @@ public class EveBrandIdentityTest {
         assertTrue(disclosure.contains("Telegram API"));
         assertTrue(disclosure.toLowerCase().contains("not an official telegram"));
 
-        String version = LocaleController.formatString(R.string.TelegramVersion, "v1.0 (1)");
+        String version = appContext.getString(R.string.TelegramVersion, "v1.0 (1)");
         assertTrue(version.startsWith("EVE for Android"));
         assertFalse(version.contains("Telegram for Android"));
     }
