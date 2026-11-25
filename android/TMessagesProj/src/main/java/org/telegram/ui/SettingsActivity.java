@@ -809,7 +809,10 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
         items.add(UItem.asShadow(null));
 
         if (org.telegram.ui.eve.admin.EveAdminConfig.isAdminAvailable()) {
-            items.add(SettingCell.Factory.of(28, 0xFF3D8BEB, 0xFF2A6FD9, R.drawable.settings_devices, "EVE Admin Control Center", "DEBUG local inspection & diagnostics"));
+            String adminSubtitle = org.telegram.ui.eve.admin.EveAdminConfig.isServerAdminSession()
+                    ? "Dashboard, Exams, Students & Pricing"
+                    : "Admin Portal & Diagnostics";
+            items.add(SettingCell.Factory.of(28, 0xFF3D8BEB, 0xFF2A6FD9, R.drawable.settings_devices, "EVE Admin Control Center", adminSubtitle));
             items.add(UItem.asShadow(null));
         }
 

@@ -262,6 +262,26 @@ public final class EveBackendClient {
         return arr != null ? arr : new JSONArray();
     }
 
+    public JSONObject getJsonRoot(String path, String firebaseIdToken) throws BackendException {
+        requireToken(firebaseIdToken, path);
+        return executeRootJsonRequest("GET", path, firebaseIdToken, null);
+    }
+
+    public JSONObject postJsonRoot(String path, String firebaseIdToken, JSONObject body) throws BackendException {
+        requireToken(firebaseIdToken, path);
+        return executeRootJsonRequest("POST", path, firebaseIdToken, body != null ? body.toString() : "{}");
+    }
+
+    public JSONObject putJsonRoot(String path, String firebaseIdToken, JSONObject body) throws BackendException {
+        requireToken(firebaseIdToken, path);
+        return executeRootJsonRequest("PUT", path, firebaseIdToken, body != null ? body.toString() : "{}");
+    }
+
+    public JSONObject deleteJsonRoot(String path, String firebaseIdToken) throws BackendException {
+        requireToken(firebaseIdToken, path);
+        return executeRootJsonRequest("DELETE", path, firebaseIdToken, null);
+    }
+
     private static String optCleanString(JSONObject obj, String key, String fallback) {
         if (obj == null || obj.isNull(key)) {
             return fallback;

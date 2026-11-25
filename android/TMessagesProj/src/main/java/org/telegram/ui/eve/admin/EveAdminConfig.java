@@ -6,14 +6,17 @@ import android.content.SharedPreferences;
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.EveInspectionMode;
 import org.telegram.messenger.FileLog;
+import org.telegram.ui.eve.auth.EveAuthManager;
+import org.telegram.ui.eve.auth.EveUserProfile;
 
 import java.io.File;
 
 /**
- * DEBUG-only local inspection administrator configuration.
+ * EVE Admin Control Center availability and client-side visibility helpers.
  *
- * Strictly gated by EveInspectionMode.isEnabledForCurrentBuild() (BuildConfig.DEBUG_VERSION).
- * In release builds, all toggles return defaults and all mutations are no-ops.
+ * Server authority lives exclusively in the Cloudflare Worker and D1 (`admins` + `admin_rights`).
+ * In release builds, only verified authenticated administrators see the Admin Control Center;
+ * DEBUG inspection builds additionally allow local diagnostics without granting any backend privilege.
  */
 public final class EveAdminConfig {
 
@@ -44,8 +47,33 @@ public final class EveAdminConfig {
     private EveAdminConfig() {
     }
 
+    public static boolean isServerAdminProfile(EveUserProfile profile) {
+        return profile != null
+                && profile.isAdmin
+                && profile.emailVerified
+                && !profile.email.isEmpty();
+    }
+
+    public static boolean isServerAdminSession() {
+        try {
+            return isServerAdminProfile(EveAuthManager.getInstance().getCachedProfile());
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    public static boolean hasRight(EveAdminModels.AdminProfile profile, String right) {
+        if (profile == null) {
+            return false;
+        }
+        if (profile.isOwner) {
+            return true;
+        }
+        return right != null && profile.rights.contains(right);
+    }
+
     public static boolean isAdminAvailable() {
-        return EveInspectionMode.isEnabledForCurrentBuild();
+        return isServerAdminSession() || EveInspectionMode.isEnabledForCurrentBuild();
     }
 
     private static SharedPreferences prefs() {

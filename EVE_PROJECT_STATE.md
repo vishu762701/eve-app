@@ -98,12 +98,18 @@ Statuses describe the new delivery effort, not the absence of existing code.
   - Edited `LocaleController.java`, `LanguageSelectActivity.java`, plus added `EveEnglishOnlyLanguageTest.java`.
   - Pending: owner runtime phone screenshot/video acceptance on Language screen & English Settings label.
 
-- **2026-11-25 — Mission 6: Settings Cleanup & EVE Premium (implemented)**
-  - Edited `android/TMessagesProj/src/main/res/values/strings.xml`: added `EvePremium`, `EvePremiumSubtitle`, and `EvePremiumFooterInfo`.
-  - Edited `android/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java`: completely removed `Telegram Features` (entry `23` and `TelegramFeaturesUrl` browser navigation via `isEveSettingsItemEnabled(...)`), renamed item `11` to `R.string.EvePremium` while preserving `R.drawable.settings_premium` star icon, and left all other Settings sections unchanged.
-  - Edited `android/TMessagesProj/src/main/java/org/telegram/ui/PremiumPreviewFragment.java`: removed Telegram Premium promotional list/subtitle/footer/subscription tiers/subscribe button via `isEvePremiumTransformEnabled()`, while preserving the original `GLIconTextureView` (`Icon3D.TYPE_STAR`), `StarParticlesView`, and gradient animations intact.
-  - Edited `android/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java`: renamed `premiumRow`/`SearchResult(800)` to `R.string.EvePremium` and removed Telegram Premium marketing feature search entries `801..813`.
-  - Added `android/TMessagesProj/src/test/java/org/telegram/ui/eve/EveSettingsAndPremiumTest.java`.
+- **2026-11-25 — Mission 6: Settings Cleanup & EVE Premium (`1ce565f32bc8cbff602b4b3edaffd857667d35fa`, CI GREEN)**
+  - CI verification: [`1ce565f32bc8cbff602b4b3edaffd857667d35fa`](https://github.com/vishu762701/eve-app/actions/runs/45639900836) (`Build Eve APK` run `45639900836` succeeded across all 4 jobs on failed-job re-run after transient `MavenArtifactFetcher` IOException; `Eve-debug-apk` artifact `15037010963`, `72,108,293` bytes).
+  - Edited `SettingsActivity.java`, `PremiumPreviewFragment.java`, `ProfileActivity.java`, `res/values/strings.xml`, plus added `EveSettingsAndPremiumTest.java`.
+  - Pending: owner runtime phone screenshot/video acceptance on Settings & EVE Premium showcase star animation.
+
+- **2026-11-25 — Mission 7: EVE Admin Control Center (implemented)**
+  - Audited legacy `app/` admin/exam/payment workflows, Cloudflare Worker routes (`backend/src/routes/{admin,exams,generatedTests,questions,premium,reports}.ts`), D1 schema (`0001..0031`), `backend/src/auth.ts` RBAC, and `firestore.rules` (`isAdmin() = false`).
+  - Edited `EveBackendClient.java`: added authenticated `getJsonRoot`, `postJsonRoot`, `putJsonRoot`, `deleteJsonRoot` JSON transport methods.
+  - Edited `EveAdminConfig.java`: enforced verified D1 admin session detection (`isServerAdminProfile`, `isServerAdminSession`, `hasRight`), preserving `EveInspectionMode` fallback strictly for DEBUG local diagnostics with zero backend privileges.
+  - Added `EveAdminModels.java`, `EveAdminRepository.java`, and `EveAdminDialogs.java` wiring Overview metrics (`/api/admin/me`, `/api/admin/stats/users`, `/api/exams`, `/api/generated-tests`, `/api/admin/analytics/exams`, `/api/admin/premium/transactions`, `/api/admin/audit-log`), Exam CRUD + AI Test Generation (`/api/generated-tests/generate-now` + test publish/pause/delete), Question Bank CRUD (`/api/questions/*`), Student search/attempts/ban/Premium grant+revoke (`/api/admin/users/*`, `/api/admin/premium/users/*`), Pricing + UPI/QR Merchant VPA management (`/api/admin/premium/config`), and Admin RBAC management (`/api/admin/admins/*`).
+  - Updated `EveAdminControlCenterActivity.java` and `SettingsActivity.java` (`EVE Admin Control Center` dynamic subtitle), keeping DEBUG local diagnostic probes intact inside DEBUG builds.
+  - Added `android/TMessagesProj/src/test/java/org/telegram/ui/eve/EveAdminControlCenterTest.java`.
 
 ## F. Active bugs
 - PROFILE-001, IN PROGRESS: owner reports a crash on tapping Profile. Two authenticated Robolectric tests reproduce `ProfileActivity.onCreate:187 -> ProfileTelegramViewTree.<init>:153 -> createCellValue:389`. `valueViews.add(this)` precedes the field initializer at line 241. This is the proven JVM cause; the exact phone event is not correlated. No main fix commit. The prepared change moves only the field, updates its EVE `NEW` hash and adds a four-row theme registration test. Post-fix Android and phone checks outstanding; not T7.
@@ -111,7 +117,7 @@ Statuses describe the new delivery effort, not the absence of existing code.
 - SMOKE-001, IN PROGRESS: the existing smoke test can fall back to one screen and accept a generic nonempty host. The prepared S2 change requires a packaged six-host inventory, attached fragment classes, live layout and fresh evidence.
 
 ## G. Current work position
-**NEXT ACTION:** Verify Mission 6 CI green run on `main`, then execute Mission 7 (audit legacy `app/` & backend/D1/Firebase rules and evolve `EveAdminControlCenterActivity` + Worker routes into the real EVE Admin Control Center).
+**NEXT ACTION:** Verify Mission 7 CI green run on `main`, then execute Mission 8 (Integration Architecture & Final Regression Verification across auth, exams, attempts/leaderboard boundaries, and build/integrity checks).
 
 Historical legacy-`app/` notes (pre-handover):
 - Offline fixture `ef2666ce97a833bf21deb4e0f954e1423cd606e3` and `a2ee6ef5d0e05314705a28c140586e64e8ce8be4` in `app/` remain preserved untouched in `app/`.
