@@ -88,7 +88,9 @@ public class LanguageSelectActivity extends BaseFragment implements Notification
     @Override
     public boolean onFragmentCreate() {
         fillLanguages();
-        LocaleController.getInstance().loadRemoteLanguages(currentAccount, false);
+        if (!LocaleController.isEnglishOnlyMode()) {
+            LocaleController.getInstance().loadRemoteLanguages(currentAccount, false);
+        }
         NotificationCenter.getGlobalInstance().addWeakObserver(this, NotificationCenter.suggestedLangpack);
 
 //        RemoteModelManager.getInstance().getDownloadedModels(TranslateRemoteModel.class)
@@ -182,6 +184,9 @@ public class LanguageSelectActivity extends BaseFragment implements Notification
             }
         });
         searchItem.setSearchFieldHint(LocaleController.getString(R.string.Search));
+        if (LocaleController.isEnglishOnlyMode()) {
+            searchItem.setVisibility(View.GONE);
+        }
 
         listAdapter = new ListAdapter(context, false);
         searchListViewAdapter = new ListAdapter(context, true);
@@ -298,7 +303,7 @@ public class LanguageSelectActivity extends BaseFragment implements Notification
                     presentFragment(new RestrictedLanguagesSelectActivity());
                     return;
                 }
-                if (getParentActivity() == null || parentLayout == null || !(view instanceof TextRadioCell)) {
+                if (LocaleController.isEnglishOnlyMode() || getParentActivity() == null || parentLayout == null || !(view instanceof TextRadioCell)) {
                     return;
                 }
                 boolean search = listView.getAdapter() == searchListViewAdapter;
@@ -364,7 +369,7 @@ public class LanguageSelectActivity extends BaseFragment implements Notification
 
         listView.setOnItemLongClickListener((view, position) -> {
             try {
-                if (getParentActivity() == null || parentLayout == null || !(view instanceof TextRadioCell)) {
+                if (LocaleController.isEnglishOnlyMode() || getParentActivity() == null || parentLayout == null || !(view instanceof TextRadioCell)) {
                     return false;
                 }
                 boolean search = listView.getAdapter() == searchListViewAdapter;
@@ -443,7 +448,36 @@ public class LanguageSelectActivity extends BaseFragment implements Notification
         }
     }
 
+    // EVE-PATCH: Mission 5 - Filter selectable app languages down to permanent English only.
+    public static ArrayList<LocaleController.LocaleInfo> filterSelectableLanguages(java.util.List<LocaleController.LocaleInfo> source) {
+        ArrayList<LocaleController.LocaleInfo> result = new ArrayList<>();
+        if (source != null) {
+            for (int i = 0; i < source.size(); i++) {
+                LocaleController.LocaleInfo info = source.get(i);
+                if (LocaleController.isAllowedApplicationLocale(info)) {
+                    result.add(info);
+                    break;
+                }
+            }
+        }
+        if (result.isEmpty()) {
+            LocaleController.LocaleInfo english = new LocaleController.LocaleInfo();
+            english.name = LocaleController.EVE_PERMANENT_LANGUAGE_NAME;
+            english.nameEnglish = LocaleController.EVE_PERMANENT_LANGUAGE_NAME;
+            english.shortName = english.pluralLangCode = LocaleController.EVE_PERMANENT_LANGUAGE_CODE;
+            english.pathToFile = null;
+            english.builtIn = true;
+            result.add(english);
+        }
+        return result;
+    }
+
     private void fillLanguages() {
+        if (LocaleController.isEnglishOnlyMode()) {
+            sortedLanguages = filterSelectableLanguages(LocaleController.getInstance().languages);
+            unofficialLanguages = new ArrayList<>();
+            return;
+        }
         final LocaleController.LocaleInfo currentLocale = LocaleController.getInstance().getCurrentLocaleInfo();
         Comparator<LocaleController.LocaleInfo> comparator = (o, o2) -> {
             if (o == currentLocale) {
@@ -605,6 +639,9 @@ public class LanguageSelectActivity extends BaseFragment implements Notification
         @Override
         public boolean isEnabled(RecyclerView.ViewHolder holder) {
             final int viewType = holder.getItemViewType();
+            if (viewType == VIEW_TYPE_LANGUAGE && LocaleController.isEnglishOnlyMode()) {
+                return false;
+            }
             return viewType == VIEW_TYPE_LANGUAGE || viewType == VIEW_TYPE_SETTINGS || viewType == VIEW_TYPE_SETTINGS_2 || viewType == VIEW_TYPE_SWITCH;
         }
 

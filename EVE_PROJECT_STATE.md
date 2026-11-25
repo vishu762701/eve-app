@@ -88,11 +88,15 @@ Statuses describe the new delivery effort, not the absence of existing code.
   - Added `android/TMessagesProj/src/test/java/org/telegram/ui/eve/EveAccountCleanupTest.java`.
   - Pending: owner runtime phone screenshot/video acceptance on cleaned Account screen.
 
-- **2026-11-25 — Mission 4: Chat Settings -> Exam Settings (implemented)**
-  - Edited `android/TMessagesProj/src/main/res/values/strings.xml`: renamed `ChatSettings` and `SettingsChat` to `"Exam Settings"`.
-  - Edited `android/TMessagesProj/src/main/java/org/telegram/ui/ThemeActivity.java`: gated off `appIconHeaderRow`/`appIconSelectorRow`/`appIconShadowRow` and `swipeGestureHeaderRow`/`swipeGestureRow`/`swipeGestureInfoRow` via `isEveExamSettingSectionEnabled(...)`, preserving Message corners, Chat list view, Message text size, Compact Mode, Change Chat Wallpaper, Change Name Color, Color theme, and Auto-Night Mode.
-  - Edited `android/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java`: removed stale `ChatListSwipeGesture` and `AppIcon` search index entries from `SearchResult`.
-  - Added `android/TMessagesProj/src/test/java/org/telegram/ui/eve/EveExamSettingsTest.java`.
+- **2026-11-25 — Mission 4: Chat Settings -> Exam Settings (`85e4baa1d97205a61611383e0597b2a023e67ad1`, CI GREEN)**
+  - CI verification: [`85e4baa1d97205a61611383e0597b2a023e67ad1`](https://github.com/vishu762701/eve-app/actions/runs/45631733282) (`Build Eve APK` run `45631733282` succeeded across all 4 jobs; `Eve-debug-apk` artifact `15032148596`, `72,109,892` bytes).
+  - Edited `android/TMessagesProj/src/main/res/values/strings.xml`, `ThemeActivity.java`, and `ProfileActivity.java`, plus added `EveExamSettingsTest.java`.
+  - Pending: owner runtime phone screenshot/video acceptance on Exam Settings.
+
+- **2026-11-25 — Mission 5: English-Only Language (implemented)**
+  - Edited `android/TMessagesProj/src/main/java/org/telegram/messenger/LocaleController.java`: locked permanent default application language to `"en"` / `"English"` (`isEnglishOnlyMode()`, `isAllowedApplicationLocale()`, `applyLanguage` safeguard, `getCurrentLanguageName()` returning `"English"`) while preserving `systemDefaultLocale` and Android configuration/system locale handling and keeping all upstream localization resource files intact.
+  - Edited `android/TMessagesProj/src/main/java/org/telegram/ui/LanguageSelectActivity.java`: restricted `fillLanguages()` via `filterSelectableLanguages(...)` to `"English"` only, hid the language search/switching controls and remote language loading, and preserved Translation controls (`Show Translate Button`, `Translate Entire Chats`, `Do Not Translate`).
+  - Added `android/TMessagesProj/src/test/java/org/telegram/ui/eve/EveEnglishOnlyLanguageTest.java`.
 
 ## F. Active bugs
 - PROFILE-001, IN PROGRESS: owner reports a crash on tapping Profile. Two authenticated Robolectric tests reproduce `ProfileActivity.onCreate:187 -> ProfileTelegramViewTree.<init>:153 -> createCellValue:389`. `valueViews.add(this)` precedes the field initializer at line 241. This is the proven JVM cause; the exact phone event is not correlated. No main fix commit. The prepared change moves only the field, updates its EVE `NEW` hash and adds a four-row theme registration test. Post-fix Android and phone checks outstanding; not T7.
@@ -100,7 +104,7 @@ Statuses describe the new delivery effort, not the absence of existing code.
 - SMOKE-001, IN PROGRESS: the existing smoke test can fall back to one screen and accept a generic nonempty host. The prepared S2 change requires a packaged six-host inventory, attached fragment classes, live layout and fresh evidence.
 
 ## G. Current work position
-**NEXT ACTION:** Verify Mission 4 CI green run on `main`, then execute Mission 5 (English-only language in `LanguageSelectActivity.java` and `LocaleController.java`).
+**NEXT ACTION:** Verify Mission 5 CI green run on `main`, then execute Mission 6 (Settings cleanup and EVE Premium in `SettingsActivity.java` and `PremiumPreviewFragment.java`).
 
 Historical legacy-`app/` notes (pre-handover):
 - Offline fixture `ef2666ce97a833bf21deb4e0f954e1423cd606e3` and `a2ee6ef5d0e05314705a28c140586e64e8ce8be4` in `app/` remain preserved untouched in `app/`.

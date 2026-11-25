@@ -732,22 +732,27 @@ public class LocaleController {
         boolean override = false;
 
         try {
-            SharedPreferences preferences = MessagesController.getGlobalMainSettings();
-            String lang = preferences.getString("language", null);
-            if (lang != null) {
-                currentInfo = getLanguageFromDict(lang);
-                if (currentInfo != null) {
-                    override = true;
+            if (isEnglishOnlyMode()) {
+                currentInfo = getLanguageFromDict(EVE_PERMANENT_LANGUAGE_CODE);
+                override = true;
+            } else {
+                SharedPreferences preferences = MessagesController.getGlobalMainSettings();
+                String lang = preferences.getString("language", null);
+                if (lang != null) {
+                    currentInfo = getLanguageFromDict(lang);
+                    if (currentInfo != null) {
+                        override = true;
+                    }
                 }
-            }
 
-            if (currentInfo == null && systemDefaultLocale.getLanguage() != null) {
-                currentInfo = getLanguageFromDict(systemDefaultLocale.getLanguage());
-            }
-            if (currentInfo == null) {
-                currentInfo = getLanguageFromDict(getLocaleString(systemDefaultLocale));
+                if (currentInfo == null && systemDefaultLocale.getLanguage() != null) {
+                    currentInfo = getLanguageFromDict(systemDefaultLocale.getLanguage());
+                }
                 if (currentInfo == null) {
-                    currentInfo = getLanguageFromDict("en");
+                    currentInfo = getLanguageFromDict(getLocaleString(systemDefaultLocale));
+                    if (currentInfo == null) {
+                        currentInfo = getLanguageFromDict("en");
+                    }
                 }
             }
 
@@ -1308,6 +1313,20 @@ public class LocaleController {
         }
     }
 
+    public static final String EVE_PERMANENT_LANGUAGE_CODE = "en";
+    public static final String EVE_PERMANENT_LANGUAGE_NAME = "English";
+
+    // EVE-PATCH: Mission 5 - English is the permanent application language default.
+    public static boolean isEnglishOnlyMode() {
+        return true;
+    }
+
+    public static boolean isAllowedApplicationLocale(LocaleInfo localeInfo) {
+        return localeInfo != null
+                && EVE_PERMANENT_LANGUAGE_CODE.equalsIgnoreCase(localeInfo.shortName)
+                && localeInfo.pathToFile == null;
+    }
+
     public int applyLanguage(LocaleInfo localeInfo, boolean override, boolean init, final int currentAccount) {
         return applyLanguage(localeInfo, override, init, false, false, currentAccount, null);
     }
@@ -1315,6 +1334,12 @@ public class LocaleController {
     public int applyLanguage(final LocaleInfo localeInfo, boolean override, boolean init, boolean fromFile, boolean force, final int currentAccount, Runnable onDone) {
         if (localeInfo == null) {
             return 0;
+        }
+        if (isEnglishOnlyMode() && !isAllowedApplicationLocale(localeInfo)) {
+            LocaleInfo english = getLanguageFromDict(EVE_PERMANENT_LANGUAGE_CODE);
+            if (isAllowedApplicationLocale(english)) {
+                return applyLanguage(english, override, init, false, false, currentAccount, onDone);
+            }
         }
         int requestId = 0;
         boolean hasBase = localeInfo.hasBaseLang();
@@ -1460,6 +1485,9 @@ public class LocaleController {
     }
 
     public static String getCurrentLanguageName() {
+        if (isEnglishOnlyMode()) {
+            return EVE_PERMANENT_LANGUAGE_NAME;
+        }
         LocaleInfo localeInfo = getInstance().currentLocaleInfo;
         return localeInfo == null || TextUtils.isEmpty(localeInfo.name) ? getString("LanguageName", R.string.LanguageName) : localeInfo.name;
     }
