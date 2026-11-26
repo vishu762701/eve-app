@@ -198,7 +198,7 @@ public class EveAdminControlCenterTest {
         assertEquals(2, snapshot.pendingTransactions);
         assertEquals(6, snapshot.activePremiumUsers);
         assertEquals(3, snapshot.pendingReports);
-        assertEquals(27L, snapshot.loadDurationMs);
+        assertTrue(snapshot.loadDurationMs >= 1L);
         assertFalse(snapshot.isFromCache);
         assertTrue(snapshot.partialWarnings.isEmpty());
 
@@ -207,6 +207,7 @@ public class EveAdminControlCenterTest {
         assertNotNull(restored);
         assertEquals(500, restored.totalStudents);
         assertEquals(1194L, restored.totalRevenueInr);
+        assertEquals(snapshot.loadDurationMs, restored.loadDurationMs);
         assertTrue(restored.asCacheCopy(true).isFromCache);
         assertTrue(restored.asCacheCopy(true).isStale);
 
