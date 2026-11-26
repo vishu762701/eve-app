@@ -6,6 +6,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
+import android.graphics.Color;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
 
@@ -145,7 +146,8 @@ public class EveStudentExamExecutionTest {
         RadioGroup group = EveTestResultFragment.buildReportReasonGroup(
                 ApplicationProvider.getApplicationContext(),
                 EveTestResultFragment.REPORT_REASONS,
-                pickedIdx
+                pickedIdx,
+                Color.BLACK
         );
         assertEquals(EveTestResultFragment.REPORT_REASONS.length, group.getChildCount());
         assertEquals(0, pickedIdx[0]);

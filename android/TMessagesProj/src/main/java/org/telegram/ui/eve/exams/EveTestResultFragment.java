@@ -343,7 +343,7 @@ public class EveTestResultFragment extends BaseFragment {
             "Other"
     };
 
-    public static RadioGroup buildReportReasonGroup(Context context, String[] reasons, int[] pickedIdx) {
+    public static RadioGroup buildReportReasonGroup(Context context, String[] reasons, int[] pickedIdx, int textColor) {
         RadioGroup reasonGroup = new RadioGroup(context);
         reasonGroup.setOrientation(RadioGroup.VERTICAL);
         pickedIdx[0] = 0;
@@ -351,7 +351,7 @@ public class EveTestResultFragment extends BaseFragment {
             RadioButton rb = new RadioButton(context);
             rb.setId(i + 1);
             rb.setText(reasons[i]);
-            rb.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
+            rb.setTextColor(textColor);
             if (i == 0) {
                 rb.setChecked(true);
             }
@@ -376,7 +376,12 @@ public class EveTestResultFragment extends BaseFragment {
         int pad = AndroidUtilities.dp(16);
         box.setPadding(pad, AndroidUtilities.dp(8), pad, 0);
 
-        RadioGroup reasonGroup = buildReportReasonGroup(activity, reasons, pickedIdx);
+        RadioGroup reasonGroup = buildReportReasonGroup(
+                activity,
+                reasons,
+                pickedIdx,
+                Theme.getColor(Theme.key_windowBackgroundWhiteBlackText)
+        );
         box.addView(reasonGroup);
 
         EditText commentInput = new EditText(activity);
