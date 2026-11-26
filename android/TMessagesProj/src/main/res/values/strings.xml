@@ -11747,4 +11747,19 @@
     <string name="FpnvConsentSimSlot">SIM Slot</string>
     <string name="FpnvConsentSimSlotValue">SIM %1$d</string>
     <string name="FpnvConsentPhoneNumber">Phone Number</string>
+
+    <!-- EVE Authentication & Emoji / Sticker Pack Library -->
+    <string name="EveContinueWithGoogle">Continue with Google</string>
+    <string name="EveEmojiStickerPacks">Emoji &amp; Sticker Packs</string>
+    <string name="EveEmojiStickerPacksSubtitle">Browse, preview &amp; install official EVE packs</string>
+    <string name="EveStickerPacksTab">Stickers</string>
+    <string name="EveEmojiPacksTab">Emoji Packs</string>
+    <string name="EveInstalledPacksTab">Installed</string>
+    <string name="EveAddPack">Add</string>
+    <string name="EveInstalledPack">Installed</string>
+    <string name="EveUpdatePack">Update</string>
+    <string name="EveUnlockPack">Unlock</string>
+    <string name="EveRemovePack">Remove Pack</string>
+    <string name="EveAdminPackManager">Emoji &amp; Sticker Pack Manager</string>
+    <string name="EveAdminPackManagerSubtitle">Create, import, moderate, gate &amp; publish packs</string>
 </resources>

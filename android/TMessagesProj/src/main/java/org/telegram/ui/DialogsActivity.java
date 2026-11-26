@@ -13017,6 +13017,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             io.add(R.drawable.msg_notifications, getString(R.string.EveAnnouncements), () -> {
                 presentFragment(new org.telegram.ui.eve.exams.EveAnnouncementsFragment());
             });
+            io.add(R.drawable.msg_sticker, getString(R.string.EveEmojiStickerPacks), () -> {
+                presentFragment(new org.telegram.ui.eve.media.EvePackLibraryFragment());
+            });
             io.add(R.drawable.msg_settings_old, getString(R.string.Settings), () -> {
                 presentFragment(new SettingsActivity());
             });

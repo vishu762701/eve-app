@@ -265,7 +265,10 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
                     if (hasMainTabs) {
                         // no back on the main tab: the left button opens the QR code (with the search open, the action bar closes it instead)
                         final Bundle args = new Bundle();
-                        args.putLong("user_id", getUserConfig().getClientUserId());
+                        long effectiveUid = getUserConfig().isClientActivated()
+                                ? getUserConfig().getClientUserId()
+                                : org.telegram.ui.eve.auth.EveAuthManager.getInstance().ensureLocalUiUser(currentAccount);
+                        args.putLong("user_id", effectiveUid);
                         args.putBoolean(QrShareActivity.ARG_IMMEDIATE, true);
                         presentFragment(new QrShareActivity(args));
                     } else {
@@ -501,7 +504,12 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
     }
 
     public void setInfo() {
-        setInfo(getUserConfig().getCurrentUser());
+        TLRPC.User current = getUserConfig().getCurrentUser();
+        if (current == null && org.telegram.ui.eve.auth.EveAuthManager.getInstance().isSignedInAccount()) {
+            long uiId = org.telegram.ui.eve.auth.EveAuthManager.getInstance().ensureLocalUiUser(currentAccount);
+            current = uiId != 0 ? getMessagesController().getUser(uiId) : null;
+        }
+        setInfo(current);
     }
 
     public void setInfo(TLRPC.User user) {
@@ -510,14 +518,25 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
 
         avatarDrawable.setInfo(user);
         avatarView.setForUserOrChat(user, avatarDrawable);
-        titleView.setText(UserObject.getUserName(user));
+        final org.telegram.ui.eve.auth.EveUserProfile eveProfile = org.telegram.ui.eve.auth.EveAuthManager.getInstance().getCachedProfile();
+        String displayTitle = UserObject.getUserName(user);
+        if ((displayTitle == null || displayTitle.trim().isEmpty()) && eveProfile != null) {
+            displayTitle = eveProfile.displayName;
+        }
+        titleView.setText(displayTitle != null ? displayTitle : getString(R.string.AppName));
         final StringBuilder sb = new StringBuilder();
-        if (user != null) {
+        if (eveProfile != null && !eveProfile.email.isEmpty()) {
+            sb.append(eveProfile.email);
+            if (!eveProfile.eveId.isEmpty()) {
+                sb.append(" • ").append(eveProfile.eveId);
+            }
+        } else if (user != null && !TextUtils.isEmpty(user.phone)) {
             sb.append(PhoneFormat.getInstance().format("+" + user.phone));
         }
         final String username = UserObject.getPublicUsername(user);
         if (username != null) {
-            sb.append(" • @").append(username);
+            if (sb.length() > 0) sb.append(" • ");
+            sb.append("@").append(username);
         }
         subtitleView.setText(sb);
 
@@ -735,20 +754,9 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
                 }
             ));
             items.add(UItem.asShadow(null));
-        } else if (suggestions.contains("VALIDATE_PHONE_NUMBER") && getUserConfig().getCurrentUser() != null) {
-            items.add(SuggestionCell.Factory.of(
-                formatString(R.string.CheckPhoneNumber, PhoneFormat.getInstance().format("+" + getUserConfig().getCurrentUser().phone)),
-                replaceSingleTag(getString(R.string.CheckPhoneNumberInfo), () -> {
-                    Browser.openUrl(getContext(), getString(R.string.CheckPhoneNumberLearnMoreUrl));
-                }),
-                getString(R.string.CheckPhoneNumberNo), v -> {
-                    presentFragment(new ActionIntroActivity(ActionIntroActivity.ACTION_TYPE_CHANGE_PHONE_NUMBER));
-                },
-                getString(R.string.CheckPhoneNumberYes2), v -> {
-                    getMessagesController().removeSuggestion(0, "VALIDATE_PHONE_NUMBER");
-                }
-            ));
-            items.add(UItem.asShadow(null));
+        } else if (suggestions.contains("VALIDATE_PHONE_NUMBER") && getUserConfig().isClientActivated() && getUserConfig().getCurrentUser() != null) {
+            // EVE-PATCH: Telegram phone-number validation prompt suppressed unless legacy activated.
+            getMessagesController().removeSuggestion(0, "VALIDATE_PHONE_NUMBER");
         } else if (suggestions.contains("VALIDATE_PASSWORD")) {
             items.add(SuggestionCell.Factory.of(
                 getString(R.string.YourPasswordHeader),
@@ -801,6 +809,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
         if (org.telegram.ui.eve.admin.EveAdminConfig.isSectionVisible(org.telegram.ui.eve.admin.EveAdminConfig.SECTION_LANGUAGE)) {
             items.add(SettingCell.Factory.of(10, IconBackgroundColors.PURPLE.top, IconBackgroundColors.PURPLE.bottom, R.drawable.settings_language, getString(R.string.SettingsLanguage), LocaleController.getCurrentLanguageName()));
         }
+        items.add(SettingCell.Factory.of(30, IconBackgroundColors.ORANGE_DEEP.top, IconBackgroundColors.ORANGE_DEEP.bottom, R.drawable.msg_sticker, getString(R.string.EveEmojiStickerPacks), getString(R.string.EveEmojiStickerPacksSubtitle)));
 
         items.add(UItem.asShadow(null));
 
@@ -970,6 +979,10 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
                 handleEveCloudAccountClick();
                 break;
             }
+            case 30: {
+                presentSettingFragment(new org.telegram.ui.eve.media.EvePackLibraryFragment());
+                break;
+            }
             case 27: {
                 presentFragment(new HeaderSettingsActivity());
                 break;
@@ -1052,6 +1065,10 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
                         }
                     }))
                     .setNeutralButton(getString(R.string.LogOut), (d, w) -> auth.signOut(activity, () -> {
+                        if (!getUserConfig().isClientActivated()) {
+                            presentFragment(new org.telegram.ui.eve.auth.EveSignInFragment(), true);
+                            return;
+                        }
                         if (listView != null && listView.adapter != null) {
                             listView.adapter.update(true);
                         }

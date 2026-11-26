@@ -122,6 +122,8 @@ public final class EveAuthCoordinator {
             String resolvedUsername = baseProfile.username;
             String resolvedCategory = baseProfile.category;
             String resolvedBio = baseProfile.bio;
+            String resolvedDob = baseProfile.dob;
+            String resolvedPhone = baseProfile.phone;
             boolean resolvedIsAdmin = baseProfile.isAdmin;
 
             try {
@@ -135,6 +137,8 @@ public final class EveAuthCoordinator {
                 resolvedUsername = profileResp.username;
                 resolvedCategory = profileResp.category;
                 resolvedBio = profileResp.bio;
+                resolvedDob = profileResp.dob;
+                resolvedPhone = profileResp.phone;
             } catch (EveBackendClient.BackendException enrichmentErr) {
                 if (enrichmentErr.accountDisabled) {
                     throw enrichmentErr;
@@ -157,6 +161,8 @@ public final class EveAuthCoordinator {
                     resolvedUsername,
                     resolvedCategory,
                     resolvedBio,
+                    resolvedDob,
+                    resolvedPhone,
                     resolvedIsAdmin,
                     System.currentTimeMillis()
             );

@@ -148,4 +148,19 @@
     <string name="EvePremiumActive">EVE प्रीमियम सक्रिय</string>
     <string name="EvePremiumUpgrade">EVE प्रीमियम अपग्रेड करें</string>
     <string name="EvePremiumPayUpi">UPI / QR से भुगतान करें</string>
+
+    <!-- EVE Authentication & Emoji / Sticker Pack Library -->
+    <string name="EveContinueWithGoogle">Google से जारी रखें</string>
+    <string name="EveEmojiStickerPacks">इमोजी और स्टिकर पैक</string>
+    <string name="EveEmojiStickerPacksSubtitle">आधिकारिक EVE पैक ब्राउज़ करें, देखें और इंस्टॉल करें</string>
+    <string name="EveStickerPacksTab">स्टिकर</string>
+    <string name="EveEmojiPacksTab">इमोजी पैक</string>
+    <string name="EveInstalledPacksTab">इंस्टॉल किए गए</string>
+    <string name="EveAddPack">जोड़ें</string>
+    <string name="EveInstalledPack">इंस्टॉल है</string>
+    <string name="EveUpdatePack">अपडेट करें</string>
+    <string name="EveUnlockPack">अनलॉक करें</string>
+    <string name="EveRemovePack">पैक हटाएँ</string>
+    <string name="EveAdminPackManager">इमोजी और स्टिकर पैक प्रबंधक</string>
+    <string name="EveAdminPackManagerSubtitle">पैक बनाएँ, आयात करें, प्रीव्यू और प्रकाशित करें</string>
 </resources>

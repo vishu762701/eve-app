@@ -535,9 +535,13 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
 
         LiteMode.addOnPowerSaverAppliedListener(onPowerSaverCallback = this::onPowerSaver);
         if (actionBarLayout.getFragmentStack().isEmpty() && (layersActionBarLayout == null || layersActionBarLayout.getFragmentStack().isEmpty())) {
-            if (!UserConfig.getInstance(currentAccount).isClientActivated()) {
+            final boolean eveSignedIn = org.telegram.ui.eve.auth.EveAuthManager.getInstance().isSignedInAccount();
+            if (!eveSignedIn && !UserConfig.getInstance(currentAccount).isClientActivated()) {
                 actionBarLayout.addFragmentToStack(getClientNotActivatedFragment());
             } else {
+                if (eveSignedIn && !UserConfig.getInstance(currentAccount).isClientActivated()) {
+                    org.telegram.ui.eve.auth.EveAuthManager.getInstance().ensureLocalUiUser(currentAccount);
+                }
                 MainTabsActivity mainTabsActivity = new MainTabsActivity();
                 actionBarLayout.addFragmentToStack(mainTabsActivity);
             }
@@ -1067,9 +1071,6 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
     }
 
     public static BaseFragment createClientNotActivatedFragment(int account) {
-        if (LoginActivity.loadCurrentState(false, account).getInt("currentViewNum", 0) != 0) {
-            return new LoginActivity();
-        }
         return new IntroActivity();
     }
 
@@ -3078,7 +3079,9 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                 } else if (open_settings == 4) {
                     fragment = new FiltersSetupActivity();
                 } else if (open_settings == 5) {
-                    fragment = new ActionIntroActivity(ActionIntroActivity.ACTION_TYPE_CHANGE_PHONE_NUMBER);
+                    fragment = UserConfig.getInstance(currentAccount).isClientActivated()
+                            ? new ActionIntroActivity(ActionIntroActivity.ACTION_TYPE_CHANGE_PHONE_NUMBER)
+                            : new UserInfoActivity();
                     closePrevious = true;
 
                 } else if (open_settings == 10) {
@@ -3090,15 +3093,18 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                 } else if (open_settings == 14) {
                     fragment = new PrivacyControlActivity(ContactsController.PRIVACY_RULES_TYPE_PHONE);
                 } else if (open_settings == 15) {
-
-                    ConnectionsManager.getInstance(currentAccount).sendRequest(new TL_account.getPassword(), (response, error) -> {
-                        if (response != null) {
-                            TL_account.Password password = (TL_account.Password) response;
-                            AndroidUtilities.runOnUIThread(() -> {
-                                openEmailSettings(password);
-                            });
-                        }
-                    }, ConnectionsManager.RequestFlagFailOnServerErrors | ConnectionsManager.RequestFlagWithoutLogin);
+                    if (!UserConfig.getInstance(currentAccount).isClientActivated()) {
+                        presentFragment(new UserInfoActivity());
+                    } else {
+                        ConnectionsManager.getInstance(currentAccount).sendRequest(new TL_account.getPassword(), (response, error) -> {
+                            if (response != null) {
+                                TL_account.Password password = (TL_account.Password) response;
+                                AndroidUtilities.runOnUIThread(() -> {
+                                    openEmailSettings(password);
+                                });
+                            }
+                        }, ConnectionsManager.RequestFlagFailOnServerErrors | ConnectionsManager.RequestFlagWithoutLogin);
+                    }
 
                     fragment = null;
                 } else if (ApplicationLoader.applicationLoaderInstance != null) {

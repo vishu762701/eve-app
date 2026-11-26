@@ -76,18 +76,14 @@ public class LogoutActivity extends BaseFragment {
 
         rowCount = 0;
         alternativeHeaderRow = rowCount++;
-        if (UserConfig.getActivatedAccountsCount() < UserConfig.MAX_ACCOUNT_COUNT) {
-            addAccountRow = rowCount++;
-        } else {
-            addAccountRow = -1;
-        }
+        addAccountRow = -1;
         if (SharedConfig.passcodeHash.length() <= 0) {
             passcodeRow = rowCount++;
         } else {
             passcodeRow = -1;
         }
         cacheRow = rowCount++;
-        phoneRow = rowCount++;
+        phoneRow = -1;
         supportRow = rowCount++;
         alternativeSectionRow = rowCount++;
         logoutRow = rowCount++;
@@ -200,7 +196,16 @@ public class LogoutActivity extends BaseFragment {
             .setTitle(getString(R.string.LogOut))
             .setMessage(AndroidUtilities.replaceTags(getString(R.string.AreYouSureLogout)))
             .setPositiveButton(getString(R.string.LogOut), (dialogInterface, i) -> {
-                MessagesController.getInstance(currentAccount).performLogout(1);
+                org.telegram.ui.eve.auth.EveAuthManager.getInstance().signOut(getParentActivity(), () -> {
+                    if (UserConfig.getInstance(currentAccount).isClientActivated()) {
+                        MessagesController.getInstance(currentAccount).performLogout(0);
+                    }
+                    if (LaunchActivity.instance != null && LaunchActivity.instance.getActionBarLayout() != null) {
+                        LaunchActivity.instance.presentFragment(new org.telegram.ui.eve.auth.EveSignInFragment(), true);
+                    } else {
+                        presentFragment(new org.telegram.ui.eve.auth.EveSignInFragment(), true);
+                    }
+                });
             })
             .setNegativeButton(getString(R.string.Cancel), null)
             .makeRed(DialogInterface.BUTTON_POSITIVE)

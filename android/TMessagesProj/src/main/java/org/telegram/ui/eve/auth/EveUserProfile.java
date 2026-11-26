@@ -25,6 +25,8 @@ public final class EveUserProfile {
     public final String username;
     public final String category;
     public final String bio;
+    public final String dob;
+    public final String phone;
     public final long createdAt;
     public final long updatedAt;
     public final long lastLoginAt;
@@ -47,6 +49,29 @@ public final class EveUserProfile {
             long updatedAt,
             long lastLoginAt,
             boolean syncedWithBackend) {
+        this(uid, eveId, displayName, email, photoUrl, authProvider, emailVerified, accountStatus,
+                isAdmin, username, category, bio, "", "", createdAt, updatedAt, lastLoginAt, syncedWithBackend);
+    }
+
+    public EveUserProfile(
+            String uid,
+            String eveId,
+            String displayName,
+            String email,
+            String photoUrl,
+            String authProvider,
+            boolean emailVerified,
+            String accountStatus,
+            boolean isAdmin,
+            String username,
+            String category,
+            String bio,
+            String dob,
+            String phone,
+            long createdAt,
+            long updatedAt,
+            long lastLoginAt,
+            boolean syncedWithBackend) {
         this.uid = uid != null ? uid : "";
         this.eveId = eveId != null ? eveId : "";
         this.displayName = displayName != null && !displayName.trim().isEmpty() ? displayName.trim() : "Student";
@@ -59,6 +84,8 @@ public final class EveUserProfile {
         this.username = username != null ? username : "";
         this.category = category != null && !category.isEmpty() ? category : "General";
         this.bio = bio != null ? bio : "";
+        this.dob = dob != null ? dob : "";
+        this.phone = phone != null ? phone : "";
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
         this.lastLoginAt = lastLoginAt;
@@ -71,6 +98,19 @@ public final class EveUserProfile {
             String newUsername,
             String newCategory,
             String newBio,
+            boolean newIsAdmin,
+            long syncTime) {
+        return withBackendSync(newEveId, newDisplayName, newUsername, newCategory, newBio, this.dob, this.phone, newIsAdmin, syncTime);
+    }
+
+    public EveUserProfile withBackendSync(
+            String newEveId,
+            String newDisplayName,
+            String newUsername,
+            String newCategory,
+            String newBio,
+            String newDob,
+            String newPhone,
             boolean newIsAdmin,
             long syncTime) {
         return new EveUserProfile(
@@ -86,6 +126,8 @@ public final class EveUserProfile {
                 newUsername != null ? newUsername : this.username,
                 newCategory != null && !newCategory.isEmpty() ? newCategory : this.category,
                 newBio != null ? newBio : this.bio,
+                newDob != null ? newDob : this.dob,
+                newPhone != null ? newPhone : this.phone,
                 this.createdAt,
                 syncTime,
                 syncTime,
@@ -108,6 +150,8 @@ public final class EveUserProfile {
             obj.put("username", username);
             obj.put("category", category);
             obj.put("bio", bio);
+            obj.put("dob", dob);
+            obj.put("phone", phone);
             obj.put("createdAt", createdAt);
             obj.put("updatedAt", updatedAt);
             obj.put("lastLoginAt", lastLoginAt);
@@ -140,6 +184,8 @@ public final class EveUserProfile {
                     obj.optString("username", ""),
                     obj.optString("category", "General"),
                     obj.optString("bio", ""),
+                    obj.optString("dob", ""),
+                    obj.optString("phone", ""),
                     obj.optLong("createdAt", 0L),
                     obj.optLong("updatedAt", 0L),
                     obj.optLong("lastLoginAt", 0L),

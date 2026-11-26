@@ -4,6 +4,7 @@
 
 export interface Env {
   DB: D1Database;
+  EMOJI_BUCKET?: R2Bucket;
   FIREBASE_PROJECT_ID: string;
   SUPABASE_PROJECT_URL: string;
   SUPABASE_BUCKET_NAME: string;
@@ -375,13 +376,29 @@ export interface EmojiPackRow {
   enabled: number;
   created_at: number;
   created_by?: string;
+  pack_type?: string; // 'emoji' | 'sticker'
+  description?: string;
+  category?: string;
+  featured?: number;
+  thumbnail_key?: string;
+  version?: number;
+  creator_attribution?: string;
+  rights_status?: string; // 'approved' | 'limited_external' | 'pending_review' | 'rejected'
+  license_evidence?: string;
+  publication_status?: string; // 'draft' | 'published' | 'unpublished'
+  access_tier?: string; // 'free' | 'premium'
+  import_status?: string;
+  import_expected_count?: number;
+  import_failed_count?: number;
+  import_error_summary?: string;
+  updated_at?: number;
 }
 
 export interface EmojiItemRow {
   id: string;
   pack_id: string;
   alt_emoji: string;
-  kind: string; // 'lottie' | 'static'
+  kind: string; // 'lottie' | 'static' | 'video'
   storage_key: string;
   thumbnail_key?: string;
   byte_size: number;
@@ -393,6 +410,14 @@ export interface EmojiItemRow {
   pack_name?: string;
   uploader?: string;
   created_at: number;
+  item_index?: number;
+  file_format?: string; // 'lottie' | 'tgs' | 'webm' | 'webp' | 'png'
+  mime_type?: string;
+  is_animated?: number;
+  is_video?: number;
+  thumbnail_sha256?: string;
+  external_reference?: string;
+  updated_at?: number;
 }
 
 export interface EmojiPlacementRow {

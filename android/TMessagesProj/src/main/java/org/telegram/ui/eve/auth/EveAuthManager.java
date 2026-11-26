@@ -38,8 +38,14 @@ import com.google.firebase.auth.GoogleAuthProvider;
 import com.google.firebase.auth.UserInfo;
 import com.google.firebase.auth.UserProfileChangeRequest;
 
+import org.json.JSONObject;
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.FileLog;
+import org.telegram.messenger.MessagesController;
+import org.telegram.messenger.NotificationCenter;
+import org.telegram.messenger.UserConfig;
+import org.telegram.tgnet.TLRPC;
+import org.telegram.tgnet.tl.TL_account;
 
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -688,6 +694,7 @@ public final class EveAuthManager {
 
         if (outcome.profile != null) {
             saveCachedProfile(outcome.profile);
+            ensureLocalUiUser(UserConfig.selectedAccount);
         }
 
         if (outcome.shouldQueueOfflineRetry) {
@@ -901,6 +908,121 @@ public final class EveAuthManager {
             return "ERROR_USER_DISABLED".equals(((FirebaseAuthException) e).getErrorCode());
         }
         return e != null && e.getMessage() != null && e.getMessage().toLowerCase().contains("disabled");
+    }
+
+    public long getEffectiveUiUserId() {
+        EveUserProfile profile = getCachedProfile();
+        if (!isSignedInAccount() || profile == null || profile.uid.isEmpty()) {
+            return 0L;
+        }
+        return 1_000_000L + (Math.abs((long) profile.uid.hashCode()) % 899_000_000L);
+    }
+
+    /**
+     * Populates an in-memory TLRPC.User & TLRPC.UserFull mirror from the authenticated EVE profile
+     * so Telegram's retained UI components (ProfileActivity, SettingsActivity, UserInfoActivity)
+     * render EVE account data without requiring Telegram phone/OTP login or MTProto auth keys.
+     */
+    public long ensureLocalUiUser(int account) {
+        long userId = getEffectiveUiUserId();
+        EveUserProfile profile = getCachedProfile();
+        if (userId == 0L || profile == null) {
+            return 0L;
+        }
+        try {
+            TLRPC.TL_user user = new TLRPC.TL_user();
+            user.id = userId;
+            String fullName = profile.displayName != null ? profile.displayName.trim() : "Student";
+            int sp = fullName.indexOf(' ');
+            if (sp > 0) {
+                user.first_name = fullName.substring(0, sp).trim();
+                user.last_name = fullName.substring(sp + 1).trim();
+            } else {
+                user.first_name = fullName.isEmpty() ? "Student" : fullName;
+                user.last_name = "";
+            }
+            user.phone = profile.phone != null ? profile.phone.replaceAll("[^0-9]", "") : "";
+            if (profile.username != null && !profile.username.trim().isEmpty()) {
+                user.username = profile.username.trim().replaceFirst("^@", "");
+                TLRPC.TL_username uname = new TLRPC.TL_username();
+                uname.username = user.username;
+                uname.active = true;
+                user.usernames.add(uname);
+            }
+            user.flags |= 2048;
+
+            TLRPC.TL_userFull userFull = new TLRPC.TL_userFull();
+            userFull.id = userId;
+            userFull.user = user;
+            userFull.about = profile.bio != null ? profile.bio : "";
+            if (!userFull.about.isEmpty()) {
+                userFull.flags |= 2;
+            }
+            if (profile.dob != null && profile.dob.matches("\\d{4}-\\d{2}-\\d{2}")) {
+                String[] parts = profile.dob.split("-");
+                TL_account.TL_birthday bday = new TL_account.TL_birthday();
+                bday.year = Integer.parseInt(parts[0]);
+                bday.month = Integer.parseInt(parts[1]);
+                bday.day = Integer.parseInt(parts[2]);
+                bday.flags |= 1;
+                userFull.birthday = bday;
+                userFull.flags2 |= 32;
+            }
+
+            MessagesController mc = MessagesController.getInstance(account);
+            mc.putUser(user, true);
+            mc.putUserInfo(userFull, true);
+        } catch (Throwable t) {
+            FileLog.e("EveAuthManager: ensureLocalUiUser failed", t);
+        }
+        return userId;
+    }
+
+    public void updateEveProfileFields(@NonNull JSONObject updates, @NonNull SimpleCallback callback) {
+        ensureInitialized();
+        FirebaseUser user = getCurrentUser();
+        if (user == null || user.isAnonymous()) {
+            mainHandler.post(() -> callback.onError("Sign in to EVE with Google first."));
+            return;
+        }
+        user.getIdToken(true)
+                .addOnSuccessListener(result -> {
+                    String token = result != null ? result.getToken() : null;
+                    if (token == null || token.trim().isEmpty()) {
+                        mainHandler.post(() -> callback.onError("Authentication token unavailable."));
+                        return;
+                    }
+                    ioExecutor.execute(() -> {
+                        try {
+                            backendClient.updateUserProfile(token, updates);
+                            EveUserProfile current = getCachedProfile();
+                            if (current != null) {
+                                EveUserProfile updated = current.withBackendSync(
+                                        current.eveId,
+                                        updates.has("displayName") ? updates.optString("displayName", current.displayName) : current.displayName,
+                                        updates.has("username") ? updates.optString("username", current.username) : current.username,
+                                        updates.has("category") ? updates.optString("category", current.category) : current.category,
+                                        updates.has("bio") ? updates.optString("bio", current.bio) : current.bio,
+                                        updates.has("dob") ? updates.optString("dob", current.dob) : current.dob,
+                                        updates.has("phone") ? updates.optString("phone", current.phone) : current.phone,
+                                        current.isAdmin,
+                                        System.currentTimeMillis()
+                                );
+                                saveCachedProfile(updated);
+                            }
+                            mainHandler.post(() -> {
+                                ensureLocalUiUser(UserConfig.selectedAccount);
+                                NotificationCenter.getInstance(UserConfig.selectedAccount).postNotificationName(NotificationCenter.mainUserInfoChanged);
+                                NotificationCenter.getInstance(UserConfig.selectedAccount).postNotificationName(NotificationCenter.updateInterfaces, MessagesController.UPDATE_MASK_NAME);
+                                callback.onSuccess("Profile saved to EVE Cloud.");
+                            });
+                        } catch (Throwable t) {
+                            String msg = t.getMessage() != null ? t.getMessage() : "Could not update EVE profile.";
+                            mainHandler.post(() -> callback.onError(msg));
+                        }
+                    });
+                })
+                .addOnFailureListener(e -> mainHandler.post(() -> callback.onError(mapFirebaseError(e))));
     }
 
     private void postSuccess(

@@ -76,16 +76,13 @@ public class OfficialTelegramLoginTest {
     }
 
     @Test
-    public void savedIncompleteLoginState_restoresOriginalTelegramLoginActivity() {
+    public void savedIncompleteLoginState_neverPromptsTelegramLoginAndOpensIntro() {
         SharedPreferences prefs = appContext.getSharedPreferences("logininfo2", Context.MODE_PRIVATE);
         prefs.edit().putInt("currentViewNum", 2).commit();
 
-        Bundle restored = LoginActivity.loadCurrentState(false, 0);
-        assertEquals(2, restored.getInt("currentViewNum", 0));
-
         BaseFragment startup = LaunchActivity.createClientNotActivatedFragment(0);
         assertNotNull(startup);
-        assertEquals(LoginActivity.class, startup.getClass());
+        assertEquals(IntroActivity.class, startup.getClass());
     }
 
     @Test

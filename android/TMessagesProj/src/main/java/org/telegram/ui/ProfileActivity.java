@@ -2107,17 +2107,25 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 getMediaDataController().loadBotInfo(user.id, user.id, true, classGuid);
             }
             userInfo = getMessagesController().getUserFull(userId);
-            getMessagesController().loadFullUser(getMessagesController().getUser(userId), classGuid, true);
+            if (getUserConfig().isClientActivated()) {
+                getMessagesController().loadFullUser(getMessagesController().getUser(userId), classGuid, true);
+            }
             participantsMap = null;
 
-            if (UserObject.isUserSelf(user)) {
+            final boolean isEveSelf = user.id == org.telegram.ui.eve.auth.EveAuthManager.getInstance().getEffectiveUiUserId();
+            if (UserObject.isUserSelf(user) || isEveSelf) {
+                if (isEveSelf && !myProfile) {
+                    myProfile = true;
+                }
                 imageUpdater = new ImageUpdater(true, ImageUpdater.FOR_TYPE_USER, true);
                 imageUpdater.setOpenWithFrontfaceCamera(true);
                 imageUpdater.parentFragment = this;
                 imageUpdater.setDelegate(this);
-                getMediaDataController().checkFeaturedStickers();
-                getMessagesController().loadSuggestedFilters();
-                getMessagesController().loadUserInfo(getUserConfig().getCurrentUser(), true, classGuid);
+                if (getUserConfig().isClientActivated()) {
+                    getMediaDataController().checkFeaturedStickers();
+                    getMessagesController().loadSuggestedFilters();
+                    getMessagesController().loadUserInfo(getUserConfig().getCurrentUser(), true, classGuid);
+                }
             }
             actionBarAnimationColorFrom = arguments.getInt("actionBarColor", 0);
         } else if (chatId != 0) {
@@ -4459,11 +4467,13 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             } else if (position == languageRow) {
                 presentFragment(new LanguageSelectActivity());
             } else if (position == setUsernameRow) {
-                presentFragment(new ChangeUsernameActivity());
+                presentFragment(getUserConfig().isClientActivated() ? new ChangeUsernameActivity() : new UserInfoActivity());
             } else if (position == bioRow) {
                 presentFragment(new UserInfoActivity());
             } else if (position == numberRow) {
-                presentFragment(new ActionIntroActivity(ActionIntroActivity.ACTION_TYPE_CHANGE_PHONE_NUMBER));
+                presentFragment(getUserConfig().isClientActivated()
+                        ? new ActionIntroActivity(ActionIntroActivity.ACTION_TYPE_CHANGE_PHONE_NUMBER)
+                        : new UserInfoActivity());
             } else if (position == setAvatarRow) {
                 onWriteButtonClick();
             } else if (position == premiumRow) {
@@ -13085,7 +13095,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                         @Override
                         protected void onNoClick(int type) {
                             if (type == SettingsSuggestionCell.TYPE_PHONE) {
-                                presentFragment(new ActionIntroActivity(ActionIntroActivity.ACTION_TYPE_CHANGE_PHONE_NUMBER));
+                                presentFragment(new UserInfoActivity());
                             } else {
                                 presentFragment(new TwoStepVerificationSetupActivity(TwoStepVerificationSetupActivity.TYPE_VERIFY, null));
                             }
@@ -14220,7 +14230,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             final Theme.ResourcesProvider resourcesProvider = f.getResourceProvider();
             return new SearchResult[]{
                     new SearchResult(500, getString(R.string.EditName), 0, () -> f.presentFragment(new ChangeNameActivity(resourcesProvider))),
-                    new SearchResult(501, getString(R.string.ChangePhoneNumber), 0, () -> f.presentFragment(new ActionIntroActivity(ActionIntroActivity.ACTION_TYPE_CHANGE_PHONE_NUMBER))).withLink("tg://settings/edit/change-number"),
+                    new SearchResult(501, getString(R.string.ChangePhoneNumber), 0, () -> f.presentFragment(f.getUserConfig().isClientActivated() ? new ActionIntroActivity(ActionIntroActivity.ACTION_TYPE_CHANGE_PHONE_NUMBER) : new UserInfoActivity())).withLink("tg://settings/edit/change-number"),
                     // TODO:
 //                    new SearchResult(503, getString(R.string.UserBio), 0, () -> {
 //                        if (userInfo != null) {
@@ -15953,7 +15963,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             });
         } else if (position == usernameRow) {
             itemOptions.add(R.drawable.msg_edit, getString(R.string.ProfileUsernameEdit), () -> {
-                presentFragment(new ChangeUsernameActivity());
+                presentFragment(getUserConfig().isClientActivated() ? new ChangeUsernameActivity() : new UserInfoActivity());
             });
         } else if (position == channelInfoRow || position == userInfoRow || position == bioRow) {
             itemOptions.add(R.drawable.msg_edit, getString(R.string.ProfileEditBio), () -> {
@@ -15961,11 +15971,39 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             });
         } else if (position == phoneRow) {
             itemOptions.add(R.drawable.menu_storage_path, getString(R.string.ProfilePhoneEdit), () -> {
-                presentFragment(new ActionIntroActivity(ActionIntroActivity.ACTION_TYPE_CHANGE_PHONE_NUMBER));
+                presentFragment(new UserInfoActivity());
             });
         } else if (position == birthdayRow) {
             itemOptions.add(R.drawable.msg_edit, getString(R.string.ProfileBirthdayChange), () -> {
-                showDialog(AlertsCreator.createBirthdayPickerDialog(getContext(), getString(R.string.EditProfileBirthdayTitle), getString(R.string.EditProfileBirthdayButton), userFull.birthday, birthday -> {
+                showDialog(AlertsCreator.createBirthdayPickerDialog(getContext(), getString(R.string.EditProfileBirthdayTitle), getString(R.string.EditProfileBirthdayButton), userFull != null ? userFull.birthday : null, birthday -> {
+                    if (!getUserConfig().isClientActivated()) {
+                        try {
+                            org.json.JSONObject updates = new org.json.JSONObject();
+                            int yr = (birthday.flags & 1) != 0 && birthday.year > 0 ? birthday.year : 2000;
+                            updates.put("dob", String.format(java.util.Locale.US, "%04d-%02d-%02d", yr, birthday.month, birthday.day));
+                            org.telegram.ui.eve.auth.EveAuthManager.getInstance().updateEveProfileFields(updates, new org.telegram.ui.eve.auth.EveAuthManager.SimpleCallback() {
+                                @Override
+                                public void onSuccess(String message) {
+                                    if (userFull != null) {
+                                        userFull.flags2 |= 32;
+                                        userFull.birthday = birthday;
+                                    }
+                                    if (listAdapter != null) {
+                                        listAdapter.notifyDataSetChanged();
+                                    }
+                                    BulletinFactory.of(ProfileActivity.this)
+                                        .createSimpleBulletin(R.raw.contact_check, LocaleController.getString(R.string.PrivacyBirthdaySetDone))
+                                        .setDuration(Bulletin.DURATION_PROLONG).show();
+                                }
+
+                                @Override
+                                public void onError(String message) {
+                                    BulletinFactory.of(ProfileActivity.this).createErrorBulletin(message).show();
+                                }
+                            });
+                        } catch (Throwable ignored) {}
+                        return;
+                    }
                     TL_account.updateBirthday req = new TL_account.updateBirthday();
                     req.flags |= 1;
                     req.birthday = birthday;

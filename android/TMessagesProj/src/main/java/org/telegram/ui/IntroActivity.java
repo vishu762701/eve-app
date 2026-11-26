@@ -383,7 +383,7 @@ public class IntroActivity extends BaseFragment implements NotificationCenter.No
             }
             startPressed = true;
 
-            presentFragment(new LoginActivity().setIntroView(frameContainerView, startMessagingButton), true);
+            presentFragment(new org.telegram.ui.eve.auth.EveSignInFragment(), true);
             destroyed = true;
         });
 
@@ -412,7 +412,7 @@ public class IntroActivity extends BaseFragment implements NotificationCenter.No
 
                         NotificationCenter.getGlobalInstance().removeObserver(this, id);
                         AndroidUtilities.runOnUIThread(()->{
-                            presentFragment(new LoginActivity().setIntroView(frameContainerView, startMessagingButton), true);
+                            presentFragment(new org.telegram.ui.eve.auth.EveSignInFragment(), true);
                             destroyed = true;
                         }, 100);
                     }

@@ -52,6 +52,42 @@ public final class EveBackendClient {
         HttpResponse execute(String method, String url, String bearerToken, String jsonBody) throws IOException;
     }
 
+    public static byte[] executeBinaryGet(String urlString, String bearerToken) throws IOException {
+        HttpURLConnection conn = null;
+        try {
+            URL url = new URL(urlString);
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setConnectTimeout(CONNECT_TIMEOUT_MS);
+            conn.setReadTimeout(READ_TIMEOUT_MS);
+            conn.setUseCaches(false);
+            conn.setRequestProperty(HEADER_EVE_CLIENT, EVE_CLIENT_VERSION);
+            if (bearerToken != null && !bearerToken.trim().isEmpty()) {
+                conn.setRequestProperty("Authorization", "Bearer " + bearerToken);
+            }
+            int code = conn.getResponseCode();
+            if (code < 200 || code >= 300) {
+                throw new IOException("Asset download failed with HTTP " + code);
+            }
+            try (InputStream is = conn.getInputStream();
+                 java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream()) {
+                byte[] buf = new byte[8192];
+                int n;
+                while ((n = is.read(buf)) != -1) {
+                    bos.write(buf, 0, n);
+                    if (bos.size() > 2 * 1024 * 1024) {
+                        throw new IOException("Asset exceeds 2MB safety cap.");
+                    }
+                }
+                return bos.toByteArray();
+            }
+        } finally {
+            if (conn != null) {
+                conn.disconnect();
+            }
+        }
+    }
+
     public static final class HttpResponse {
         public final int statusCode;
         public final String body;
@@ -146,6 +182,7 @@ public final class EveBackendClient {
         public final String category;
         public final String username;
         public final String bio;
+        public final String phone;
         public final boolean isOnline;
 
         public ProfileResponse(
@@ -158,6 +195,20 @@ public final class EveBackendClient {
                 String username,
                 String bio,
                 boolean isOnline) {
+            this(id, eveId, email, displayName, dob, category, username, bio, "", isOnline);
+        }
+
+        public ProfileResponse(
+                String id,
+                String eveId,
+                String email,
+                String displayName,
+                String dob,
+                String category,
+                String username,
+                String bio,
+                String phone,
+                boolean isOnline) {
             this.id = id;
             this.eveId = eveId;
             this.email = email;
@@ -166,6 +217,7 @@ public final class EveBackendClient {
             this.category = category;
             this.username = username;
             this.bio = bio;
+            this.phone = phone != null ? phone : "";
             this.isOnline = isOnline;
         }
     }
@@ -236,8 +288,14 @@ public final class EveBackendClient {
                 optCleanString(data, "category", "General"),
                 optCleanString(data, "username", ""),
                 optCleanString(data, "bio", ""),
+                optCleanString(data, "phone", ""),
                 data.optBoolean("isOnline", false)
         );
+    }
+
+    public void updateUserProfile(String firebaseIdToken, JSONObject updates) throws BackendException {
+        requireToken(firebaseIdToken, "/api/users/profile");
+        executeRootJsonRequest("PUT", "/api/users/profile", firebaseIdToken, updates != null ? updates.toString() : "{}");
     }
 
     public JSONArray fetchExamsJson(String firebaseIdToken) throws BackendException {
@@ -267,9 +325,60 @@ public final class EveBackendClient {
         return executeRootJsonRequest("GET", path, firebaseIdToken, null);
     }
 
+    public JSONObject getOptionalJsonRoot(String path, String firebaseIdToken) throws BackendException {
+        return executeRootJsonRequest("GET", path, firebaseIdToken, null);
+    }
+
     public JSONObject postJsonRoot(String path, String firebaseIdToken, JSONObject body) throws BackendException {
         requireToken(firebaseIdToken, path);
         return executeRootJsonRequest("POST", path, firebaseIdToken, body != null ? body.toString() : "{}");
+    }
+
+    public JSONObject postBinaryRoot(String path, String firebaseIdToken, String contentType, byte[] payloadBytes) throws BackendException {
+        requireToken(firebaseIdToken, path);
+        HttpURLConnection conn = null;
+        try {
+            URL url = new URL(baseUrl + path);
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("POST");
+            conn.setConnectTimeout(CONNECT_TIMEOUT_MS);
+            conn.setReadTimeout(READ_TIMEOUT_MS);
+            conn.setUseCaches(false);
+            conn.setRequestProperty(HEADER_EVE_CLIENT, EVE_CLIENT_VERSION);
+            conn.setRequestProperty("Authorization", "Bearer " + firebaseIdToken);
+            conn.setRequestProperty("Content-Type", contentType != null ? contentType : "application/octet-stream");
+            conn.setDoOutput(true);
+            byte[] bytes = payloadBytes != null ? payloadBytes : new byte[0];
+            try (OutputStream os = conn.getOutputStream()) {
+                os.write(bytes);
+                os.flush();
+            }
+            int code = conn.getResponseCode();
+            InputStream stream = (code >= 200 && code < 300) ? conn.getInputStream() : conn.getErrorStream();
+            String bodyText = readStream(stream);
+            if (code >= 200 && code < 300) {
+                return new JSONObject(bodyText.isEmpty() ? "{}" : bodyText);
+            }
+            JSONObject parsedErr = null;
+            try {
+                if (!bodyText.isEmpty()) parsedErr = new JSONObject(bodyText);
+            } catch (JSONException ignored) {}
+            String serverCode = parsedErr != null ? optCleanString(parsedErr, "code", "") : "";
+            String errMsg = parsedErr != null ? optCleanString(parsedErr, "error", "") : "";
+            if (errMsg.isEmpty()) errMsg = "Upload failed (" + code + ").";
+            throw new BackendException(code, path, serverCode, ErrorKind.CLIENT_BAD_REQUEST, errMsg);
+        } catch (BackendException be) {
+            throw be;
+        } catch (IOException e) {
+            throw new BackendException(0, path, "UPLOAD_IO_ERROR", ErrorKind.NETWORK_OFFLINE,
+                    e.getMessage() != null ? e.getMessage() : "Upload failed due to network error.");
+        } catch (JSONException e) {
+            throw new BackendException(502, path, "INVALID_JSON", ErrorKind.INVALID_RESPONSE, "Invalid response from EVE Cloud.");
+        } finally {
+            if (conn != null) {
+                conn.disconnect();
+            }
+        }
     }
 
     public JSONObject putJsonRoot(String path, String firebaseIdToken, JSONObject body) throws BackendException {

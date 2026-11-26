@@ -14,9 +14,12 @@ import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
+import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+
+import org.json.JSONObject;
 
 import androidx.annotation.Keep;
 
@@ -361,15 +364,25 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
         items.add(UItem.asCustom(bioEdit));
         items.add(UItem.asShadow(bioInfo));
 
-        final TLRPC.User user = getUserConfig().getCurrentUser();
+        final long effectiveId = getUserConfig().isClientActivated()
+                ? getUserConfig().getClientUserId()
+                : org.telegram.ui.eve.auth.EveAuthManager.getInstance().ensureLocalUiUser(currentAccount);
+        TLRPC.User user = effectiveId != 0 ? getMessagesController().getUser(effectiveId) : null;
+        if (user == null) {
+            user = getUserConfig().getCurrentUser();
+        }
         items.add(UItem.asHeader(getString(R.string.EditAccountInfoHeader)));
         if (user != null) {
             numberRow = items.size();
-            items.add(SettingsActivity.SettingCell.Factory.of(INFO_PHONE, IconBackgroundColors.GREEN.top, IconBackgroundColors.GREEN.bottom, R.drawable.settings_calls, PhoneFormat.getInstance().format("+" + user.phone), getString(R.string.TapToChangePhone)));
+            String phoneLabel = TextUtils.isEmpty(user.phone)
+                    ? getString(R.string.Phone)
+                    : PhoneFormat.getInstance().format("+" + user.phone);
+            items.add(SettingsActivity.SettingCell.Factory.of(INFO_PHONE, IconBackgroundColors.GREEN.top, IconBackgroundColors.GREEN.bottom, R.drawable.settings_calls, phoneLabel, getString(R.string.TapToChangePhone)));
         }
         usernameRow = items.size();
-        if (UserObject.getPublicUsername(user) != null) {
-            items.add(SettingsActivity.SettingCell.Factory.of(INFO_USERNAME, IconBackgroundColors.ORANGE.top, IconBackgroundColors.ORANGE.bottom, R.drawable.filled_chatlist_mention, "@" + UserObject.getPublicUsername(user), getString(R.string.Username)));
+        String publicUsername = UserObject.getPublicUsername(user);
+        if (!TextUtils.isEmpty(publicUsername)) {
+            items.add(SettingsActivity.SettingCell.Factory.of(INFO_USERNAME, IconBackgroundColors.ORANGE.top, IconBackgroundColors.ORANGE.bottom, R.drawable.filled_chatlist_mention, "@" + publicUsername, getString(R.string.Username)));
         } else {
             items.add(SettingsActivity.SettingCell.Factory.of(INFO_USERNAME, IconBackgroundColors.ORANGE.top, IconBackgroundColors.ORANGE.bottom, R.drawable.filled_chatlist_mention, getString(R.string.AddUsername), null));
         }
@@ -474,12 +487,71 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
             
 
         } else if (item.id == INFO_PHONE) {
-            presentFragment(new ActionIntroActivity(ActionIntroActivity.ACTION_TYPE_CHANGE_PHONE_NUMBER));
+            if (getUserConfig().isClientActivated()) {
+                presentFragment(new ActionIntroActivity(ActionIntroActivity.ACTION_TYPE_CHANGE_PHONE_NUMBER));
+            } else {
+                showEveFieldEditDialog(getString(R.string.Phone), "phone",
+                        org.telegram.ui.eve.auth.EveAuthManager.getInstance().getCachedProfile() != null
+                                ? org.telegram.ui.eve.auth.EveAuthManager.getInstance().getCachedProfile().phone : "",
+                        "+91 9876543210");
+            }
         } else if (item.id == INFO_USERNAME) {
-            presentFragment(new ChangeUsernameActivity());
+            if (getUserConfig().isClientActivated()) {
+                presentFragment(new ChangeUsernameActivity());
+            } else {
+                showEveFieldEditDialog(getString(R.string.Username), "username",
+                        org.telegram.ui.eve.auth.EveAuthManager.getInstance().getCachedProfile() != null
+                                ? org.telegram.ui.eve.auth.EveAuthManager.getInstance().getCachedProfile().username : "",
+                        "student_handle");
+            }
         } else if (item.id == BUTTON_LOGOUT) {
             presentFragment(new LogoutActivity());
         }
+    }
+
+    private void showEveFieldEditDialog(String title, String fieldKey, String currentVal, String hint) {
+        if (getContext() == null) return;
+        final EditText input = new EditText(getContext());
+        input.setSingleLine(true);
+        input.setText(currentVal != null ? currentVal : "");
+        input.setHint(hint);
+        input.setTextColor(getThemedColor(Theme.key_dialogTextBlack));
+        input.setHintTextColor(getThemedColor(Theme.key_dialogTextHint));
+        LinearLayout container = new LinearLayout(getContext());
+        container.setPadding(dp(24), dp(8), dp(24), dp(8));
+        container.addView(input, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+        showDialog(new AlertDialog.Builder(getContext(), resourceProvider)
+                .setTitle(title)
+                .setView(container)
+                .setPositiveButton(getString(R.string.Save), (d, w) -> {
+                    String newValue = input.getText().toString().trim();
+                    if ("username".equals(fieldKey) && newValue.startsWith("@")) {
+                        newValue = newValue.substring(1).trim();
+                    }
+                    try {
+                        JSONObject updates = new JSONObject();
+                        updates.put(fieldKey, newValue);
+                        org.telegram.ui.eve.auth.EveAuthManager.getInstance().updateEveProfileFields(updates, new org.telegram.ui.eve.auth.EveAuthManager.SimpleCallback() {
+                            @Override
+                            public void onSuccess(String message) {
+                                valueSet = false;
+                                setValue();
+                                if (listView != null && listView.adapter != null) {
+                                    listView.adapter.update(true);
+                                }
+                                BulletinFactory.of(UserInfoActivity.this).createSimpleBulletin(R.raw.contact_check, message).show();
+                            }
+
+                            @Override
+                            public void onError(String message) {
+                                BulletinFactory.of(UserInfoActivity.this).createErrorBulletin(message).show();
+                            }
+                        });
+                    } catch (Throwable ignored) {
+                    }
+                })
+                .setNegativeButton(getString(R.string.Cancel), null)
+                .create());
     }
 
     @Override
@@ -538,10 +610,12 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
     private void setValue() {
         if (valueSet) return;
 
-        final long selfId = getUserConfig().getClientUserId();
-        TLRPC.UserFull userFull = getMessagesController().getUserFull(selfId);
+        final long selfId = getUserConfig().isClientActivated()
+                ? getUserConfig().getClientUserId()
+                : org.telegram.ui.eve.auth.EveAuthManager.getInstance().ensureLocalUiUser(currentAccount);
+        TLRPC.UserFull userFull = selfId != 0 ? getMessagesController().getUserFull(selfId) : null;
         if (userFull == null) {
-            if (getUserConfig().getCurrentUser() != null) {
+            if (getUserConfig().isClientActivated() && getUserConfig().getCurrentUser() != null) {
                 getMessagesController().loadUserInfo(getUserConfig().getCurrentUser(), true, getClassGuid());
             }
             return;
@@ -549,7 +623,7 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
 
         TLRPC.User user = userFull.user;
         if (user == null) {
-            user = getUserConfig().getCurrentUser();
+            user = selfId != 0 ? getMessagesController().getUser(selfId) : getUserConfig().getCurrentUser();
         }
 
         if (user == null) {
@@ -609,6 +683,57 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
         }
 
         doneButton.setLoading(true, true);
+        if (!getUserConfig().isClientActivated()) {
+            if (!hasChanges()) {
+                wasSaved = true;
+                doneButton.setLoading(false, true);
+                finishFragment();
+                return;
+            }
+            JSONObject updates = new JSONObject();
+            try {
+                String fn = firstNameEdit.getText().toString().trim();
+                String ln = lastNameEdit.getText().toString().trim();
+                String fullName = (fn + (ln.isEmpty() ? "" : " " + ln)).trim();
+                if (!fullName.isEmpty() && (!TextUtils.equals(currentFirstName, fn) || !TextUtils.equals(currentLastName, ln))) {
+                    updates.put("displayName", fullName);
+                }
+                String newBio = bioEdit.getText().toString().trim();
+                if (!TextUtils.equals(currentBio == null ? "" : currentBio, newBio)) {
+                    updates.put("bio", newBio);
+                }
+                if (!birthdaysEqual(currentBirthday, birthday)) {
+                    if (birthday == null) {
+                        updates.put("dob", "");
+                    } else {
+                        int yr = (birthday.flags & 1) != 0 && birthday.year > 0 ? birthday.year : 2000;
+                        updates.put("dob", String.format(java.util.Locale.US, "%04d-%02d-%02d", yr, birthday.month, birthday.day));
+                    }
+                }
+            } catch (Throwable ignored) {
+            }
+            if (updates.length() == 0) {
+                wasSaved = true;
+                doneButton.setLoading(false, true);
+                finishFragment();
+                return;
+            }
+            org.telegram.ui.eve.auth.EveAuthManager.getInstance().updateEveProfileFields(updates, new org.telegram.ui.eve.auth.EveAuthManager.SimpleCallback() {
+                @Override
+                public void onSuccess(String message) {
+                    wasSaved = true;
+                    doneButton.setLoading(false, true);
+                    finishFragment();
+                }
+
+                @Override
+                public void onError(String message) {
+                    doneButton.setLoading(false, true);
+                    BulletinFactory.of(UserInfoActivity.this).createErrorBulletin(message).show();
+                }
+            });
+            return;
+        }
         TLRPC.User user = getUserConfig().getCurrentUser();
         TLRPC.UserFull userFull = getMessagesController().getUserFull(getUserConfig().getClientUserId());
         if (user == null || userFull == null) {

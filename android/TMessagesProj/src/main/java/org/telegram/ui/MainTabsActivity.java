@@ -805,8 +805,14 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
             dialogsActivity.setMainTabsActivityController(new MainTabsActivityControllerImpl());
             return dialogsActivity;
         } else if (position == POSITION_PROFILE) {
+            long profileUid = UserConfig.getInstance(currentAccount).isClientActivated()
+                    ? UserConfig.getInstance(currentAccount).getClientUserId()
+                    : org.telegram.ui.eve.auth.EveAuthManager.getInstance().ensureLocalUiUser(currentAccount);
+            if (profileUid == 0) {
+                return new org.telegram.ui.eve.auth.EveSignInFragment();
+            }
             Bundle args = new Bundle();
-            args.putLong("user_id", UserConfig.getInstance(currentAccount).getClientUserId());
+            args.putLong("user_id", profileUid);
             args.putBoolean("my_profile", true);
             // args.putBoolean("expandPhoto", true);
             args.putBoolean("hasMainTabs", true);

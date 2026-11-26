@@ -386,4 +386,20 @@ public class EveAuthSuiteTest {
         assertNull(AuthTokensHelper.getSavedLogInTokens());
         assertNull(AuthTokensHelper.getSavedLogOutTokens());
     }
+
+    @Test
+    public void eveProfile_preservesDobPhoneAndCloudUpdateSerializationWithoutTelegramLogin() {
+        EveUserProfile initial = new EveUserProfile(
+                "uid_google_1", "EV-5T9X1B", "Ananya Rao", "ananya@eve.app",
+                "", "google.com", true, EveUserProfile.STATUS_ACTIVE, false,
+                "ananya_ssc", "SSC", "Preparing for CGL", "2002-05-14", "+919876543210",
+                1700000000000L, 1700000000000L, 1700000000000L, true);
+        EveUserProfile roundTrip = EveUserProfile.fromJson(initial.toJson().toString());
+        assertNotNull(roundTrip);
+        assertEquals("2002-05-14", roundTrip.dob);
+        assertEquals("+919876543210", roundTrip.phone);
+        assertEquals("EV-5T9X1B", roundTrip.eveId);
+        assertFalse(org.telegram.messenger.UserConfig.getInstance(0).isClientActivated());
+        assertNotNull(EveSignInFragment.class);
+    }
 }

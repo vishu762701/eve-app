@@ -1,4 +1,5 @@
 import { Env } from '../types';
+import { AssetStorage } from '../storage';
 import { SupabaseStorage } from '../supabase';
 
 /** Run only AFTER the record mutation is confirmed. A cleanup failure must not
@@ -25,7 +26,7 @@ export async function cleanupEmojiMedia(env: Env, paths: string[], requestId?: s
       "SELECT DISTINCT ltrim(storage_key, '/') AS storage_key FROM emoji_items WHERE ltrim(storage_key, '/') IN (SELECT value FROM json_each(?))"
     ).bind(JSON.stringify(candidates)).all<{ storage_key: string }>();
     const keep = new Set((shared.results || []).map(item => item.storage_key));
-    await new SupabaseStorage(env).deleteFiles(candidates.filter(path => !keep.has(path)));
+    await new AssetStorage(env).deleteFiles(candidates.filter(path => !keep.has(path)));
     return true;
   } catch {
     try {

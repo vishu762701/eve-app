@@ -57,6 +57,7 @@ public class EveAdminControlCenterActivity extends BaseFragment {
     private static final int ID_EXAM_GENERATE_NOW = 1103;
     private static final int ID_EXAM_TESTS_MANAGE = 1104;
     private static final int ID_QUESTION_BANK = 1201;
+    private static final int ID_PACK_MANAGER = 1202;
     private static final int ID_STUDENT_MANAGE = 1301;
     private static final int ID_PREMIUM_CONFIG = 1401;
     private static final int ID_PAYMENTS_TRANSACTIONS = 1402;
@@ -200,6 +201,15 @@ public class EveAdminControlCenterActivity extends BaseFragment {
                 items.add(UItem.asShadow("Supports browsing, creating, editing, validating answers, and deleting D1 questions."));
             }
 
+            // C2. EMOJI & STICKER PACK LIBRARY
+            if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_CONTENT)) {
+                items.add(UItem.asHeader("C2. Emoji & Sticker Pack Library"));
+                items.add(UItem.asButton(ID_PACK_MANAGER,
+                        org.telegram.messenger.LocaleController.getString(R.string.EveAdminPackManager),
+                        org.telegram.messenger.LocaleController.getString(R.string.EveAdminPackManagerSubtitle)));
+                items.add(UItem.asShadow("Create packs, import Telegram/Noto packs with rights verification, preview, gate & publish."));
+            }
+
             // D. STUDENT MANAGEMENT
             if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_USERS)) {
                 items.add(UItem.asHeader("D. Student Management"));
@@ -269,6 +279,9 @@ public class EveAdminControlCenterActivity extends BaseFragment {
                 break;
             case ID_QUESTION_BANK:
                 EveAdminDialogs.showQuestionBankPicker(this, repo, getExams());
+                break;
+            case ID_PACK_MANAGER:
+                presentFragment(new org.telegram.ui.eve.media.EveAdminPackManagerFragment());
                 break;
             case ID_STUDENT_MANAGE:
                 EveAdminDialogs.showStudentSearchDialog(this, repo, this::refreshDashboard);
