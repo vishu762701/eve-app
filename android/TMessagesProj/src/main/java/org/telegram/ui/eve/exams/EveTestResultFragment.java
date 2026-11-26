@@ -9,6 +9,8 @@ import android.view.Gravity;
 import android.view.View;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.RadioButton;
+import android.widget.RadioGroup;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
@@ -347,16 +349,39 @@ public class EveTestResultFragment extends BaseFragment {
         LinearLayout box = new LinearLayout(activity);
         box.setOrientation(LinearLayout.VERTICAL);
         int pad = AndroidUtilities.dp(16);
-        box.setPadding(pad, pad, pad, 0);
+        box.setPadding(pad, AndroidUtilities.dp(8), pad, 0);
+
+        RadioGroup reasonGroup = new RadioGroup(activity);
+        reasonGroup.setOrientation(RadioGroup.VERTICAL);
+        for (int i = 0; i < reasons.length; i++) {
+            RadioButton rb = new RadioButton(activity);
+            rb.setId(i + 1);
+            rb.setText(reasons[i]);
+            rb.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
+            if (i == 0) {
+                rb.setChecked(true);
+            }
+            reasonGroup.addView(rb);
+        }
+        reasonGroup.setOnCheckedChangeListener((group, checkedId) -> {
+            int idx = checkedId - 1;
+            if (idx >= 0 && idx < reasons.length) {
+                pickedIdx[0] = idx;
+            }
+        });
+        box.addView(reasonGroup);
 
         EditText commentInput = new EditText(activity);
         commentInput.setHint("Optional details (up to 500 chars)");
-        box.addView(commentInput);
+        commentInput.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
+        box.addView(commentInput, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 8, 0, 0));
+
+        ScrollView scroll = new ScrollView(activity);
+        scroll.addView(box);
 
         new AlertDialog.Builder(activity)
                 .setTitle(LocaleController.getString(R.string.EveReportQuestion))
-                .setSingleChoiceItems(reasons, 0, (d, which) -> pickedIdx[0] = which)
-                .setView(box)
+                .setView(scroll)
                 .setPositiveButton("Submit Report", (d, w) -> {
                     String reason = reasons[pickedIdx[0]];
                     String comment = commentInput.getText() != null ? commentInput.getText().toString().trim() : "";
