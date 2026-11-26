@@ -363,7 +363,7 @@ public class EveAdminPremiumUsersFragment extends BaseFragment {
             @Override
             public void onSuccess(Void data) {
                 if (destroyed) return;
-                repo.invalidateDashboardCache();
+                repo.invalidateCache();
                 BulletinFactory.of(EveAdminPremiumUsersFragment.this)
                         .createSimpleBulletin(R.raw.info, "Extended +" + days + " days").show();
                 reload();
@@ -394,7 +394,7 @@ public class EveAdminPremiumUsersFragment extends BaseFragment {
                 @Override
                 public void onSuccess(Void data) {
                     if (destroyed) return;
-                    repo.invalidateDashboardCache();
+                    repo.invalidateCache();
                     BulletinFactory.of(EveAdminPremiumUsersFragment.this)
                             .createSimpleBulletin(R.raw.info, "Premium access revoked").show();
                     reload();

@@ -544,7 +544,7 @@ public class EveAdminPremiumConfigFragment extends BaseFragment {
                 if (destroyed) return;
                 saving = false;
                 dirty = false;
-                repo.invalidateDashboardCache();
+                repo.invalidateCache();
                 updateSubtitle();
                 updateList();
                 BulletinFactory.of(EveAdminPremiumConfigFragment.this)

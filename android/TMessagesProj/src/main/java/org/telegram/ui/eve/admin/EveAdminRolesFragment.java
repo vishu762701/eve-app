@@ -327,7 +327,7 @@ public class EveAdminRolesFragment extends BaseFragment {
                 @Override
                 public void onSuccess(Void data) {
                     if (destroyed) return;
-                    repo.invalidateDashboardCache();
+                    repo.invalidateCache();
                     BulletinFactory.of(EveAdminRolesFragment.this)
                             .createSimpleBulletin(R.raw.info, existing == null ? "Admin added" : "Rights updated").show();
                     reload();
@@ -364,7 +364,7 @@ public class EveAdminRolesFragment extends BaseFragment {
                 @Override
                 public void onSuccess(Void data) {
                     if (destroyed) return;
-                    repo.invalidateDashboardCache();
+                    repo.invalidateCache();
                     BulletinFactory.of(EveAdminRolesFragment.this)
                             .createSimpleBulletin(R.raw.info, "Admin removed").show();
                     reload();
