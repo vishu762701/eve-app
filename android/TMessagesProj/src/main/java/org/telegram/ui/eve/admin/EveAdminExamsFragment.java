@@ -23,7 +23,6 @@ import org.telegram.ui.Components.UniversalRecyclerView;
 import org.telegram.ui.SettingsActivity;
 import org.telegram.ui.eve.exams.EveExamModels;
 import org.telegram.ui.eve.exams.EveExamTestsFragment;
-import org.telegram.utils.glass.source.GlassSourceRenderNode;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -80,16 +79,6 @@ public class EveAdminExamsFragment extends BaseFragment {
     @Override
     public boolean drawEdgeNavigationBar() {
         return false;
-    }
-
-    @Override
-    public GlassSourceRenderNode getGlassSource() {
-        return getBaseSimpleGlass().getGlassSource();
-    }
-
-    @Override
-    public GlassSourceRenderNode getFrostedGlassSource() {
-        return getBaseSimpleGlass().getFrostedGlassSource();
     }
 
     @Override

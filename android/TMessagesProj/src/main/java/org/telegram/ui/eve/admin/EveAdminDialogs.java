@@ -125,19 +125,15 @@ public final class EveAdminDialogs {
                 Theme.multAlpha(Theme.getColor(Theme.key_dialogTextGray3, rp), 0.10f)));
         publishPicker.setText(formatPublishModeLabel(selectedMode[0]) + "  ▾");
         publishPicker.setOnClickListener(v -> {
-            int checked = 0;
+            String[] displayLabels = new String[modeLabels.length];
             for (int i = 0; i < modeValues.length; i++) {
-                if (modeValues[i].equals(selectedMode[0])) {
-                    checked = i;
-                    break;
-                }
+                displayLabels[i] = (modeValues[i].equals(selectedMode[0]) ? "✓ " : "    ") + modeLabels[i];
             }
             new AlertDialog.Builder(activity, rp)
                     .setTitle("Select Publish Mode")
-                    .setSingleChoiceItems(modeLabels, checked, (dialog, which) -> {
+                    .setItems(displayLabels, (dialog, which) -> {
                         selectedMode[0] = modeValues[which];
                         publishPicker.setText(modeLabels[which] + "  ▾");
-                        dialog.dismiss();
                     })
                     .setNegativeButton("Cancel", null)
                     .show();

@@ -26,7 +26,6 @@ import org.telegram.ui.Components.UniversalAdapter;
 import org.telegram.ui.Components.UniversalRecyclerView;
 import org.telegram.ui.SettingsActivity;
 import org.telegram.ui.eve.exams.EveLeaderboardFragment;
-import org.telegram.utils.glass.source.GlassSourceRenderNode;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -92,16 +91,6 @@ public class EveAdminInsightsAndSystemFragment extends BaseFragment {
     @Override
     public boolean drawEdgeNavigationBar() {
         return false;
-    }
-
-    @Override
-    public GlassSourceRenderNode getGlassSource() {
-        return getBaseSimpleGlass().getGlassSource();
-    }
-
-    @Override
-    public GlassSourceRenderNode getFrostedGlassSource() {
-        return getBaseSimpleGlass().getFrostedGlassSource();
     }
 
     @Override
