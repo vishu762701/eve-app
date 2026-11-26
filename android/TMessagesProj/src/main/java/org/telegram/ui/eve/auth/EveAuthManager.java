@@ -971,7 +971,7 @@ public final class EveAuthManager {
 
             MessagesController mc = MessagesController.getInstance(account);
             mc.putUser(user, true);
-            mc.putUserInfo(userFull, true);
+            mc.putUserFull(userFull);
         } catch (Throwable t) {
             FileLog.e("EveAuthManager: ensureLocalUiUser failed", t);
         }

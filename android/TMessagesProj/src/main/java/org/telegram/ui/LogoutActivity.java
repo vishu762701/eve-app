@@ -201,7 +201,7 @@ public class LogoutActivity extends BaseFragment {
                         MessagesController.getInstance(currentAccount).performLogout(0);
                     }
                     if (LaunchActivity.instance != null && LaunchActivity.instance.getActionBarLayout() != null) {
-                        LaunchActivity.instance.presentFragment(new org.telegram.ui.eve.auth.EveSignInFragment(), true);
+                        LaunchActivity.instance.presentFragment(new org.telegram.ui.eve.auth.EveSignInFragment(), true, false);
                     } else {
                         presentFragment(new org.telegram.ui.eve.auth.EveSignInFragment(), true);
                     }

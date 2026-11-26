@@ -355,7 +355,7 @@ public final class EveBackendClient {
             }
             int code = conn.getResponseCode();
             InputStream stream = (code >= 200 && code < 300) ? conn.getInputStream() : conn.getErrorStream();
-            String bodyText = readStream(stream);
+            String bodyText = UrlConnectionTransport.readStream(stream);
             if (code >= 200 && code < 300) {
                 return new JSONObject(bodyText.isEmpty() ? "{}" : bodyText);
             }
@@ -491,7 +491,9 @@ public final class EveBackendClient {
                 conn.setUseCaches(false);
                 conn.setRequestProperty("Accept", "application/json");
                 conn.setRequestProperty(HEADER_EVE_CLIENT, EVE_CLIENT_VERSION);
-                conn.setRequestProperty("Authorization", "Bearer " + bearerToken);
+                if (bearerToken != null && !bearerToken.trim().isEmpty()) {
+                    conn.setRequestProperty("Authorization", "Bearer " + bearerToken);
+                }
                 if (jsonBody != null) {
                     conn.setDoOutput(true);
                     conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");

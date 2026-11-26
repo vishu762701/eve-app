@@ -7189,6 +7189,12 @@ public class MessagesController extends BaseController implements NotificationCe
         return fullUsers.get(uid);
     }
 
+    public void putUserFull(TLRPC.UserFull userFull) {
+        if (userFull != null) {
+            fullUsers.put(userFull.id, userFull);
+        }
+    }
+
     public TLRPC.ChatFull getChatFull(long chatId) {
         return fullChats.get(chatId);
     }

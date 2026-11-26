@@ -108,9 +108,13 @@ const adminUser = { uid: "admin-1", email: "owner@test.com", displayName: "Owner
 const studentUser = { uid: "student-1", email: "student@test.com", displayName: "Student", isAdmin: false };
 
 function seedOwner(sqlite) {
-  sqlite.prepare("INSERT OR IGNORE INTO admin_users (email, added_at) VALUES (?, ?)").run(adminUser.email, Date.now());
+  const now = Date.now();
+  sqlite.prepare("INSERT OR IGNORE INTO admins (email, created_at) VALUES (?, ?)").run(adminUser.email, now);
+  sqlite
+    .prepare("INSERT OR IGNORE INTO admin_rights (email, rights, custom_title, updated_at) VALUES (?, ?, ?, ?)")
+    .run(adminUser.email, JSON.stringify(["manage_content", "manage_premium"]), "Owner", now);
   sqlite.prepare("INSERT OR IGNORE INTO users (id, email, display_name, created_at) VALUES (?, ?, ?, ?)").run(
-    studentUser.uid, studentUser.email, "Student", Date.now()
+    studentUser.uid, studentUser.email, "Student", now
   );
 }
 
@@ -204,7 +208,12 @@ test("Complete pack lifecycle: create, upload Lottie + WebM, list by type, manif
   assert.equal(lockedAsset.status, 403);
 
   // Grant EVE Premium entitlement -> access restored
-  sqlite.prepare("INSERT INTO premium_entitlements (user_id, is_active, granted_at) VALUES (?, 1, ?)").run(studentUser.uid, Date.now());
+  const now = Date.now();
+  sqlite
+    .prepare(
+      "INSERT INTO premium_entitlements (user_id, plan_id, plan_name, activated_at, is_lifetime, status, created_at, updated_at) VALUES (?, 'pro', 'EVE Premium', ?, 1, 'ACTIVE', ?, ?)"
+    )
+    .run(studentUser.uid, now, now, now);
   const unlockedManifest = await studentApp.request(`/api/emoji/packs/${createdPack.id}/manifest`);
   assert.equal(unlockedManifest.status, 200);
 
