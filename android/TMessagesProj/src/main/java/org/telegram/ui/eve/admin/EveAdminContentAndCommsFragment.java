@@ -99,6 +99,7 @@ public class EveAdminContentAndCommsFragment extends BaseFragment {
                 getResourceProvider(),
                 "Content & Moderation",
                 null,
+                true,
                 this::fillItems,
                 this::onClick,
                 new ActionBar.ActionBarMenuOnItemClick() {

@@ -8,16 +8,16 @@ Read `EVE_PROJECT_STATE.md` for the permanent record and NEXT ACTION. Developmen
 - Existing systems intact: Cloudflare Worker + D1 (+ R2/Supabase storage), Firebase Auth, Firestore, Firebase Functions, and security rules.
 
 ## Done
-- Prior green CI baseline (`fec8e0f`, run `45745958364`, artifact `15084086589`): bilingual `en`/`hi` Exams UI, Exam Player/Results/History/Leaderboard/Announcements, EVE Premium UPI/QR checkout, Admin Control Center, FCM/Telegram notification isolation.
-- Final Completion & Closure Batch: Google Sign-In (`EveSignInFragment`), profile editing (`PUT /api/users/profile`), cloud Emoji & Sticker Pack Library (`0032`, R2/Supabase, `EvePackLibraryFragment`).
-- Admin UI Overhaul & Student Directory Batch:
-  - Removed custom Emoji & Sticker Packs entries from `SettingsActivity` and `EveAdminControlCenterActivity` (while keeping built-in Telegram emoji/sticker engine intact).
-  - Added shared `EveAdminUiChrome` (`SimpleActionBar` + `actionBarFadeView` + rounded `UniversalRecyclerView` sections) across all admin fragments.
-  - Redesigned `EveAdminControlCenterActivity` into 3 clean cards (`Exams & Content`, `Students & Revenue`, `System & Access`); added `EveAdminGeneratedTestsFragment`, `EveAdminStudentsFragment`, and `EveAdminStudentDetailFragment`.
-  - Extended `GET /api/admin/users` safely for `username`, `phone`, `bio`, `photoUrl`, and `@username` search; cleaned `EveAdminExamsFragment`, `EveAdminInsightsAndSystemFragment`, `EveAdminContentAndCommsFragment`, and `EveAdminDialogs`.
+- Prior green CI baseline (`088785df`, run `45852968861`): Google Sign-In, Settings cleanup, `SimpleActionBar` + `EveAdminUiChrome` cards, Student Directory & Detail, Generated Mock Tests, Admin Overhaul.
+- Current UI Polish, Exam Pinning & Admin Restructure Batch:
+  - Dual-mode `EveAdminUiChrome` (`useSectionCards = true` cards for hubs/settings only; `useSectionCards = false` white edge-to-edge lists with hairline dividers for directories).
+  - Exam-scoped Admin hierarchy: `EveAdminExamsFragment` -> `EveAdminExamDetailFragment` -> `EveAdminGeneratedTestsFragment` / `EveAdminQuestionsFragment`; removed redundant `Mock Tests` / `Question Bank` top-level rows from `EveAdminControlCenterActivity`.
+  - Replaced all AlertDialog admin viewers with native screens: `EveAdminPremiumUsersFragment`, `EveAdminPaymentsFragment`, `EveAdminPremiumConfigFragment`, `EveAdminRolesFragment`, `EveAdminAuditLogFragment`.
+  - Removed `EveEmojiStickerPacks` / `EvePackLibraryFragment` from `DialogsActivity` Exams overflow menu while leaving Telegram emoji/sticker engine untouched.
+  - Fixed Exams home swipe: disabled Archive on EVE exam rows, enabled Swipe-to-Pin/Unpin (`GET /api/pins`, `POST /api/pins/:examId/toggle`, `SharedPreferences` cache, pinned-first sorting, smooth snap-back with zero stuck-swipe glitch).
 
 ## Next
-- Verify all GitHub Actions jobs (`backend`, `firebase-functions`, `Telegram Port Integrity`, `Build New Android App`) are green on the latest `main` push, fix any CI issues if found, and test `Eve-debug-apk` on device.
+- Verify all 4 GitHub Actions jobs pass on the latest `main` push, fix any CI issues if found, and validate `Eve-debug-apk` on device.
 
 ## Open decisions
 - Production Worker secrets (`TELEGRAM_BOT_TOKEN`), R2 bucket binding (`EMOJI_BUCKET` in `wrangler.toml`), and D1 migration `0032` deployment happen separately outside automated CI.

@@ -266,7 +266,7 @@ public final class EveAdminDialogs {
                 .show();
     }
 
-    private static void showGeneratePromptDialog(
+    public static void showGeneratePromptDialog(
             BaseFragment fragment,
             EveAdminRepository repo,
             EveAdminModels.AdminExamItem exam,
@@ -455,7 +455,7 @@ public final class EveAdminDialogs {
         repo.runWithAdminToken(cb, token -> repo.postSuccess(cb, repo.fetchQuestions(token, exam.id)));
     }
 
-    private static void showBulkImportQuestionsDialog(
+    public static void showBulkImportQuestionsDialog(
             BaseFragment fragment,
             EveAdminRepository repo,
             EveAdminModels.AdminExamItem exam,
@@ -524,7 +524,7 @@ public final class EveAdminDialogs {
                 .show();
     }
 
-    private static void showQuestionActions(
+    public static void showQuestionActions(
             BaseFragment fragment,
             EveAdminRepository repo,
             EveAdminModels.AdminExamItem exam,
@@ -550,7 +550,7 @@ public final class EveAdminDialogs {
                 .show();
     }
 
-    private static void showEditQuestionDialog(
+    public static void showEditQuestionDialog(
             BaseFragment fragment,
             EveAdminRepository repo,
             EveAdminModels.AdminExamItem exam,

@@ -324,6 +324,50 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     }
 
     private EveExamModels.ExamCatalogResult lastBoundExamCatalogResult;
+    private boolean eveSwipeHandled;
+
+    private void handleEveExamPinSwipe(RecyclerView.ViewHolder viewHolder, DialogCell dialogCell) {
+        if (eveSwipeHandled || viewHolder == null || dialogCell == null) {
+            return;
+        }
+        eveSwipeHandled = true;
+        EveExamModels.ExamSummary targetExam = null;
+        int pos = viewHolder.getAdapterPosition();
+        if (pos >= 0 && viewPages != null && viewPages.length > 0 && viewPages[0] != null && viewPages[0].dialogsAdapter != null) {
+            Object item = viewPages[0].dialogsAdapter.getItem(pos);
+            if (item instanceof EveExamModels.ExamSummary) {
+                targetExam = (EveExamModels.ExamSummary) item;
+            }
+        }
+        if (targetExam == null) {
+            long dialogId = dialogCell.getDialogId();
+            for (EveExamModels.ExamSummary candidate : getFilteredEveExams()) {
+                if (EveExamDialogsMapper.stableDialogIdForExam(candidate.id) == dialogId) {
+                    targetExam = candidate;
+                    break;
+                }
+            }
+        }
+        if (targetExam == null) {
+            return;
+        }
+        final boolean targetPin = !targetExam.isPinned;
+        dialogCell.setEveSwipePinMode(true, targetPin);
+        EveExamRepository.getInstance().togglePinExam(targetExam.id, (isPinnedNow, errorMessage) -> {
+            if (errorMessage != null && !errorMessage.isEmpty()) {
+                if (BulletinFactory.canShowBulletin(DialogsActivity.this)) {
+                    BulletinFactory.of(DialogsActivity.this).createErrorBulletin(errorMessage).show();
+                }
+                return;
+            }
+            if (BulletinFactory.canShowBulletin(DialogsActivity.this)) {
+                BulletinFactory.of(DialogsActivity.this).createSimpleBulletin(
+                        isPinnedNow ? R.raw.ic_pin : R.raw.ic_unpin,
+                        isPinnedNow ? "Exam pinned" : "Exam unpinned"
+                ).show();
+            }
+        });
+    }
 
     @Override
     public void onExamCatalogUpdated(EveExamModels.ExamCatalogResult result) {
@@ -2230,7 +2274,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                             if (viewHolder.itemView instanceof DialogCell) {
                                 DialogCell dialogCell = (DialogCell) viewHolder.itemView;
                                 long dialogId = dialogCell.getDialogId();
-                                if (DialogObject.isFolderDialogId(dialogId)) {
+                                if (isEveExamsMode()) {
+                                    handleEveExamPinSwipe(viewHolder, dialogCell);
+                                } else if (DialogObject.isFolderDialogId(dialogId)) {
                                     toggleArchiveHidden(false, dialogCell);
                                 } else {
                                     TLRPC.Dialog dialog = getMessagesController().dialogs_dict.get(dialogId);
@@ -2456,6 +2502,22 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             }
             if (!onlySelect && parentPage.isDefaultDialogType() && slidingView == null && viewHolder.itemView instanceof DialogCell) {
                 DialogCell dialogCell = (DialogCell) viewHolder.itemView;
+                if (isEveExamsMode()) {
+                    if (actionBar.isActionModeShowed(null) || !allowSwipeDuringCurrentTouch || rightSlidingDialogContainer.hasFragment()) {
+                        return 0;
+                    }
+                    int pos = viewHolder.getAdapterPosition();
+                    Object item = pos >= 0 ? parentPage.dialogsAdapter.getItem(pos) : null;
+                    if (!(item instanceof EveExamModels.ExamSummary)) {
+                        return 0;
+                    }
+                    EveExamModels.ExamSummary exam = (EveExamModels.ExamSummary) item;
+                    dialogCell.setEveSwipePinMode(true, exam.isPinned);
+                    swipeFolderBack = false;
+                    swipingFolder = true;
+                    dialogCell.setSliding(true);
+                    return makeMovementFlags(0, ItemTouchHelper.LEFT);
+                }
                 long dialogId = dialogCell.getDialogId();
                 if (actionBar.isActionModeShowed(null)) {
                     TLRPC.Dialog dialog = getMessagesController().dialogs_dict.get(dialogId);
@@ -2538,6 +2600,21 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         public void onSwiped(RecyclerView.ViewHolder viewHolder, int direction) {
             if (viewHolder != null) {
                 DialogCell dialogCell = (DialogCell) viewHolder.itemView;
+                if (isEveExamsMode()) {
+                    swipeFolderBack = true;
+                    swipingFolder = false;
+                    slidingView = null;
+                    dialogCell.swipeCanceled = true;
+                    dialogCell.setSliding(false);
+                    dialogCell.setTranslationX(0f);
+                    dialogCell.resetPinnedArchiveState();
+                    int pos = viewHolder.getAdapterPosition();
+                    handleEveExamPinSwipe(viewHolder, dialogCell);
+                    if (pos >= 0 && parentPage.dialogsAdapter != null) {
+                        parentPage.dialogsAdapter.notifyItemChanged(pos);
+                    }
+                    return;
+                }
                 long dialogId = dialogCell.getDialogId();
                 if (DialogObject.isFolderDialogId(dialogId)) {
                     parentPage.listView.toggleArchiveHidden(false, dialogCell);
@@ -2685,6 +2762,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         public void onSelectedChanged(RecyclerView.ViewHolder viewHolder, int actionState) {
             if (viewHolder != null) {
                 parentPage.listView.hideSelector(false);
+                eveSwipeHandled = false;
             }
             currentItemViewHolder = viewHolder;
             if (viewHolder != null && viewHolder.itemView instanceof DialogCell) {
@@ -13015,9 +13093,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             });
             io.add(R.drawable.msg_notifications, getString(R.string.EveAnnouncements), () -> {
                 presentFragment(new org.telegram.ui.eve.exams.EveAnnouncementsFragment());
-            });
-            io.add(R.drawable.msg_sticker, getString(R.string.EveEmojiStickerPacks), () -> {
-                presentFragment(new org.telegram.ui.eve.media.EvePackLibraryFragment());
             });
             io.add(R.drawable.msg_settings_old, getString(R.string.Settings), () -> {
                 presentFragment(new SettingsActivity());

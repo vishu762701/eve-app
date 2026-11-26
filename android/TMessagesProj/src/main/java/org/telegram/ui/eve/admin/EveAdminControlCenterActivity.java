@@ -25,12 +25,10 @@ import org.telegram.ui.eve.auth.EveAuthManager;
 import org.telegram.ui.eve.auth.EveUserProfile;
 
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 import java.util.Locale;
 
 /**
- * EVE Admin Control Center organized into clean Telegram Settings cards.
+ * EVE Admin Control Center organized into 3 clean Telegram Settings cards.
  */
 public class EveAdminControlCenterActivity extends BaseFragment {
 
@@ -40,8 +38,6 @@ public class EveAdminControlCenterActivity extends BaseFragment {
     private static final int ID_ADMIN_SIGN_IN = 1002;
 
     private static final int ID_MOD_EXAMS = 1101;
-    private static final int ID_MOD_MOCK_TESTS = 1102;
-    private static final int ID_MOD_QUESTIONS = 1201;
     private static final int ID_MOD_CONTENT_COMMS = 1601;
 
     private static final int ID_MOD_STUDENTS = 1301;
@@ -117,6 +113,7 @@ public class EveAdminControlCenterActivity extends BaseFragment {
                 getResourceProvider(),
                 LocaleController.getString(R.string.EveAdminControlCenter),
                 initialSubtitle,
+                true,
                 this::fillItems,
                 this::onClick,
                 new ActionBar.ActionBarMenuOnItemClick() {
@@ -271,14 +268,14 @@ public class EveAdminControlCenterActivity extends BaseFragment {
 
         // Card 1: Exams & Content
         boolean canExams = EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_EXAMS)
-                || EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_SYLLABUS);
-        boolean canTests = EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_GENERATED_TESTS);
-        boolean canQuestions = EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_QUESTIONS);
+                || EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_SYLLABUS)
+                || EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_GENERATED_TESTS)
+                || EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_QUESTIONS);
         boolean canContent = EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_CONTENT)
                 || EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_SEND_BROADCASTS)
                 || EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MODERATE_FEEDBACK);
 
-        if (canExams || canTests || canQuestions || canContent) {
+        if (canExams || canContent) {
             items.add(UItem.asHeader("Exams & Content"));
             if (canExams) {
                 items.add(SettingsActivity.SettingCell.Factory.of(
@@ -288,24 +285,6 @@ public class EveAdminControlCenterActivity extends BaseFragment {
                         "Exams & Syllabus",
                         snapshot.publishedExams + " live • " + snapshot.draftExams + " paused",
                         String.valueOf(snapshot.totalExams)));
-            }
-            if (canTests) {
-                items.add(SettingsActivity.SettingCell.Factory.of(
-                        ID_MOD_MOCK_TESTS,
-                        IconBackgroundColors.PURPLE.top, IconBackgroundColors.PURPLE.bottom,
-                        R.drawable.msg_add,
-                        "Mock Tests",
-                        snapshot.liveTests + " live • " + snapshot.draftTests + " draft",
-                        String.valueOf(snapshot.totalTests)));
-            }
-            if (canQuestions) {
-                items.add(SettingsActivity.SettingCell.Factory.of(
-                        ID_MOD_QUESTIONS,
-                        IconBackgroundColors.BLUE.top, IconBackgroundColors.BLUE.bottom,
-                        R.drawable.msg_edit,
-                        "Question Bank",
-                        "Add, edit & import questions",
-                        null));
             }
             if (canContent) {
                 items.add(SettingsActivity.SettingCell.Factory.of(
@@ -404,12 +383,6 @@ public class EveAdminControlCenterActivity extends BaseFragment {
             case ID_MOD_EXAMS:
                 presentFragment(new EveAdminExamsFragment());
                 break;
-            case ID_MOD_MOCK_TESTS:
-                presentFragment(new EveAdminGeneratedTestsFragment());
-                break;
-            case ID_MOD_QUESTIONS:
-                EveAdminDialogs.showQuestionBankPicker(this, repo, getExams());
-                break;
             case ID_MOD_CONTENT_COMMS:
                 presentFragment(new EveAdminContentAndCommsFragment(profile));
                 break;
@@ -417,22 +390,22 @@ public class EveAdminControlCenterActivity extends BaseFragment {
                 presentFragment(new EveAdminStudentsFragment());
                 break;
             case ID_MOD_PAYMENTS:
-                EveAdminDialogs.showTransactionsDialog(this, repo);
+                presentFragment(new EveAdminPaymentsFragment());
                 break;
             case ID_MOD_PREMIUM:
-                EveAdminDialogs.showPricingAndUpiDialog(this, repo, this::refreshDashboard);
+                presentFragment(new EveAdminPremiumConfigFragment());
                 break;
             case ID_MOD_PREMIUM_USERS:
-                EveAdminDialogs.showPremiumUsersDialog(this, repo, this::refreshDashboard);
+                presentFragment(new EveAdminPremiumUsersFragment());
                 break;
             case ID_MOD_INSIGHTS_SYSTEM:
                 presentFragment(new EveAdminInsightsAndSystemFragment(profile));
                 break;
             case ID_MOD_ADMINS:
-                EveAdminDialogs.showAdminsManager(this, repo, this::refreshDashboard);
+                presentFragment(new EveAdminRolesFragment());
                 break;
             case ID_MOD_AUDIT:
-                EveAdminDialogs.showAuditLogDialog(this, repo);
+                presentFragment(new EveAdminAuditLogFragment());
                 break;
         }
     }
@@ -454,9 +427,5 @@ public class EveAdminControlCenterActivity extends BaseFragment {
                         .createErrorBulletin(message).show();
             }
         });
-    }
-
-    private List<EveAdminModels.AdminExamItem> getExams() {
-        return snapshot != null ? snapshot.exams : Collections.emptyList();
     }
 }

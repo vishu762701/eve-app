@@ -107,6 +107,7 @@ public class EveAdminInsightsAndSystemFragment extends BaseFragment {
                 getResourceProvider(),
                 "Analytics & Health",
                 null,
+                true,
                 this::fillItems,
                 this::onClick,
                 new ActionBar.ActionBarMenuOnItemClick() {

@@ -135,6 +135,7 @@ public class EveAdminStudentDetailFragment extends BaseFragment {
                 getResourceProvider(),
                 "Student Profile",
                 null,
+                true,
                 this::fillItems,
                 this::onClick,
                 new ActionBar.ActionBarMenuOnItemClick() {

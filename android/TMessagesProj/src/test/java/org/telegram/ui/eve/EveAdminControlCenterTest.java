@@ -294,4 +294,30 @@ public class EveAdminControlCenterTest {
             assertEquals(1, authRejectedCalls.size());
         }
     }
+
+    @Test
+    public void restructuredAdminScreensAndChromeHelpers_existAndFormatCleanly() throws Exception {
+        assertEquals("Exam Created", org.telegram.ui.eve.admin.EveAdminUiChrome.formatActionTitle("EXAM_CREATED"));
+        assertEquals("Manage Admins Rights", org.telegram.ui.eve.admin.EveAdminUiChrome.formatActionTitle("manage_admins_rights"));
+
+        String[] classes = new String[] {
+                "org.telegram.ui.eve.admin.EveAdminControlCenterActivity",
+                "org.telegram.ui.eve.admin.EveAdminExamsFragment",
+                "org.telegram.ui.eve.admin.EveAdminExamDetailFragment",
+                "org.telegram.ui.eve.admin.EveAdminGeneratedTestsFragment",
+                "org.telegram.ui.eve.admin.EveAdminQuestionsFragment",
+                "org.telegram.ui.eve.admin.EveAdminStudentsFragment",
+                "org.telegram.ui.eve.admin.EveAdminStudentDetailFragment",
+                "org.telegram.ui.eve.admin.EveAdminContentAndCommsFragment",
+                "org.telegram.ui.eve.admin.EveAdminInsightsAndSystemFragment",
+                "org.telegram.ui.eve.admin.EveAdminPremiumUsersFragment",
+                "org.telegram.ui.eve.admin.EveAdminPaymentsFragment",
+                "org.telegram.ui.eve.admin.EveAdminPremiumConfigFragment",
+                "org.telegram.ui.eve.admin.EveAdminRolesFragment",
+                "org.telegram.ui.eve.admin.EveAdminAuditLogFragment"
+        };
+        for (String name : classes) {
+            assertNotNull(Class.forName(name));
+        }
+    }
 }

@@ -16,6 +16,24 @@ public final class EveExamDialogsMapper {
     private EveExamDialogsMapper() {
     }
 
+    public static List<EveExamModels.ExamSummary> sortExamsByPin(List<EveExamModels.ExamSummary> source) {
+        List<EveExamModels.ExamSummary> out = new ArrayList<>();
+        if (source == null || source.isEmpty()) {
+            return out;
+        }
+        for (EveExamModels.ExamSummary exam : source) {
+            if (exam != null && exam.isPinned) {
+                out.add(exam);
+            }
+        }
+        for (EveExamModels.ExamSummary exam : source) {
+            if (exam != null && !exam.isPinned) {
+                out.add(exam);
+            }
+        }
+        return out;
+    }
+
     public static List<EveExamModels.ExamSummary> filterExams(
             List<EveExamModels.ExamSummary> source,
             String query) {
@@ -23,23 +41,23 @@ public final class EveExamDialogsMapper {
             return new ArrayList<>();
         }
         String normalized = query == null ? "" : query.trim().toLowerCase(Locale.US);
-        List<EveExamModels.ExamSummary> out = new ArrayList<>();
+        List<EveExamModels.ExamSummary> matched = new ArrayList<>();
         for (EveExamModels.ExamSummary exam : source) {
             if (exam == null || exam.isPaused()) {
                 continue;
             }
             if (normalized.isEmpty()) {
-                out.add(exam);
+                matched.add(exam);
                 continue;
             }
             if (containsIgnoreCase(exam.examName, normalized)
                     || containsIgnoreCase(exam.category, normalized)
                     || containsIgnoreCase(exam.nextTestLabel, normalized)
                     || containsIgnoreCase(exam.testNumber, normalized)) {
-                out.add(exam);
+                matched.add(exam);
             }
         }
-        return out;
+        return sortExamsByPin(matched);
     }
 
     private static boolean containsIgnoreCase(String value, String needleLower) {
@@ -86,7 +104,7 @@ public final class EveExamDialogsMapper {
         custom.date = exam.latestTestTimestampSec;
         custom.type = 1;
         custom.verified = exam.liveTestCount > 0;
-        custom.pinned = false;
+        custom.pinned = exam.isPinned;
         custom.muted = false;
         custom.isMedia = false;
         custom.sent = -1;

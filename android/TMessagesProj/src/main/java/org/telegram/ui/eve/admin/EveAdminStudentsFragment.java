@@ -123,6 +123,7 @@ public class EveAdminStudentsFragment extends BaseFragment {
                 getResourceProvider(),
                 "Students",
                 "Loading directory...",
+                false,
                 this::fillItems,
                 this::onClick,
                 new ActionBar.ActionBarMenuOnItemClick() {

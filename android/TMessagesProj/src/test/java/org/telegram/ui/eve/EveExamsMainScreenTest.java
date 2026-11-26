@@ -26,6 +26,7 @@ import org.telegram.ui.eve.exams.EveExamDialogsMapper;
 import org.telegram.ui.eve.exams.EveExamModels;
 import org.telegram.ui.eve.exams.EveExamRepository;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -143,5 +144,48 @@ public class EveExamsMainScreenTest {
                 EveExamModels.LoadState.ERROR, "", "HTTP 503");
         assertEquals(R.string.EveExamsErrorTitle, error.titleRes);
         assertEquals("HTTP 503", error.errorPrefix);
+    }
+
+    @Test
+    public void pinnedExams_sortFirstMapCustomDialogAndBindPinRoutes() throws Exception {
+        JSONArray exams = new JSONArray("["
+                + "{\"id\":\"ex-a\",\"examName\":\"Alpha Exam\",\"timeLimitMinutes\":60,\"category\":\"SSC\",\"questionCount\":50,\"publishMode\":\"live\",\"parentExamId\":\"\"},"
+                + "{\"id\":\"ex-b\",\"examName\":\"Beta Exam\",\"timeLimitMinutes\":60,\"category\":\"UPSC\",\"questionCount\":50,\"publishMode\":\"live\",\"parentExamId\":\"\"},"
+                + "{\"id\":\"ex-c\",\"examName\":\"Charlie Exam\",\"timeLimitMinutes\":60,\"category\":\"RRB\",\"questionCount\":50,\"publishMode\":\"live\",\"parentExamId\":\"\"}"
+                + "]");
+        JSONArray tests = new JSONArray("[]");
+
+        List<EveExamModels.ExamSummary> parsed = EveExamRepository.parseExamCatalog(
+                exams, tests, Collections.singleton("ex-c"));
+        assertEquals(3, parsed.size());
+        assertEquals("ex-c", parsed.get(0).id);
+        assertTrue(parsed.get(0).isPinned);
+        assertEquals("ex-a", parsed.get(1).id);
+        assertFalse(parsed.get(1).isPinned);
+        assertEquals("ex-b", parsed.get(2).id);
+        assertFalse(parsed.get(2).isPinned);
+
+        DialogCell.CustomDialog pinnedDialog = EveExamDialogsMapper.toCustomDialog(parsed.get(0));
+        DialogCell.CustomDialog regularDialog = EveExamDialogsMapper.toCustomDialog(parsed.get(1));
+        assertTrue(pinnedDialog.pinned);
+        assertFalse(regularDialog.pinned);
+
+        List<EveExamModels.ExamSummary> filtered = EveExamDialogsMapper.filterExams(parsed, "exam");
+        assertEquals("ex-c", filtered.get(0).id);
+
+        EveBackendClient client = new EveBackendClient("https://eve-backend.anyqueairdrop.workers.dev", (method, url, token, body) -> {
+            assertEquals("jwt-1", token);
+            if ("GET".equals(method) && url.endsWith("/api/pins")) {
+                return new EveBackendClient.HttpResponse(200, "{\"success\":true,\"data\":[\"ex-c\"]}");
+            }
+            if ("POST".equals(method) && url.endsWith("/api/pins/ex-b/toggle")) {
+                return new EveBackendClient.HttpResponse(200, "{\"success\":true,\"data\":{\"isPinned\":true}}");
+            }
+            return new EveBackendClient.HttpResponse(404, "{}");
+        });
+        JSONArray pins = client.fetchPinnedExamIdsJson("jwt-1");
+        assertEquals(1, pins.length());
+        assertEquals("ex-c", pins.getString(0));
+        assertTrue(client.toggleExamPin("jwt-1", "ex-b"));
     }
 }

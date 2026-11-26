@@ -1067,6 +1067,7 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
                     cell.setChecked(selectedDialogs.contains(cell.getDialogId()), oldDialogId == cell.getDialogId());
                 } else {
                     DialogCell cell = (DialogCell) holder.itemView;
+                    cell.setEveSwipePinMode(false, false);
                     cell.isHiddenInCommunity = communityId != 0 && ChatObject.isHiddenInCommunity(currentAccount, dialog.id);
                     cell.useSeparator = false; // nextDialog != null;
                     cell.fullSeparator = false; // dialog.pinned && nextDialog != null && !nextDialog.pinned;
@@ -1115,7 +1116,11 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
                 cell.fullSeparator = false;
                 cell.setCustomMessage(null);
                 if (item instanceof EveExamModels.ExamSummary) {
-                    cell.setDialog(EveExamDialogsMapper.toCustomDialog((EveExamModels.ExamSummary) item));
+                    EveExamModels.ExamSummary exam = (EveExamModels.ExamSummary) item;
+                    cell.setDialog(EveExamDialogsMapper.toCustomDialog(exam));
+                    cell.setEveSwipePinMode(true, exam.isPinned);
+                } else {
+                    cell.setEveSwipePinMode(false, false);
                 }
                 cell.checkHeight();
                 if (cell.collapsed != collapsedView) {

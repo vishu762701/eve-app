@@ -34,6 +34,7 @@ public final class EveExamModels {
         public final int liveTestCount;
         public final String nextTestLabel;
         public final int latestTestTimestampSec;
+        public final boolean isPinned;
 
         public ExamSummary(
                 String id,
@@ -49,6 +50,26 @@ public final class EveExamModels {
                 int liveTestCount,
                 String nextTestLabel,
                 int latestTestTimestampSec) {
+            this(id, examName, timeLimitMinutes, category, questionCount, testNumber,
+                    negativeMarkingText, parentExamId, publishMode, lastGenerationTimeMs,
+                    liveTestCount, nextTestLabel, latestTestTimestampSec, false);
+        }
+
+        public ExamSummary(
+                String id,
+                String examName,
+                int timeLimitMinutes,
+                String category,
+                int questionCount,
+                String testNumber,
+                String negativeMarkingText,
+                String parentExamId,
+                String publishMode,
+                long lastGenerationTimeMs,
+                int liveTestCount,
+                String nextTestLabel,
+                int latestTestTimestampSec,
+                boolean isPinned) {
             this.id = id != null ? id : "";
             this.examName = examName != null ? examName : "";
             this.timeLimitMinutes = timeLimitMinutes;
@@ -62,6 +83,14 @@ public final class EveExamModels {
             this.liveTestCount = Math.max(0, liveTestCount);
             this.nextTestLabel = nextTestLabel != null ? nextTestLabel : "";
             this.latestTestTimestampSec = Math.max(0, latestTestTimestampSec);
+            this.isPinned = isPinned;
+        }
+
+        public ExamSummary withPinned(boolean nextPinned) {
+            return new ExamSummary(
+                    id, examName, timeLimitMinutes, category, questionCount, testNumber,
+                    negativeMarkingText, parentExamId, publishMode, lastGenerationTimeMs,
+                    liveTestCount, nextTestLabel, latestTestTimestampSec, nextPinned);
         }
 
         public boolean isMainExam() {

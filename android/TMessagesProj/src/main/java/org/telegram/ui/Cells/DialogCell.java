@@ -477,6 +477,24 @@ public class DialogCell extends BaseCell implements Theme.Colorable {
     protected int overrideSwipeActionStringId;
     protected RLottieDrawable overrideSwipeActionDrawable;
 
+    public void setEveSwipePinMode(boolean enabled, boolean isPinned) {
+        if (!enabled) {
+            overrideSwipeAction = false;
+            overrideSwipeActionBackgroundColorKey = 0;
+            overrideSwipeActionRevealBackgroundColorKey = 0;
+            overrideSwipeActionStringKey = null;
+            overrideSwipeActionStringId = 0;
+            overrideSwipeActionDrawable = null;
+            return;
+        }
+        overrideSwipeAction = true;
+        overrideSwipeActionBackgroundColorKey = isPinned ? Theme.key_chats_archiveBackground : Theme.key_chats_archivePinBackground;
+        overrideSwipeActionRevealBackgroundColorKey = isPinned ? Theme.key_chats_archivePinBackground : Theme.key_chats_archiveBackground;
+        overrideSwipeActionStringKey = isPinned ? "SwipeUnpin" : "SwipePin";
+        overrideSwipeActionStringId = isPinned ? R.string.SwipeUnpin : R.string.SwipePin;
+        overrideSwipeActionDrawable = isPinned ? Theme.dialogs_swipeUnpinDrawable : Theme.dialogs_swipePinDrawable;
+    }
+
     private int thumbsCount;
     private boolean hasVideoThumb;
     private Paint thumbBackgroundPaint;

@@ -36,7 +36,7 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Full-screen Telegram-native Mock Tests manager for EVE Admin Control Center.
+ * Edge-to-Edge Exam-scoped Mock Tests manager for EVE Admin Control Center.
  */
 public class EveAdminGeneratedTestsFragment extends BaseFragment {
 
@@ -48,6 +48,8 @@ public class EveAdminGeneratedTestsFragment extends BaseFragment {
     private static final int BASE_TEST_ID = 1000;
 
     private final EveAdminRepository repo = EveAdminRepository.getInstance();
+    @Nullable
+    private final EveAdminModels.AdminExamItem scopedExam;
     private UniversalRecyclerView listView;
     private ActionBarMenuItem searchItem;
 
@@ -58,6 +60,14 @@ public class EveAdminGeneratedTestsFragment extends BaseFragment {
     private List<EveAdminModels.AdminExamItem> exams = Collections.emptyList();
     private List<EveAdminModels.AdminGeneratedTestItem> allTests = Collections.emptyList();
     private final List<EveAdminModels.AdminGeneratedTestItem> filteredTests = new ArrayList<>();
+
+    public EveAdminGeneratedTestsFragment() {
+        this(null);
+    }
+
+    public EveAdminGeneratedTestsFragment(@Nullable EveAdminModels.AdminExamItem scopedExam) {
+        this.scopedExam = scopedExam;
+    }
 
     @Override
     public boolean onFragmentCreate() {
@@ -120,7 +130,8 @@ public class EveAdminGeneratedTestsFragment extends BaseFragment {
                 glassEngine,
                 getResourceProvider(),
                 "Mock Tests",
-                allTests.isEmpty() ? "Manage generated tests" : allTests.size() + " tests",
+                scopedExam != null ? scopedExam.examName : "All exams",
+                false,
                 this::fillItems,
                 this::onClick,
                 new ActionBar.ActionBarMenuOnItemClick() {
@@ -129,11 +140,19 @@ public class EveAdminGeneratedTestsFragment extends BaseFragment {
                         if (id == -1) {
                             finishFragment();
                         } else if (id == MENU_ADD) {
-                            EveAdminDialogs.showGenerateTestDialog(
-                                    EveAdminGeneratedTestsFragment.this,
-                                    repo,
-                                    exams,
-                                    EveAdminGeneratedTestsFragment.this::reload);
+                            if (scopedExam != null) {
+                                EveAdminDialogs.showGeneratePromptDialog(
+                                        EveAdminGeneratedTestsFragment.this,
+                                        repo,
+                                        scopedExam,
+                                        EveAdminGeneratedTestsFragment.this::reload);
+                            } else {
+                                EveAdminDialogs.showGenerateTestDialog(
+                                        EveAdminGeneratedTestsFragment.this,
+                                        repo,
+                                        exams,
+                                        EveAdminGeneratedTestsFragment.this::reload);
+                            }
                         } else if (id == MENU_REFRESH) {
                             reload();
                         }
@@ -166,7 +185,7 @@ public class EveAdminGeneratedTestsFragment extends BaseFragment {
                             applyFilter();
                         }
                     });
-            searchItem.setSearchFieldHint("Search tests or exams");
+            searchItem.setSearchFieldHint("Search mock tests");
             menu.addItem(MENU_ADD, R.drawable.msg_add, getResourceProvider());
             menu.addItem(MENU_REFRESH, R.drawable.msg_retry, getResourceProvider());
         }
@@ -220,6 +239,9 @@ public class EveAdminGeneratedTestsFragment extends BaseFragment {
         filteredTests.clear();
         String q = searchQuery != null ? searchQuery.trim().toLowerCase(Locale.US) : "";
         for (EveAdminModels.AdminGeneratedTestItem test : allTests) {
+            if (scopedExam != null && !scopedExam.id.equals(test.examId)) {
+                continue;
+            }
             if (q.isEmpty()
                     || test.title.toLowerCase(Locale.US).contains(q)
                     || test.examName.toLowerCase(Locale.US).contains(q)
@@ -228,10 +250,10 @@ public class EveAdminGeneratedTestsFragment extends BaseFragment {
             }
         }
         if (simpleActionBar != null) {
-            if (q.isEmpty()) {
-                simpleActionBar.setSubtitle(allTests.size() + " tests");
+            if (scopedExam != null) {
+                simpleActionBar.setSubtitle(scopedExam.examName + " • " + filteredTests.size() + " tests");
             } else {
-                simpleActionBar.setSubtitle(filteredTests.size() + " matching");
+                simpleActionBar.setSubtitle(filteredTests.size() + " tests");
             }
         }
         updateList();
@@ -254,7 +276,6 @@ public class EveAdminGeneratedTestsFragment extends BaseFragment {
                     "Retry Loading Tests",
                     errorText,
                     "Retry"));
-            items.add(UItem.asShadow(null));
         }
 
         if (loading && allTests.isEmpty()) {
@@ -265,19 +286,17 @@ public class EveAdminGeneratedTestsFragment extends BaseFragment {
         }
 
         if (filteredTests.isEmpty()) {
-            items.add(UItem.asHeader("Mock Tests"));
             items.add(UItem.asShadow(searchQuery.trim().isEmpty()
                     ? "No mock tests found. Tap + above to generate an AI mock test."
                     : "No mock tests matched \"" + searchQuery.trim() + "\"."));
             return;
         }
 
-        items.add(UItem.asHeader("Mock Tests (" + filteredTests.size() + ")"));
         for (int i = 0; i < filteredTests.size(); i++) {
             EveAdminModels.AdminGeneratedTestItem test = filteredTests.get(i);
             boolean live = test.isLive();
             IconBackgroundColors iconBg = live ? IconBackgroundColors.GREEN : IconBackgroundColors.ORANGE;
-            String examLabel = !test.examName.isEmpty() ? test.examName : "Mock Test";
+            String examLabel = !test.examName.isEmpty() ? test.examName : (scopedExam != null ? scopedExam.examName : "Mock Test");
             String subtitle = examLabel + " • " + test.questionCount + " Qs";
             String badge = live ? "Live" : "Draft";
             items.add(SettingsActivity.SettingCell.Factory.of(
@@ -288,7 +307,6 @@ public class EveAdminGeneratedTestsFragment extends BaseFragment {
                     subtitle,
                     badge));
         }
-        items.add(UItem.asShadow(null));
     }
 
     private void onClick(UItem item, View view, int position, float x, float y) {

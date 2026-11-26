@@ -325,6 +325,27 @@ public final class EveBackendClient {
         return arr != null ? arr : new JSONArray();
     }
 
+    public JSONArray fetchPinnedExamIdsJson(String firebaseIdToken) throws BackendException {
+        String path = "/api/pins";
+        requireToken(firebaseIdToken, path);
+        JSONObject root = executeRootJsonRequest("GET", path, firebaseIdToken, null);
+        JSONArray arr = root.optJSONArray("data");
+        return arr != null ? arr : new JSONArray();
+    }
+
+    public boolean toggleExamPin(String firebaseIdToken, String examId) throws BackendException {
+        String encoded;
+        try {
+            encoded = URLEncoder.encode(examId != null ? examId.trim() : "", "UTF-8").replace("+", "%20");
+        } catch (UnsupportedEncodingException ignored) {
+            encoded = examId != null ? examId.trim() : "";
+        }
+        String path = "/api/pins/" + encoded + "/toggle";
+        requireToken(firebaseIdToken, path);
+        JSONObject data = executeJsonRequest("POST", path, firebaseIdToken, "{}");
+        return data.optBoolean("isPinned", false);
+    }
+
     public JSONObject getJsonRoot(String path, String firebaseIdToken) throws BackendException {
         requireToken(firebaseIdToken, path);
         return executeRootJsonRequest("GET", path, firebaseIdToken, null);

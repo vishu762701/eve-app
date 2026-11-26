@@ -6,29 +6,40 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
+import android.graphics.Paint;
 import android.text.TextUtils;
 import android.util.LruCache;
+import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.FrameLayout;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
+import androidx.recyclerview.widget.RecyclerView;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.FileLog;
+import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.R;
 import org.telegram.messenger.Utilities;
 import org.telegram.ui.ActionBar.ActionBar;
 import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.SimpleActionBar;
 import org.telegram.ui.ActionBar.Theme;
+import org.telegram.ui.Cells.HeaderCell;
+import org.telegram.ui.Cells.ShadowSectionCell;
 import org.telegram.ui.Components.AvatarDrawable;
 import org.telegram.ui.Components.BackupImageView;
+import org.telegram.ui.Components.FlickerLoadingView;
 import org.telegram.ui.Components.LayoutHelper;
+import org.telegram.ui.Components.RecyclerListView;
 import org.telegram.ui.Components.SizeNotifierFrameLayout;
 import org.telegram.ui.Components.UItem;
 import org.telegram.ui.Components.UniversalAdapter;
@@ -42,14 +53,19 @@ import java.net.URL;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Shared Telegram Settings-style glass header + rounded UniversalRecyclerView sections chrome
- * for all EVE Admin Control Center screens.
+ * Shared Telegram Settings-style glass header + UniversalRecyclerView chrome
+ * supporting two explicit layout modes:
+ * <ul>
+ *     <li>{@code useSectionCards = true}: Card / Hub / Settings mode ({@code windowBackgroundGray} + rounded cards)</li>
+ *     <li>{@code useSectionCards = false}: Edge-to-Edge Directory / List mode ({@code windowBackgroundWhite} + hairline dividers)</li>
+ * </ul>
  */
 public final class EveAdminUiChrome {
 
@@ -78,20 +94,32 @@ public final class EveAdminUiChrome {
             @Nullable Theme.ResourcesProvider resourcesProvider,
             @NonNull CharSequence title,
             @Nullable CharSequence subtitle,
+            boolean useSectionCards,
             @NonNull Utilities.Callback2<ArrayList<UItem>, UniversalAdapter> fillItems,
             @Nullable Utilities.Callback5<UItem, View, Integer, Float, Float> onClick,
             @Nullable ActionBar.ActionBarMenuOnItemClick menuClick,
             @Nullable Runnable onUpdateColors) {
 
+        final int bgColorKey = useSectionCards ? Theme.key_windowBackgroundGray : Theme.key_windowBackgroundWhite;
+        final int horizontalPadTop = useSectionCards ? dp(12) : 0;
+
         final Chrome[] holder = new Chrome[1];
         final UniversalRecyclerView listView = new UniversalRecyclerView(fragment, fillItems, onClick, null);
-        listView.setCaptureSectionsDecoratorAllowed(true);
-        if (listView.adapter != null) {
-            listView.adapter.setApplyBackground(false);
+        if (useSectionCards) {
+            listView.setCaptureSectionsDecoratorAllowed(true);
+            if (listView.adapter != null) {
+                listView.adapter.setApplyBackground(false);
+            }
+            listView.setSections();
+            listView.setSectionsDrawBackground(true);
+        } else {
+            listView.setCaptureSectionsDecoratorAllowed(false);
+            if (listView.adapter != null) {
+                listView.adapter.setApplyBackground(true);
+            }
+            listView.addItemDecoration(new EdgeListDividerDecoration(resourcesProvider));
         }
-        listView.setSections();
-        listView.setSectionsDrawBackground(true);
-        BaseFragmentSimpleGlass.setListViewParams(listView, 0, 0, dp(12), 0);
+        BaseFragmentSimpleGlass.setListViewParams(listView, 0, 0, horizontalPadTop, 0);
         listView.setClipToPadding(false);
 
         final View actionBarFadeView = new View(context);
@@ -118,7 +146,7 @@ public final class EveAdminUiChrome {
             public void updateColors() {
                 try {
                     super.updateColors();
-                    setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundGray, resourcesProvider));
+                    setBackgroundColor(Theme.getColor(bgColorKey, resourcesProvider));
                     if (simpleActionBar != null) {
                         simpleActionBar.updateColors();
                     }
@@ -131,7 +159,7 @@ public final class EveAdminUiChrome {
                 }
             }
         };
-        contentView.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundGray, resourcesProvider));
+        contentView.setBackgroundColor(Theme.getColor(bgColorKey, resourcesProvider));
 
         contentView.addView(listView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.FILL));
         contentView.addView(actionBarFadeView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 0, Gravity.TOP));
@@ -158,7 +186,7 @@ public final class EveAdminUiChrome {
             final Insets systemInsets = AndroidUtilities.getDefaultWindowInsets(insets, false);
             chrome.navigationBarHeight = systemInsets.bottom;
             updateActionBarFadeHeight(actionBarFadeView, systemInsets.top);
-            BaseFragmentSimpleGlass.setListViewParams(listView, systemInsets.top, systemInsets.bottom, dp(12), 0);
+            BaseFragmentSimpleGlass.setListViewParams(listView, systemInsets.top, systemInsets.bottom, horizontalPadTop, 0);
             return WindowInsetsCompat.CONSUMED;
         });
 
@@ -181,6 +209,44 @@ public final class EveAdminUiChrome {
         }
     }
 
+    private static final class EdgeListDividerDecoration extends RecyclerView.ItemDecoration {
+        private final Theme.ResourcesProvider resourcesProvider;
+
+        EdgeListDividerDecoration(@Nullable Theme.ResourcesProvider resourcesProvider) {
+            this.resourcesProvider = resourcesProvider;
+        }
+
+        @Override
+        public void onDrawOver(@NonNull Canvas canvas, @NonNull RecyclerView parent, @NonNull RecyclerView.State state) {
+            Paint paint = resourcesProvider != null ? resourcesProvider.getPaint(Theme.key_paint_divider) : Theme.dividerPaint;
+            if (paint == null) {
+                paint = Theme.dividerPaint;
+            }
+            if (paint == null) {
+                return;
+            }
+            int childCount = parent.getChildCount();
+            int startX = dp(LocaleController.isRTL ? 0 : 18);
+            int endX = parent.getWidth() - dp(LocaleController.isRTL ? 18 : 0);
+            for (int i = 0; i < childCount - 1; i++) {
+                View child = parent.getChildAt(i);
+                View next = parent.getChildAt(i + 1);
+                if (isNonRowDecorator(child) || isNonRowDecorator(next)) {
+                    continue;
+                }
+                int y = Math.round(child.getBottom() + child.getTranslationY());
+                canvas.drawLine(startX, y, endX, y, paint);
+            }
+        }
+
+        private static boolean isNonRowDecorator(View view) {
+            return view instanceof HeaderCell
+                    || view instanceof ShadowSectionCell
+                    || view instanceof FlickerLoadingView
+                    || view.getHeight() <= dp(20);
+        }
+    }
+
     private static final LruCache<String, Bitmap> AVATAR_CACHE = new LruCache<>(64);
     private static final ExecutorService AVATAR_EXECUTOR = Executors.newFixedThreadPool(2);
 
@@ -189,17 +255,28 @@ public final class EveAdminUiChrome {
             @NonNull AvatarDrawable avatarDrawable,
             @NonNull EveAdminModels.AdminStudentItem student,
             int sizeDp) {
-        String name = !TextUtils.isEmpty(student.displayName) ? student.displayName : "Student";
+        bindAvatar(avatarView, avatarDrawable, student.id, student.displayName, student.photoUrl, sizeDp);
+    }
+
+    public static void bindAvatar(
+            @NonNull BackupImageView avatarView,
+            @NonNull AvatarDrawable avatarDrawable,
+            @Nullable String seedKey,
+            @Nullable String displayName,
+            @Nullable String photoUrl,
+            int sizeDp) {
+        String name = !TextUtils.isEmpty(displayName) ? displayName : "User";
         String[] parts = name.trim().split("\\s+", 2);
-        String first = parts.length > 0 ? parts[0] : "S";
+        String first = parts.length > 0 ? parts[0] : "U";
         String last = parts.length > 1 ? parts[1] : "";
-        long colorSeed = !TextUtils.isEmpty(student.id) ? student.id.hashCode() : name.hashCode();
+        String effectiveSeed = !TextUtils.isEmpty(seedKey) ? seedKey : name;
+        long colorSeed = effectiveSeed.hashCode();
         avatarDrawable.setInfo(colorSeed, first, last);
         avatarView.setRoundRadius(dp(sizeDp / 2f));
         avatarView.setImageDrawable(avatarDrawable);
 
-        String url = student.photoUrl != null ? student.photoUrl.trim() : "";
-        String tag = student.id + "|" + url;
+        String url = photoUrl != null ? photoUrl.trim() : "";
+        String tag = effectiveSeed + "|" + url;
         avatarView.setTag(tag);
 
         if (!(url.startsWith("https://") || url.startsWith("http://"))) {
@@ -257,5 +334,199 @@ public final class EveAdminUiChrome {
             return "-";
         }
         return new SimpleDateFormat("dd MMM yyyy", Locale.US).format(new Date(epochMs));
+    }
+
+    public static String formatActionTitle(String rawType) {
+        if (rawType == null || rawType.trim().isEmpty()) {
+            return "Admin Action";
+        }
+        String[] parts = rawType.trim().toLowerCase(Locale.US).split("_+");
+        StringBuilder out = new StringBuilder();
+        for (String p : parts) {
+            if (p.isEmpty()) continue;
+            if (out.length() > 0) out.append(' ');
+            out.append(Character.toUpperCase(p.charAt(0))).append(p.substring(1));
+        }
+        return out.length() > 0 ? out.toString() : "Admin Action";
+    }
+
+    /**
+     * Reusable Telegram-native 44dp circular avatar list row for user/subscriber/admin directories.
+     */
+    public static final class AvatarRowCell extends FrameLayout implements Theme.Colorable {
+
+        public static final int BADGE_NEUTRAL = 0;
+        public static final int BADGE_RED = 1;
+        public static final int BADGE_GREEN = 2;
+        public static final int BADGE_PURPLE = 3;
+        public static final int BADGE_BLUE = 4;
+
+        private final Theme.ResourcesProvider resourcesProvider;
+        private final AvatarDrawable avatarDrawable;
+        private final BackupImageView avatarView;
+        private final TextView titleView;
+        private final TextView subtitleView;
+        private final TextView badgeView;
+        private int badgeStyle = BADGE_NEUTRAL;
+
+        public AvatarRowCell(Context context, Theme.ResourcesProvider resourcesProvider) {
+            super(context);
+            this.resourcesProvider = resourcesProvider;
+
+            avatarDrawable = new AvatarDrawable();
+            avatarView = new BackupImageView(context);
+            avatarView.setRoundRadius(dp(22));
+
+            LinearLayout textColumn = new LinearLayout(context);
+            textColumn.setOrientation(LinearLayout.VERTICAL);
+
+            titleView = new TextView(context);
+            titleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16);
+            titleView.setTypeface(AndroidUtilities.bold());
+            titleView.setSingleLine(true);
+            titleView.setEllipsize(TextUtils.TruncateAt.END);
+            textColumn.addView(titleView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+
+            subtitleView = new TextView(context);
+            subtitleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
+            subtitleView.setSingleLine(true);
+            subtitleView.setEllipsize(TextUtils.TruncateAt.END);
+            textColumn.addView(subtitleView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 2, 0, 0));
+
+            badgeView = new TextView(context);
+            badgeView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12);
+            badgeView.setTypeface(AndroidUtilities.bold());
+            badgeView.setSingleLine(true);
+            badgeView.setPadding(dp(8), dp(3), dp(8), dp(3));
+
+            LinearLayout row = new LinearLayout(context);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            if (LocaleController.isRTL) {
+                row.addView(badgeView, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_VERTICAL, 14, 0, 8, 0));
+                row.addView(textColumn, LayoutHelper.createLinear(0, LayoutHelper.WRAP_CONTENT, 1f, Gravity.CENTER_VERTICAL, 12, 0, 12, 0));
+                row.addView(avatarView, LayoutHelper.createLinear(44, 44, Gravity.CENTER_VERTICAL, 0, 0, 16, 0));
+            } else {
+                row.addView(avatarView, LayoutHelper.createLinear(44, 44, Gravity.CENTER_VERTICAL, 16, 0, 12, 0));
+                row.addView(textColumn, LayoutHelper.createLinear(0, LayoutHelper.WRAP_CONTENT, 1f, Gravity.CENTER_VERTICAL, 0, 0, 8, 0));
+                row.addView(badgeView, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_VERTICAL, 0, 0, 16, 0));
+            }
+
+            addView(row, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_VERTICAL, 0, 10, 0, 10));
+            updateColors();
+        }
+
+        public void bind(String seed, CharSequence title, CharSequence subtitle, String photoUrl, CharSequence badge, int style) {
+            this.badgeStyle = style;
+            bindAvatar(avatarView, avatarDrawable, seed, title != null ? title.toString() : "", photoUrl, 44);
+            titleView.setText(title);
+            subtitleView.setVisibility(TextUtils.isEmpty(subtitle) ? View.GONE : View.VISIBLE);
+            subtitleView.setText(subtitle);
+            badgeView.setVisibility(TextUtils.isEmpty(badge) ? View.GONE : View.VISIBLE);
+            badgeView.setText(badge);
+            updateColors();
+        }
+
+        @Override
+        public void updateColors() {
+            titleView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
+            subtitleView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, resourcesProvider));
+            int badgeColor;
+            if (badgeStyle == BADGE_RED) {
+                badgeColor = Theme.getColor(Theme.key_text_RedRegular, resourcesProvider);
+            } else if (badgeStyle == BADGE_GREEN) {
+                badgeColor = 0xFF27B434;
+            } else if (badgeStyle == BADGE_PURPLE) {
+                badgeColor = 0xFF9F55DF;
+            } else if (badgeStyle == BADGE_BLUE) {
+                badgeColor = Theme.getColor(Theme.key_windowBackgroundWhiteBlueText, resourcesProvider);
+            } else {
+                badgeColor = Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, resourcesProvider);
+            }
+            badgeView.setTextColor(badgeColor);
+            badgeView.setBackground(Theme.createRoundRectDrawable(dp(10), Theme.multAlpha(badgeColor, 0.12f)));
+        }
+
+        @Override
+        public void addColorKeys(HashSet<Integer> colors) {
+            colors.add(Theme.key_windowBackgroundWhiteBlackText);
+            colors.add(Theme.key_windowBackgroundWhiteGrayText);
+            colors.add(Theme.key_text_RedRegular);
+            colors.add(Theme.key_windowBackgroundWhiteBlueText);
+        }
+
+        @Override
+        protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+            super.onMeasure(
+                    MeasureSpec.makeMeasureSpec(MeasureSpec.getSize(widthMeasureSpec), MeasureSpec.EXACTLY),
+                    MeasureSpec.makeMeasureSpec(dp(64), MeasureSpec.EXACTLY));
+        }
+
+        public static final class Payload {
+            public final String seed;
+            public final String title;
+            public final String subtitle;
+            public final String photoUrl;
+            public final String badge;
+            public final int badgeStyle;
+
+            public Payload(String seed, String title, String subtitle, String photoUrl, String badge, int badgeStyle) {
+                this.seed = seed != null ? seed : "";
+                this.title = title != null ? title : "";
+                this.subtitle = subtitle != null ? subtitle : "";
+                this.photoUrl = photoUrl != null ? photoUrl : "";
+                this.badge = badge != null ? badge : "";
+                this.badgeStyle = badgeStyle;
+            }
+        }
+
+        public static final class Factory extends UItem.UItemFactory<AvatarRowCell> {
+            static {
+                setup(new Factory());
+            }
+
+            @Override
+            public AvatarRowCell createView(Context context, RecyclerListView listView, int currentAccount, int classGuid, Theme.ResourcesProvider resourcesProvider) {
+                return new AvatarRowCell(context, resourcesProvider);
+            }
+
+            @Override
+            public void bindView(View view, UItem item, boolean divider, UniversalAdapter adapter, UniversalRecyclerView listView) {
+                if (item.object2 instanceof Payload) {
+                    Payload p = (Payload) item.object2;
+                    ((AvatarRowCell) view).bind(p.seed, p.title, p.subtitle, p.photoUrl, p.badge, p.badgeStyle);
+                }
+            }
+
+            @Override
+            public boolean equals(UItem a, UItem b) {
+                if (a.object2 instanceof Payload && b.object2 instanceof Payload) {
+                    return TextUtils.equals(((Payload) a.object2).seed, ((Payload) b.object2).seed) && a.id == b.id;
+                }
+                return a.id == b.id;
+            }
+
+            @Override
+            public boolean contentsEquals(UItem a, UItem b) {
+                if (a.object2 instanceof Payload && b.object2 instanceof Payload) {
+                    Payload pa = (Payload) a.object2;
+                    Payload pb = (Payload) b.object2;
+                    return pa.badgeStyle == pb.badgeStyle
+                            && TextUtils.equals(pa.title, pb.title)
+                            && TextUtils.equals(pa.subtitle, pb.subtitle)
+                            && TextUtils.equals(pa.photoUrl, pb.photoUrl)
+                            && TextUtils.equals(pa.badge, pb.badge);
+                }
+                return Objects.equals(a.object2, b.object2);
+            }
+
+            public static UItem of(int id, Object tagObject, Payload payload) {
+                UItem item = UItem.ofFactory(Factory.class);
+                item.id = id;
+                item.object = tagObject;
+                item.object2 = payload;
+                return item;
+            }
+        }
     }
 }

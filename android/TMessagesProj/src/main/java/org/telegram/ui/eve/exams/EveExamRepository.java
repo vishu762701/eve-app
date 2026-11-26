@@ -21,8 +21,10 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -57,6 +59,7 @@ public final class EveExamRepository {
     private static final String PREFS_CACHE = "eve_exam_catalog_cache";
     private static final String KEY_EXAMS_JSON = "exams_json";
     private static final String KEY_TESTS_JSON = "tests_json";
+    private static final String KEY_PINS_JSON = "pinned_exam_ids_json";
     private static final String KEY_CACHED_AT = "cached_at_ms";
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -67,6 +70,7 @@ public final class EveExamRepository {
 
     private volatile EveExamModels.ExamCatalogResult currentResult =
             new EveExamModels.ExamCatalogResult(EveExamModels.LoadState.LOADING, Collections.emptyList(), "");
+    private volatile Set<String> pinnedExamIds = Collections.emptySet();
     private volatile long lastSuccessLoadMs;
 
     private EveExamRepository() {
@@ -79,12 +83,16 @@ public final class EveExamRepository {
             Context ctx = ApplicationLoader.applicationContext;
             if (ctx == null) return;
             SharedPreferences prefs = ctx.getSharedPreferences(PREFS_CACHE, Context.MODE_PRIVATE);
+            String pinsRaw = prefs.getString(KEY_PINS_JSON, "[]");
+            if (pinsRaw != null && !pinsRaw.trim().isEmpty()) {
+                pinnedExamIds = parsePinnedIds(new JSONArray(pinsRaw));
+            }
             String examsRaw = prefs.getString(KEY_EXAMS_JSON, "");
             if (examsRaw == null || examsRaw.trim().isEmpty()) return;
             JSONArray examsArr = new JSONArray(examsRaw);
             String testsRaw = prefs.getString(KEY_TESTS_JSON, "[]");
             JSONArray testsArr = (testsRaw != null && !testsRaw.trim().isEmpty()) ? new JSONArray(testsRaw) : new JSONArray();
-            List<EveExamModels.ExamSummary> parsed = parseExamCatalog(examsArr, testsArr);
+            List<EveExamModels.ExamSummary> parsed = parseExamCatalog(examsArr, testsArr, pinnedExamIds);
             if (!parsed.isEmpty()) {
                 currentResult = new EveExamModels.ExamCatalogResult(EveExamModels.LoadState.LOADED, parsed, "");
             }
@@ -92,15 +100,30 @@ public final class EveExamRepository {
         }
     }
 
-    private void saveDiskCache(JSONArray examsJson, JSONArray testsJson) {
+    private void saveDiskCache(JSONArray examsJson, JSONArray testsJson, Set<String> pins) {
         try {
             Context ctx = ApplicationLoader.applicationContext;
             if (ctx == null || examsJson == null) return;
-            ctx.getSharedPreferences(PREFS_CACHE, Context.MODE_PRIVATE)
+            SharedPreferences.Editor editor = ctx.getSharedPreferences(PREFS_CACHE, Context.MODE_PRIVATE)
                     .edit()
                     .putString(KEY_EXAMS_JSON, examsJson.toString())
                     .putString(KEY_TESTS_JSON, testsJson != null ? testsJson.toString() : "[]")
-                    .putLong(KEY_CACHED_AT, System.currentTimeMillis())
+                    .putLong(KEY_CACHED_AT, System.currentTimeMillis());
+            if (pins != null) {
+                editor.putString(KEY_PINS_JSON, new JSONArray(pins).toString());
+            }
+            editor.apply();
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private void savePinnedIdsCache(Set<String> pins) {
+        try {
+            Context ctx = ApplicationLoader.applicationContext;
+            if (ctx == null) return;
+            ctx.getSharedPreferences(PREFS_CACHE, Context.MODE_PRIVATE)
+                    .edit()
+                    .putString(KEY_PINS_JSON, new JSONArray(pins != null ? pins : Collections.emptySet()).toString())
                     .apply();
         } catch (Throwable ignored) {
         }
@@ -213,14 +236,29 @@ public final class EveExamRepository {
                                     return null;
                                 }
                             });
+                            Future<Set<String>> pinsFuture = ioExecutor.submit(() -> {
+                                try {
+                                    return parsePinnedIds(backendClient.fetchPinnedExamIdsJson(token));
+                                } catch (Exception ignored) {
+                                    return null;
+                                }
+                            });
                             JSONArray examsJson = backendClient.fetchExamsJson(token);
                             JSONArray testsJson = null;
                             try {
                                 testsJson = testsFuture.get();
                             } catch (Exception ignored) {
                             }
-                            saveDiskCache(examsJson, testsJson);
-                            List<EveExamModels.ExamSummary> parsed = parseExamCatalog(examsJson, testsJson);
+                            Set<String> fetchedPins = null;
+                            try {
+                                fetchedPins = pinsFuture.get();
+                            } catch (Exception ignored) {
+                            }
+                            if (fetchedPins != null) {
+                                pinnedExamIds = fetchedPins;
+                            }
+                            saveDiskCache(examsJson, testsJson, pinnedExamIds);
+                            List<EveExamModels.ExamSummary> parsed = parseExamCatalog(examsJson, testsJson, pinnedExamIds);
                             lastSuccessLoadMs = System.currentTimeMillis();
                             EveExamModels.LoadState state = parsed.isEmpty()
                                     ? EveExamModels.LoadState.EMPTY
@@ -743,7 +781,85 @@ public final class EveExamRepository {
         return (v2 != null && !"null".equalsIgnoreCase(v2.trim())) ? v2 : "";
     }
 
+    public void togglePinExam(String examId, ApiCallback<Boolean> callback) {
+        String normalizedId = examId != null ? examId.trim() : "";
+        if (normalizedId.isEmpty()) {
+            postComplete(callback, false, "Invalid exam.");
+            return;
+        }
+        final Set<String> previousPins = new HashSet<>(pinnedExamIds);
+        final boolean wasPinned = previousPins.contains(normalizedId);
+        final boolean optimisticPinned = !wasPinned;
+
+        Set<String> nextPins = new HashSet<>(previousPins);
+        if (optimisticPinned) {
+            nextPins.add(normalizedId);
+        } else {
+            nextPins.remove(normalizedId);
+        }
+        applyPinnedIdsAndNotify(nextPins);
+
+        withFreshToken(new ApiCallback<Boolean>() {
+            @Override
+            public void onComplete(Boolean data, String errorMessage) {
+                if (errorMessage != null && !errorMessage.isEmpty()) {
+                    applyPinnedIdsAndNotify(previousPins);
+                    postComplete(callback, wasPinned, errorMessage);
+                    return;
+                }
+                postComplete(callback, data != null ? data : optimisticPinned, "");
+            }
+        }, token -> {
+            boolean serverPinned = backendClient.toggleExamPin(token, normalizedId);
+            Set<String> syncedPins = new HashSet<>(pinnedExamIds);
+            if (serverPinned) {
+                syncedPins.add(normalizedId);
+            } else {
+                syncedPins.remove(normalizedId);
+            }
+            applyPinnedIdsAndNotify(syncedPins);
+            postComplete(callback, serverPinned, "");
+        });
+    }
+
+    private void applyPinnedIdsAndNotify(Set<String> pins) {
+        Set<String> copy = pins != null ? Collections.unmodifiableSet(new HashSet<>(pins)) : Collections.emptySet();
+        pinnedExamIds = copy;
+        savePinnedIdsCache(copy);
+        EveExamModels.ExamCatalogResult prev = currentResult;
+        if (prev != null && !prev.exams.isEmpty()) {
+            List<EveExamModels.ExamSummary> baseSorted = new ArrayList<>(prev.exams.size());
+            for (EveExamModels.ExamSummary ex : prev.exams) {
+                baseSorted.add(ex.withPinned(copy.contains(ex.id)));
+            }
+            Collections.sort(baseSorted, Comparator.comparing(e -> e.examName.toLowerCase()));
+            List<EveExamModels.ExamSummary> reordered = EveExamDialogsMapper.sortExamsByPin(baseSorted);
+            publishResult(new EveExamModels.ExamCatalogResult(prev.state, reordered, prev.errorMessage));
+        }
+    }
+
+    private static Set<String> parsePinnedIds(JSONArray arr) {
+        Set<String> out = new HashSet<>();
+        if (arr == null) {
+            return out;
+        }
+        for (int i = 0; i < arr.length(); i++) {
+            String id = arr.optString(i, "").trim();
+            if (!id.isEmpty()) {
+                out.add(id);
+            }
+        }
+        return out;
+    }
+
     public static List<EveExamModels.ExamSummary> parseExamCatalog(JSONArray examsJson, JSONArray testsJson) {
+        return parseExamCatalog(examsJson, testsJson, Collections.emptySet());
+    }
+
+    public static List<EveExamModels.ExamSummary> parseExamCatalog(
+            JSONArray examsJson,
+            JSONArray testsJson,
+            Set<String> pinnedIds) {
         Map<String, Integer> liveCountByExam = new HashMap<>();
         Map<String, EveExamModels.GeneratedTestSummary> latestLiveByExam = new HashMap<>();
 
@@ -800,14 +916,15 @@ public final class EveExamRepository {
                     lastGenTimeMs,
                     liveCount,
                     nextLabel,
-                    dateSec
+                    dateSec,
+                    pinnedIds != null && pinnedIds.contains(id)
             );
             if (summary.isMainExam()) {
                 list.add(summary);
             }
         }
         Collections.sort(list, Comparator.comparing(e -> e.examName.toLowerCase()));
-        return list;
+        return EveExamDialogsMapper.sortExamsByPin(list);
     }
 
     public static List<EveExamModels.GeneratedTestSummary> parseGeneratedTests(JSONArray arr) {
