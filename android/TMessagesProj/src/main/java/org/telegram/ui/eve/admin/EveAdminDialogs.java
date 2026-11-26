@@ -152,17 +152,6 @@ public final class EveAdminDialogs {
                     });
                 })
                 .setNegativeButton("Cancel", null)
-                .setNeutralButton("AI Format Explanation", (d, w) -> {
-                    String qText = text(qInput);
-                    String exp = text(expInput);
-                    if (qText.isEmpty()) {
-                        showError(fragment, "Enter question text first.");
-                        return;
-                    }
-                    EveAdminRepository.ResultCallback<String> cb = callback(fragment, formatted ->
-                            showTextDialog(activity, "AI Formatted Explanation", formatted));
-                    repo.runWithAdminToken(cb, token -> repo.postSuccess(cb, repo.reformatExplanation(token, qText, exp)));
-                })
                 .show();
     }
 
@@ -186,17 +175,6 @@ public final class EveAdminDialogs {
                 .setTitle("Select Exam to Generate Mock Test")
                 .setItems(labels, (d, which) -> showGeneratePromptDialog(fragment, repo, exams.get(which), onGenerated))
                 .setNegativeButton("Cancel", null)
-                .setNeutralButton("AI Format Explanation", (d, w) -> {
-                    String qText = text(qInput);
-                    String exp = text(expInput);
-                    if (qText.isEmpty()) {
-                        showError(fragment, "Enter question text first.");
-                        return;
-                    }
-                    EveAdminRepository.ResultCallback<String> cb = callback(fragment, formatted ->
-                            showTextDialog(activity, "AI Formatted Explanation", formatted));
-                    repo.runWithAdminToken(cb, token -> repo.postSuccess(cb, repo.reformatExplanation(token, qText, exp)));
-                })
                 .show();
     }
 
@@ -233,17 +211,6 @@ public final class EveAdminDialogs {
                     });
                 })
                 .setNegativeButton("Cancel", null)
-                .setNeutralButton("AI Format Explanation", (d, w) -> {
-                    String qText = text(qInput);
-                    String exp = text(expInput);
-                    if (qText.isEmpty()) {
-                        showError(fragment, "Enter question text first.");
-                        return;
-                    }
-                    EveAdminRepository.ResultCallback<String> cb = callback(fragment, formatted ->
-                            showTextDialog(activity, "AI Formatted Explanation", formatted));
-                    repo.runWithAdminToken(cb, token -> repo.postSuccess(cb, repo.reformatExplanation(token, qText, exp)));
-                })
                 .show();
     }
 
@@ -344,17 +311,6 @@ public final class EveAdminDialogs {
                     });
                 })
                 .setNegativeButton("Cancel", null)
-                .setNeutralButton("AI Format Explanation", (d, w) -> {
-                    String qText = text(qInput);
-                    String exp = text(expInput);
-                    if (qText.isEmpty()) {
-                        showError(fragment, "Enter question text first.");
-                        return;
-                    }
-                    EveAdminRepository.ResultCallback<String> cb = callback(fragment, formatted ->
-                            showTextDialog(activity, "AI Formatted Explanation", formatted));
-                    repo.runWithAdminToken(cb, token -> repo.postSuccess(cb, repo.reformatExplanation(token, qText, exp)));
-                })
                 .show();
     }
 
@@ -376,17 +332,6 @@ public final class EveAdminDialogs {
                 .setTitle("Question Bank — Pick Exam")
                 .setItems(labels, (d, which) -> loadAndShowExamQuestions(fragment, repo, exams.get(which)))
                 .setNegativeButton("Cancel", null)
-                .setNeutralButton("AI Format Explanation", (d, w) -> {
-                    String qText = text(qInput);
-                    String exp = text(expInput);
-                    if (qText.isEmpty()) {
-                        showError(fragment, "Enter question text first.");
-                        return;
-                    }
-                    EveAdminRepository.ResultCallback<String> cb = callback(fragment, formatted ->
-                            showTextDialog(activity, "AI Formatted Explanation", formatted));
-                    repo.runWithAdminToken(cb, token -> repo.postSuccess(cb, repo.reformatExplanation(token, qText, exp)));
-                })
                 .show();
     }
 
@@ -488,17 +433,6 @@ public final class EveAdminDialogs {
                     });
                 })
                 .setNegativeButton("Cancel", null)
-                .setNeutralButton("AI Format Explanation", (d, w) -> {
-                    String qText = text(qInput);
-                    String exp = text(expInput);
-                    if (qText.isEmpty()) {
-                        showError(fragment, "Enter question text first.");
-                        return;
-                    }
-                    EveAdminRepository.ResultCallback<String> cb = callback(fragment, formatted ->
-                            showTextDialog(activity, "AI Formatted Explanation", formatted));
-                    repo.runWithAdminToken(cb, token -> repo.postSuccess(cb, repo.reformatExplanation(token, qText, exp)));
-                })
                 .show();
     }
 
@@ -601,17 +535,6 @@ public final class EveAdminDialogs {
                 .setView(wrapScroll(activity, container))
                 .setPositiveButton("Search", (d, w) -> loadStudents(fragment, repo, text(queryInput), onMutated))
                 .setNegativeButton("Cancel", null)
-                .setNeutralButton("AI Format Explanation", (d, w) -> {
-                    String qText = text(qInput);
-                    String exp = text(expInput);
-                    if (qText.isEmpty()) {
-                        showError(fragment, "Enter question text first.");
-                        return;
-                    }
-                    EveAdminRepository.ResultCallback<String> cb = callback(fragment, formatted ->
-                            showTextDialog(activity, "AI Formatted Explanation", formatted));
-                    repo.runWithAdminToken(cb, token -> repo.postSuccess(cb, repo.reformatExplanation(token, qText, exp)));
-                })
                 .show();
     }
 
@@ -699,17 +622,6 @@ public final class EveAdminDialogs {
                     }
                 })
                 .setNegativeButton("Cancel", null)
-                .setNeutralButton("AI Format Explanation", (d, w) -> {
-                    String qText = text(qInput);
-                    String exp = text(expInput);
-                    if (qText.isEmpty()) {
-                        showError(fragment, "Enter question text first.");
-                        return;
-                    }
-                    EveAdminRepository.ResultCallback<String> cb = callback(fragment, formatted ->
-                            showTextDialog(activity, "AI Formatted Explanation", formatted));
-                    repo.runWithAdminToken(cb, token -> repo.postSuccess(cb, repo.reformatExplanation(token, qText, exp)));
-                })
                 .show();
     }
 
@@ -946,53 +858,6 @@ public final class EveAdminDialogs {
             });
         }
         builder.show();
-    }
-
-    public static void showDuplicateExamDialog(
-            BaseFragment fragment,
-            EveAdminRepository repo,
-            EveAdminModels.AdminExamItem source,
-            Runnable onSaved) {
-        if (source == null) return;
-        Activity activity = fragment.getParentActivity();
-        if (activity == null) return;
-        LinearLayout container = makeFormContainer(activity);
-        EditText nameInput = addField(activity, container, "New Exam Name", source.examName + " (Copy)", InputType.TYPE_CLASS_TEXT);
-        EditText categoryInput = addField(activity, container, "Category", source.category, InputType.TYPE_CLASS_TEXT);
-        EditText publishInput = addField(activity, container, "Publish Mode (paused | live | inherit)", "paused", InputType.TYPE_CLASS_TEXT);
-        new AlertDialog.Builder(activity)
-                .setTitle("Duplicate Exam")
-                .setView(wrapScroll(activity, container))
-                .setPositiveButton("Create Copy", (d, w) -> {
-                    String name = text(nameInput);
-                    if (name.isEmpty()) {
-                        showError(fragment, "Exam name cannot be empty.");
-                        return;
-                    }
-                    EveAdminRepository.ResultCallback<String> cb = callback(fragment, msg -> {
-                        showInfo(fragment, msg);
-                        if (onSaved != null) onSaved.run();
-                    });
-                    repo.runWithAdminToken(cb, token -> {
-                        String copyId = repo.createExam(token, name, textOr(categoryInput, source.category),
-                                source.timeLimitMinutes, source.questionCount, source.testNumber,
-                                source.negativeMarkingText, normalizePublishMode(text(publishInput)), source.generationPrompt);
-                        repo.postSuccess(cb, "Duplicated exam (" + copyId + ").");
-                    });
-                })
-                .setNegativeButton("Cancel", null)
-                .setNeutralButton("AI Format Explanation", (d, w) -> {
-                    String qText = text(qInput);
-                    String exp = text(expInput);
-                    if (qText.isEmpty()) {
-                        showError(fragment, "Enter question text first.");
-                        return;
-                    }
-                    EveAdminRepository.ResultCallback<String> cb = callback(fragment, formatted ->
-                            showTextDialog(activity, "AI Formatted Explanation", formatted));
-                    repo.runWithAdminToken(cb, token -> repo.postSuccess(cb, repo.reformatExplanation(token, qText, exp)));
-                })
-                .show();
     }
 
     public static void showAuditLogDialog(BaseFragment fragment, EveAdminRepository repo) {
