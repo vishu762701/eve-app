@@ -27,6 +27,12 @@ monitoringRoutes.get('/health', async (c) => {
     firestore: { status: 'unavailable', detail: 'No authorized Firestore probe is configured in the Worker' },
     messaging: { status: 'unavailable', detail: 'FCM delivery is not tested by this read-only check' },
     media: { status: c.env.SUPABASE_PROJECT_URL && c.env.SUPABASE_BUCKET_NAME && c.env.SUPABASE_SERVICE_ROLE_KEY ? 'configured' : 'unconfigured', detail: 'Media binding configuration only; storage access is not tested' },
+    r2: {
+      status: c.env.EMOJI_BUCKET ? 'configured' : 'unconfigured',
+      detail: c.env.EMOJI_BUCKET
+        ? 'Cloudflare R2 EMOJI_BUCKET binding configured for emoji/sticker assets'
+        : 'R2 EMOJI_BUCKET not bound in wrangler.toml; Supabase Storage fallback active',
+    },
     ai: { status: getGeminiApiKeys(c.env).length ? 'configured' : 'unconfigured', detail: 'Configuration check only; use the existing AI connection test to verify provider access' },
   };
   if (c.env.DB) {

@@ -298,6 +298,11 @@ public final class EveBackendClient {
         executeRootJsonRequest("PUT", "/api/users/profile", firebaseIdToken, updates != null ? updates.toString() : "{}");
     }
 
+    public void deleteAccount(String firebaseIdToken) throws BackendException {
+        requireToken(firebaseIdToken, "/api/users/account");
+        executeRootJsonRequest("DELETE", "/api/users/account", firebaseIdToken, null);
+    }
+
     public JSONArray fetchExamsJson(String firebaseIdToken) throws BackendException {
         requireToken(firebaseIdToken, "/api/exams");
         JSONObject root = executeRootJsonRequest("GET", "/api/exams", firebaseIdToken, null);

@@ -47,13 +47,13 @@ public class EveBrandIdentityTest {
         assertEquals("Get Started", appContext.getString(R.string.StartMessaging));
 
         String page1Message = appContext.getString(R.string.Page1Message);
-        assertTrue(page1Message.contains("EVE"));
-        assertTrue(page1Message.contains("Telegram API"));
-        assertTrue(page1Message.toLowerCase().contains("not an official telegram"));
+        assertTrue(page1Message.toLowerCase().contains("independent"));
+        assertFalse(page1Message.contains("Telegram API"));
+        assertFalse(page1Message.toLowerCase().contains("not an official telegram"));
 
         String disclosure = appContext.getString(R.string.EveThirdPartyApiDisclosure);
-        assertTrue(disclosure.contains("Telegram API"));
-        assertTrue(disclosure.toLowerCase().contains("not an official telegram"));
+        assertFalse(disclosure.contains("Telegram API"));
+        assertTrue(disclosure.toLowerCase().contains("independent"));
 
         String version = appContext.getString(R.string.TelegramVersion, "v1.0 (1)");
         assertTrue(version.startsWith("EVE for Android"));

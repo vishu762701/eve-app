@@ -53,7 +53,7 @@ public final class EveAdminDialogs {
         EditText minutesInput = addField(activity, container, "Time Limit (minutes 1-600)", String.valueOf(existing != null ? existing.timeLimitMinutes : 60), InputType.TYPE_CLASS_NUMBER);
         EditText countInput = addField(activity, container, "Questions Per Test (1-200)", String.valueOf(existing != null ? existing.questionCount : 25), InputType.TYPE_CLASS_NUMBER);
         EditText negInput = addField(activity, container, "Negative Marking (0, 1/3, 1/4, 0.25)", existing != null ? existing.negativeMarkingText : "0.25", InputType.TYPE_CLASS_TEXT);
-        EditText publishInput = addField(activity, container, "Publish Mode (inherit | live | paused)", existing != null ? existing.publishMode : "live", InputType.TYPE_CLASS_TEXT);
+        EditText publishInput = addField(activity, container, "Publish Mode (inherit | live | paused | archived)", existing != null ? existing.publishMode : "live", InputType.TYPE_CLASS_TEXT);
         EditText promptInput = existing == null
                 ? addField(activity, container, "AI Generation Prompt Notes (optional)", "", InputType.TYPE_CLASS_TEXT)
                 : null;
@@ -119,6 +119,53 @@ public final class EveAdminDialogs {
         builder.show();
     }
 
+    public static void showDuplicateExamDialog(
+            BaseFragment fragment,
+            EveAdminRepository repo,
+            EveAdminModels.AdminExamItem source,
+            Runnable onSaved) {
+        if (source == null) return;
+        Activity activity = fragment.getParentActivity();
+        if (activity == null) return;
+        LinearLayout container = makeFormContainer(activity);
+        EditText nameInput = addField(activity, container, "New Exam Name", source.examName + " (Copy)", InputType.TYPE_CLASS_TEXT);
+        EditText categoryInput = addField(activity, container, "Category", source.category, InputType.TYPE_CLASS_TEXT);
+        EditText publishInput = addField(activity, container, "Publish Mode (paused | live | inherit)", "paused", InputType.TYPE_CLASS_TEXT);
+        new AlertDialog.Builder(activity)
+                .setTitle("Duplicate Exam")
+                .setView(wrapScroll(activity, container))
+                .setPositiveButton("Create Copy", (d, w) -> {
+                    String name = text(nameInput);
+                    if (name.isEmpty()) {
+                        showError(fragment, "Exam name cannot be empty.");
+                        return;
+                    }
+                    EveAdminRepository.ResultCallback<String> cb = callback(fragment, msg -> {
+                        showInfo(fragment, msg);
+                        if (onSaved != null) onSaved.run();
+                    });
+                    repo.runWithAdminToken(cb, token -> {
+                        String copyId = repo.createExam(token, name, textOr(categoryInput, source.category),
+                                source.timeLimitMinutes, source.questionCount, source.testNumber,
+                                source.negativeMarkingText, normalizePublishMode(text(publishInput)), source.generationPrompt);
+                        repo.postSuccess(cb, "Duplicated exam (" + copyId + ").");
+                    });
+                })
+                .setNegativeButton("Cancel", null)
+                .setNeutralButton("AI Format Explanation", (d, w) -> {
+                    String qText = text(qInput);
+                    String exp = text(expInput);
+                    if (qText.isEmpty()) {
+                        showError(fragment, "Enter question text first.");
+                        return;
+                    }
+                    EveAdminRepository.ResultCallback<String> cb = callback(fragment, formatted ->
+                            showTextDialog(activity, "AI Formatted Explanation", formatted));
+                    repo.runWithAdminToken(cb, token -> repo.postSuccess(cb, repo.reformatExplanation(token, qText, exp)));
+                })
+                .show();
+    }
+
     public static void showGenerateTestDialog(
             BaseFragment fragment,
             EveAdminRepository repo,
@@ -139,6 +186,17 @@ public final class EveAdminDialogs {
                 .setTitle("Select Exam to Generate Mock Test")
                 .setItems(labels, (d, which) -> showGeneratePromptDialog(fragment, repo, exams.get(which), onGenerated))
                 .setNegativeButton("Cancel", null)
+                .setNeutralButton("AI Format Explanation", (d, w) -> {
+                    String qText = text(qInput);
+                    String exp = text(expInput);
+                    if (qText.isEmpty()) {
+                        showError(fragment, "Enter question text first.");
+                        return;
+                    }
+                    EveAdminRepository.ResultCallback<String> cb = callback(fragment, formatted ->
+                            showTextDialog(activity, "AI Formatted Explanation", formatted));
+                    repo.runWithAdminToken(cb, token -> repo.postSuccess(cb, repo.reformatExplanation(token, qText, exp)));
+                })
                 .show();
     }
 
@@ -175,6 +233,17 @@ public final class EveAdminDialogs {
                     });
                 })
                 .setNegativeButton("Cancel", null)
+                .setNeutralButton("AI Format Explanation", (d, w) -> {
+                    String qText = text(qInput);
+                    String exp = text(expInput);
+                    if (qText.isEmpty()) {
+                        showError(fragment, "Enter question text first.");
+                        return;
+                    }
+                    EveAdminRepository.ResultCallback<String> cb = callback(fragment, formatted ->
+                            showTextDialog(activity, "AI Formatted Explanation", formatted));
+                    repo.runWithAdminToken(cb, token -> repo.postSuccess(cb, repo.reformatExplanation(token, qText, exp)));
+                })
                 .show();
     }
 
@@ -275,6 +344,17 @@ public final class EveAdminDialogs {
                     });
                 })
                 .setNegativeButton("Cancel", null)
+                .setNeutralButton("AI Format Explanation", (d, w) -> {
+                    String qText = text(qInput);
+                    String exp = text(expInput);
+                    if (qText.isEmpty()) {
+                        showError(fragment, "Enter question text first.");
+                        return;
+                    }
+                    EveAdminRepository.ResultCallback<String> cb = callback(fragment, formatted ->
+                            showTextDialog(activity, "AI Formatted Explanation", formatted));
+                    repo.runWithAdminToken(cb, token -> repo.postSuccess(cb, repo.reformatExplanation(token, qText, exp)));
+                })
                 .show();
     }
 
@@ -296,6 +376,17 @@ public final class EveAdminDialogs {
                 .setTitle("Question Bank — Pick Exam")
                 .setItems(labels, (d, which) -> loadAndShowExamQuestions(fragment, repo, exams.get(which)))
                 .setNegativeButton("Cancel", null)
+                .setNeutralButton("AI Format Explanation", (d, w) -> {
+                    String qText = text(qInput);
+                    String exp = text(expInput);
+                    if (qText.isEmpty()) {
+                        showError(fragment, "Enter question text first.");
+                        return;
+                    }
+                    EveAdminRepository.ResultCallback<String> cb = callback(fragment, formatted ->
+                            showTextDialog(activity, "AI Formatted Explanation", formatted));
+                    repo.runWithAdminToken(cb, token -> repo.postSuccess(cb, repo.reformatExplanation(token, qText, exp)));
+                })
                 .show();
     }
 
@@ -370,11 +461,44 @@ public final class EveAdminDialogs {
                         if (onImported != null) onImported.run();
                     });
                     repo.runWithAdminToken(cb, token -> {
-                        int count = repo.batchImportQuestions(token, parsed);
-                        repo.postSuccess(cb, "Imported " + count + " questions.");
+                        List<EveAdminModels.AdminQuestionItem> existing = repo.fetchQuestions(token, exam.id);
+                        java.util.Set<String> seenTexts = new java.util.HashSet<>();
+                        for (EveAdminModels.AdminQuestionItem ex : existing) {
+                            seenTexts.add(ex.questionText.trim().toLowerCase(Locale.US));
+                        }
+                        org.json.JSONArray deduped = new org.json.JSONArray();
+                        int skipped = 0;
+                        for (int i = 0; i < parsed.length(); i++) {
+                            JSONObject q = parsed.optJSONObject(i);
+                            if (q == null) continue;
+                            String qt = q.optString("questionText", "").trim().toLowerCase(Locale.US);
+                            if (qt.isEmpty() || seenTexts.contains(qt)) {
+                                skipped++;
+                                continue;
+                            }
+                            seenTexts.add(qt);
+                            deduped.put(q);
+                        }
+                        if (deduped.length() == 0) {
+                            repo.postSuccess(cb, "All " + skipped + " questions were empty or duplicates.");
+                            return;
+                        }
+                        int count = repo.batchImportQuestions(token, deduped);
+                        repo.postSuccess(cb, "Imported " + count + " questions" + (skipped > 0 ? " (" + skipped + " duplicates skipped)." : "."));
                     });
                 })
                 .setNegativeButton("Cancel", null)
+                .setNeutralButton("AI Format Explanation", (d, w) -> {
+                    String qText = text(qInput);
+                    String exp = text(expInput);
+                    if (qText.isEmpty()) {
+                        showError(fragment, "Enter question text first.");
+                        return;
+                    }
+                    EveAdminRepository.ResultCallback<String> cb = callback(fragment, formatted ->
+                            showTextDialog(activity, "AI Formatted Explanation", formatted));
+                    repo.runWithAdminToken(cb, token -> repo.postSuccess(cb, repo.reformatExplanation(token, qText, exp)));
+                })
                 .show();
     }
 
@@ -453,6 +577,17 @@ public final class EveAdminDialogs {
                     });
                 })
                 .setNegativeButton("Cancel", null)
+                .setNeutralButton("AI Format Explanation", (d, w) -> {
+                    String qText = text(qInput);
+                    String exp = text(expInput);
+                    if (qText.isEmpty()) {
+                        showError(fragment, "Enter question text first.");
+                        return;
+                    }
+                    EveAdminRepository.ResultCallback<String> cb = callback(fragment, formatted ->
+                            showTextDialog(activity, "AI Formatted Explanation", formatted));
+                    repo.runWithAdminToken(cb, token -> repo.postSuccess(cb, repo.reformatExplanation(token, qText, exp)));
+                })
                 .show();
     }
 
@@ -466,6 +601,17 @@ public final class EveAdminDialogs {
                 .setView(wrapScroll(activity, container))
                 .setPositiveButton("Search", (d, w) -> loadStudents(fragment, repo, text(queryInput), onMutated))
                 .setNegativeButton("Cancel", null)
+                .setNeutralButton("AI Format Explanation", (d, w) -> {
+                    String qText = text(qInput);
+                    String exp = text(expInput);
+                    if (qText.isEmpty()) {
+                        showError(fragment, "Enter question text first.");
+                        return;
+                    }
+                    EveAdminRepository.ResultCallback<String> cb = callback(fragment, formatted ->
+                            showTextDialog(activity, "AI Formatted Explanation", formatted));
+                    repo.runWithAdminToken(cb, token -> repo.postSuccess(cb, repo.reformatExplanation(token, qText, exp)));
+                })
                 .show();
     }
 
@@ -553,6 +699,17 @@ public final class EveAdminDialogs {
                     }
                 })
                 .setNegativeButton("Cancel", null)
+                .setNeutralButton("AI Format Explanation", (d, w) -> {
+                    String qText = text(qInput);
+                    String exp = text(expInput);
+                    if (qText.isEmpty()) {
+                        showError(fragment, "Enter question text first.");
+                        return;
+                    }
+                    EveAdminRepository.ResultCallback<String> cb = callback(fragment, formatted ->
+                            showTextDialog(activity, "AI Formatted Explanation", formatted));
+                    repo.runWithAdminToken(cb, token -> repo.postSuccess(cb, repo.reformatExplanation(token, qText, exp)));
+                })
                 .show();
     }
 
@@ -662,7 +819,7 @@ public final class EveAdminDialogs {
     public static void showTransactionsDialog(BaseFragment fragment, EveAdminRepository repo) {
         Activity activity = fragment.getParentActivity();
         if (activity == null) return;
-        String[] statuses = new String[] { "ALL", "SUCCESS", "CREATED", "EXPIRED", "REFUNDED" };
+        String[] statuses = new String[] { "ALL", "PAID", "PENDING", "FAILED", "EXPIRED", "REFUNDED" };
         new AlertDialog.Builder(activity)
                 .setTitle("Filter Payment Orders")
                 .setItems(statuses, (d, which) -> {
@@ -791,6 +948,53 @@ public final class EveAdminDialogs {
         builder.show();
     }
 
+    public static void showDuplicateExamDialog(
+            BaseFragment fragment,
+            EveAdminRepository repo,
+            EveAdminModels.AdminExamItem source,
+            Runnable onSaved) {
+        if (source == null) return;
+        Activity activity = fragment.getParentActivity();
+        if (activity == null) return;
+        LinearLayout container = makeFormContainer(activity);
+        EditText nameInput = addField(activity, container, "New Exam Name", source.examName + " (Copy)", InputType.TYPE_CLASS_TEXT);
+        EditText categoryInput = addField(activity, container, "Category", source.category, InputType.TYPE_CLASS_TEXT);
+        EditText publishInput = addField(activity, container, "Publish Mode (paused | live | inherit)", "paused", InputType.TYPE_CLASS_TEXT);
+        new AlertDialog.Builder(activity)
+                .setTitle("Duplicate Exam")
+                .setView(wrapScroll(activity, container))
+                .setPositiveButton("Create Copy", (d, w) -> {
+                    String name = text(nameInput);
+                    if (name.isEmpty()) {
+                        showError(fragment, "Exam name cannot be empty.");
+                        return;
+                    }
+                    EveAdminRepository.ResultCallback<String> cb = callback(fragment, msg -> {
+                        showInfo(fragment, msg);
+                        if (onSaved != null) onSaved.run();
+                    });
+                    repo.runWithAdminToken(cb, token -> {
+                        String copyId = repo.createExam(token, name, textOr(categoryInput, source.category),
+                                source.timeLimitMinutes, source.questionCount, source.testNumber,
+                                source.negativeMarkingText, normalizePublishMode(text(publishInput)), source.generationPrompt);
+                        repo.postSuccess(cb, "Duplicated exam (" + copyId + ").");
+                    });
+                })
+                .setNegativeButton("Cancel", null)
+                .setNeutralButton("AI Format Explanation", (d, w) -> {
+                    String qText = text(qInput);
+                    String exp = text(expInput);
+                    if (qText.isEmpty()) {
+                        showError(fragment, "Enter question text first.");
+                        return;
+                    }
+                    EveAdminRepository.ResultCallback<String> cb = callback(fragment, formatted ->
+                            showTextDialog(activity, "AI Formatted Explanation", formatted));
+                    repo.runWithAdminToken(cb, token -> repo.postSuccess(cb, repo.reformatExplanation(token, qText, exp)));
+                })
+                .show();
+    }
+
     public static void showAuditLogDialog(BaseFragment fragment, EveAdminRepository repo) {
         EveAdminRepository.ResultCallback<List<EveAdminModels.AuditLogEntry>> cb = callback(fragment, entries -> {
             Activity activity = fragment.getParentActivity();
@@ -858,9 +1062,55 @@ public final class EveAdminDialogs {
         }
     }
 
+    public static void showPremiumUsersDialog(BaseFragment fragment, EveAdminRepository repo, Runnable onMutated) {
+        EveAdminRepository.ResultCallback<List<EveAdminModels.PremiumUserItem>> cb = callback(fragment, users -> {
+            Activity activity = fragment.getParentActivity();
+            if (activity == null) return;
+            String[] labels = new String[users.size() + 1];
+            labels[0] = "+ Grant / Manage by Student Search";
+            SimpleDateFormat fmt = new SimpleDateFormat("yyyy-MM-dd", Locale.US);
+            for (int i = 0; i < users.size(); i++) {
+                EveAdminModels.PremiumUserItem u = users.get(i);
+                String exp = u.expiresAt > 0 ? fmt.format(new Date(u.expiresAt)) : "Lifetime";
+                labels[i + 1] = u.displayName + " (" + u.email + ") • " + u.planName + " • " + exp;
+            }
+            new AlertDialog.Builder(activity)
+                    .setTitle("EVE Premium Subscribers (" + users.size() + ")")
+                    .setItems(labels, (d, idx) -> {
+                        if (idx == 0) {
+                            showStudentSearchDialog(fragment, repo, onMutated);
+                        } else {
+                            EveAdminModels.PremiumUserItem u = users.get(idx - 1);
+                            new AlertDialog.Builder(activity)
+                                    .setTitle(u.email)
+                                    .setItems(new String[]{"Extend +30 Days", "Revoke Premium"}, (dd, actIdx) -> {
+                                        EveAdminRepository.ResultCallback<String> rcb = callback(fragment, msg -> {
+                                            showInfo(fragment, msg);
+                                            if (onMutated != null) onMutated.run();
+                                        });
+                                        repo.runWithAdminToken(rcb, token -> {
+                                            if (actIdx == 0) {
+                                                repo.extendPremium(token, u.userId, 30);
+                                                repo.postSuccess(rcb, "Extended +30 days.");
+                                            } else {
+                                                repo.revokePremium(token, u.userId);
+                                                repo.postSuccess(rcb, "Premium revoked.");
+                                            }
+                                        });
+                                    })
+                                    .setNegativeButton("Cancel", null)
+                                    .show();
+                        }
+                    })
+                    .setNegativeButton("Close", null)
+                    .show();
+        });
+        repo.runWithAdminToken(cb, token -> repo.postSuccess(cb, repo.fetchPremiumUsers(token)));
+    }
+
     private static String normalizePublishMode(String mode) {
         String lower = mode.trim().toLowerCase(Locale.US);
-        if ("live".equals(lower) || "paused".equals(lower)) {
+        if ("live".equals(lower) || "paused".equals(lower) || "archived".equals(lower)) {
             return lower;
         }
         return "inherit";

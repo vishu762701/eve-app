@@ -197,35 +197,6 @@ public class PrivacySettingsActivity extends BaseFragment implements Notificatio
         }
 
         updateRows();
-        loadPasswordSettings();
-        loadPasskeys();
-
-        getNotificationCenter().addWeakObserver(this, NotificationCenter.privacyRulesUpdated);
-        getNotificationCenter().addWeakObserver(this, NotificationCenter.blockedUsersDidLoad);
-        getNotificationCenter().addWeakObserver(this, NotificationCenter.didSetOrRemoveTwoStepPassword);
-        getNotificationCenter().addWeakObserver(this, NotificationCenter.didUpdateGlobalAutoDeleteTimer);
-
-        getUserConfig().loadGlobalTTl();
-
-        devicesActivityPreload = new SessionsActivity(SessionsActivity.TYPE_DEVICES);
-        devicesActivityPreload.setDelegate(() -> {
-            if (listAdapter != null && sessionsRow >= 0) {
-                listAdapter.notifyItemChanged(sessionsRow);
-            }
-        });
-        devicesActivityPreload.loadSessions(false);
-
-        webSessionsActivityPreload = new SessionsActivity(SessionsActivity.TYPE_WEB_SESSIONS);
-        webSessionsActivityPreload.setDelegate(() -> {
-            if (listAdapter != null) {
-                int webSessionsCount = webSessionsActivityPreload.getSessionsCount();
-                if (webSessionsRow < 0 && webSessionsCount > 0) {
-                    updateRows();
-                }
-            }
-        });
-        webSessionsActivityPreload.loadSessions(false);
-
         return true;
     }
 
@@ -334,6 +305,31 @@ public class PrivacySettingsActivity extends BaseFragment implements Notificatio
                 if (getParentActivity() == null) {
                     return;
                 }
+                new AlertDialog.Builder(getParentActivity(), resourceProvider)
+                        .setTitle(LocaleController.getString(R.string.DeleteAccountTitle))
+                        .setMessage(LocaleController.getString(R.string.EveDeleteAccountSummary))
+                        .setPositiveButton(LocaleController.getString(R.string.Delete), (di, w) -> {
+                            final AlertDialog progressDialog = new AlertDialog(getParentActivity(), AlertDialog.ALERT_TYPE_SPINNER);
+                            progressDialog.setCanCancel(false);
+                            progressDialog.show();
+                            org.telegram.ui.eve.auth.EveAuthManager.getInstance().deleteEveAccount(getParentActivity(), new org.telegram.ui.eve.auth.EveAuthManager.SimpleCallback() {
+                                @Override
+                                public void onSuccess(String message) {
+                                    progressDialog.dismiss();
+                                    presentFragment(new org.telegram.ui.eve.auth.EveSignInFragment(), true);
+                                }
+
+                                @Override
+                                public void onError(String message) {
+                                    progressDialog.dismiss();
+                                    BulletinFactory.of(PrivacySettingsActivity.this).createErrorBulletin(message).show();
+                                }
+                            });
+                        })
+                        .setNegativeButton(LocaleController.getString(R.string.Cancel), null)
+                        .makeRed(DialogInterface.BUTTON_POSITIVE)
+                        .show();
+            } else if (false) {
                 int ttl = getContactsController().getDeleteAccountTTL();
                 int selected;
                 if (ttl <= 31) {
@@ -705,95 +701,55 @@ return fragmentView;
     }
 
     public void updateRows(boolean notify) {
-        passkeysRow = -1;
+        // EVE-PATCH: Show only EVE-relevant Security & Privacy controls (Passcode Lock + EVE Account Deletion).
         rowCount = 0;
-
-        securitySectionRow = rowCount++;
-        passwordRow = rowCount++;
-        autoDeleteMesages = rowCount++;
-        passcodeRow = rowCount++;
-        if (getMessagesController().config.settingsDisplayPasskeys.get() && Build.VERSION.SDK_INT >= 28 && BuildVars.SUPPORTS_PASSKEYS) {
-            passkeysRow = rowCount++;
-        }
-        if (currentPassword != null ? currentPassword.login_email_pattern != null : SharedConfig.hasEmailLogin) {
-            emailLoginRow = rowCount++;
-        } else {
-            emailLoginRow = -1;
-        }
-        blockedRow = rowCount++;
-        if (currentPassword != null) {
-            boolean hasEmail = currentPassword.login_email_pattern != null;
-            if (SharedConfig.hasEmailLogin != hasEmail) {
-                SharedConfig.hasEmailLogin = hasEmail;
-                SharedConfig.saveConfig();
-            }
-        }
-        sessionsRow = rowCount++;
-        sessionsDetailRow = rowCount++;
-
-        privacySectionRow = rowCount++;
-        phoneNumberRow = rowCount++;
-        lastSeenRow = rowCount++;
-        profilePhotoRow = rowCount++;
-        forwardsRow = rowCount++;
+        passwordRow = -1;
+        autoDeleteMesages = -1;
+        passkeysRow = -1;
+        emailLoginRow = -1;
+        blockedRow = -1;
+        sessionsRow = -1;
+        sessionsDetailRow = -1;
+        privacySectionRow = -1;
+        phoneNumberRow = -1;
+        lastSeenRow = -1;
+        profilePhotoRow = -1;
+        forwardsRow = -1;
         callsRow = -1;
         groupsDetailRow = -1;
-        if (!getMessagesController().premiumFeaturesBlocked() || getUserConfig().isPremium()) {
-            voicesRow = rowCount++;
-            noncontactsRow = rowCount++;
-        } else {
-            voicesRow = -1;
-            noncontactsRow = -1;
-        }
-        birthdayRow = rowCount++;
-        giftsRow = rowCount++;
-        bioRow = rowCount++;
-        musicRow = rowCount++;
-        groupsRow = rowCount++;
-        privacyShadowRow = rowCount++;
-
-        if (getMessagesController().autoarchiveAvailable || getUserConfig().isPremium()) {
-            newChatsHeaderRow = rowCount++;
-            newChatsRow = rowCount++;
-            newChatsSectionRow = rowCount++;
-        } else {
-            newChatsHeaderRow = -1;
-            newChatsRow = -1;
-            newChatsSectionRow = -1;
-        }
-        advancedSectionRow = rowCount++;
-        deleteAccountRow = rowCount++;
-        deleteAccountDetailRow = rowCount++;
-        botsSectionRow = rowCount++;
-        if (getUserConfig().hasSecureData) {
-            passportRow = rowCount++;
-        } else {
-            passportRow = -1;
-        }
-        paymentsClearRow = rowCount++;
-        if (false) {
-            botsBiometryRow = rowCount++;
-        } else {
-            botsBiometryRow = -1;
-        }
-        if (webSessionsActivityPreload != null && webSessionsActivityPreload.getSessionsCount() > 0) {
-            webSessionsRow = rowCount++;
-            botsDetailRow = rowCount++;
-            botsAndWebsitesShadowRow = -1;
-        } else {
-            webSessionsRow = -1;
-            botsDetailRow = -1;
-            botsAndWebsitesShadowRow = rowCount++;
-        }
+        voicesRow = -1;
+        noncontactsRow = -1;
+        birthdayRow = -1;
+        giftsRow = -1;
+        bioRow = -1;
+        musicRow = -1;
+        groupsRow = -1;
+        privacyShadowRow = -1;
+        newChatsHeaderRow = -1;
+        newChatsRow = -1;
+        newChatsSectionRow = -1;
+        botsSectionRow = -1;
+        passportRow = -1;
+        paymentsClearRow = -1;
+        botsBiometryRow = -1;
+        webSessionsRow = -1;
+        botsDetailRow = -1;
+        botsAndWebsitesShadowRow = -1;
         contactsSectionRow = -1;
         contactsDeleteRow = -1;
         contactsSyncRow = -1;
         contactsSuggestRow = -1;
         contactsDetailRow = -1;
-        secretSectionRow = rowCount++;
-        secretMapRow = rowCount++;
-        secretWebpageRow = rowCount++;
-        secretDetailRow = rowCount++;
+        secretSectionRow = -1;
+        secretMapRow = -1;
+        secretWebpageRow = -1;
+        secretDetailRow = -1;
+
+        securitySectionRow = rowCount++;
+        passcodeRow = rowCount++;
+        advancedSectionRow = rowCount++;
+        deleteAccountRow = rowCount++;
+        deleteAccountDetailRow = rowCount++;
         if (listAdapter != null && notify) {
             listAdapter.notifyDataSetChanged();
         }
@@ -1182,25 +1138,8 @@ return fragmentView;
                     } else if (position == passportRow) {
                         textCell.setText(getString("TelegramPassport", R.string.TelegramPassport), true);
                     } else if (position == deleteAccountRow) {
-                        if (getContactsController().getLoadingDeleteInfo()) {
-                            showLoading = true;
-                        } else {
-                            int ttl = getContactsController().getDeleteAccountTTL();
-                            if (ttl <= 182) {
-                                value = formatPluralString("Months", ttl / 30);
-                            } else if (ttl == 365) {
-                                value = formatPluralString("Months", 12);
-                            } else if (ttl == 548) {
-                                value = formatPluralString("Months", 18);
-                            } else if (ttl == 730) {
-                                value = formatPluralString("Months", 24);
-                            } else if (ttl > 30) {
-                                value = formatPluralString("Months", (int) Math.round(ttl / 30.0));
-                            } else {
-                                value = formatPluralString("Days", ttl);
-                            }
-                        }
-                        textCell.setTextAndValue(getString("DeleteAccountIfAwayFor3", R.string.DeleteAccountIfAwayFor3), value, deleteAccountUpdate, false);
+                        textCell.setText(getString("DeleteAccountTitle", R.string.DeleteAccountTitle), false);
+                        textCell.setTextColor(Theme.getColor(Theme.key_text_RedRegular));
                         deleteAccountUpdate = false;
                     } else if (position == paymentsClearRow) {
                         textCell.setText(getString("PrivacyPaymentsClear", R.string.PrivacyPaymentsClear), true);
@@ -1233,7 +1172,7 @@ return fragmentView;
                     TextInfoPrivacyCell privacyCell = (TextInfoPrivacyCell) holder.itemView;
                     boolean last = position == getItemCount() - 1;
                     if (position == deleteAccountDetailRow) {
-                        privacyCell.setText(getString("DeleteAccountHelp", R.string.DeleteAccountHelp));
+                        privacyCell.setText(getString("EveDeleteAccountSummary", R.string.EveDeleteAccountSummary));
                     } else if (position == groupsDetailRow) {
                         privacyCell.setText(getString("GroupsAndChannelsHelp", R.string.GroupsAndChannelsHelp));
                     } else if (position == sessionsDetailRow) {

@@ -93,7 +93,10 @@ public final class EvePackRepository {
                 JSONArray arr = root.optJSONArray("data");
                 postSuccess(callback, EvePackModels.PackSummary.parseList(arr));
             } catch (EveBackendClient.BackendException e) {
-                postError(callback, e.getMessage(), e.httpStatus, e.serverCode);
+                String msg = e.httpStatus == 404
+                        ? "Pack API unavailable on Worker (HTTP 404). Deploy latest EVE Worker and migration 0032."
+                        : e.getMessage();
+                postError(callback, msg, e.httpStatus, e.serverCode);
             } catch (Throwable t) {
                 postError(callback, t.getMessage(), 0, "");
             }
@@ -106,7 +109,10 @@ public final class EvePackRepository {
                 JSONObject root = client.getOptionalJsonRoot("/api/emoji/packs/" + encode(packId), token);
                 postSuccess(callback, EvePackModels.PackSummary.fromJson(root.optJSONObject("data")));
             } catch (EveBackendClient.BackendException e) {
-                postError(callback, e.getMessage(), e.httpStatus, e.serverCode);
+                String msg = e.httpStatus == 404
+                        ? "Pack API unavailable on Worker (HTTP 404). Deploy latest EVE Worker and migration 0032."
+                        : e.getMessage();
+                postError(callback, msg, e.httpStatus, e.serverCode);
             } catch (Throwable t) {
                 postError(callback, t.getMessage(), 0, "");
             }

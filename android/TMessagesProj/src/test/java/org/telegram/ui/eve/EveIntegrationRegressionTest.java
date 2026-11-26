@@ -68,9 +68,10 @@ public class EveIntegrationRegressionTest {
 
     @Test
     public void allMissionPoliciesAndStrings_holdSimultaneously() {
-        // Mission 1: EVE brand identity + disclosure
+        // Mission 1: EVE independent brand identity
         assertEquals("EVE", appContext.getString(R.string.AppName));
-        assertTrue(appContext.getString(R.string.EveThirdPartyApiDisclosure).contains("Telegram API"));
+        assertFalse(appContext.getString(R.string.EveThirdPartyApiDisclosure).contains("Telegram API"));
+        assertTrue(appContext.getString(R.string.Page1Message).toLowerCase().contains("independent"));
         assertEquals(R.drawable.ic_eve_launcher_foreground, LauncherIconController.LauncherIcon.DEFAULT.foreground);
 
         // Mission 2: Exams main tab & search copy

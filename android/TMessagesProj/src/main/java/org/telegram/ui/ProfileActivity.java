@@ -4467,13 +4467,11 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             } else if (position == languageRow) {
                 presentFragment(new LanguageSelectActivity());
             } else if (position == setUsernameRow) {
-                presentFragment(getUserConfig().isClientActivated() ? new ChangeUsernameActivity() : new UserInfoActivity());
+                presentFragment(new UserInfoActivity());
             } else if (position == bioRow) {
                 presentFragment(new UserInfoActivity());
             } else if (position == numberRow) {
-                presentFragment(getUserConfig().isClientActivated()
-                        ? new ActionIntroActivity(ActionIntroActivity.ACTION_TYPE_CHANGE_PHONE_NUMBER)
-                        : new UserInfoActivity());
+                presentFragment(new UserInfoActivity());
             } else if (position == setAvatarRow) {
                 onWriteButtonClick();
             } else if (position == premiumRow) {
@@ -13342,14 +13340,14 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                             detailCell.setTextAndValue(location.address, LocaleController.getString(R.string.AttachLocation), false);
                         }
                     } else if (position == numberRow) {
-                        TLRPC.User user = UserConfig.getInstance(currentAccount).getCurrentUser();
+                        org.telegram.ui.eve.auth.EveUserProfile eveCached = org.telegram.ui.eve.auth.EveAuthManager.getInstance().getCachedProfile();
                         String value;
-                        if (user != null && user.phone != null && user.phone.length() != 0) {
-                            value = PhoneFormat.getInstance().format("+" + user.phone);
+                        if (eveCached != null && !TextUtils.isEmpty(eveCached.phone)) {
+                            value = eveCached.phone.startsWith("+") ? eveCached.phone : PhoneFormat.getInstance().format("+" + eveCached.phone);
                         } else {
                             value = LocaleController.getString(R.string.NumberUnknown);
                         }
-                        detailCell.setTextAndValue(value, LocaleController.getString(R.string.TapToChangePhone), true);
+                        detailCell.setTextAndValue(value, LocaleController.getString(R.string.Phone), true);
                         detailCell.setContentDescriptionValueFirst(false);
                     } else if (position == setUsernameRow) {
                         TLRPC.User user = UserConfig.getInstance(currentAccount).getCurrentUser();
@@ -15963,7 +15961,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             });
         } else if (position == usernameRow) {
             itemOptions.add(R.drawable.msg_edit, getString(R.string.ProfileUsernameEdit), () -> {
-                presentFragment(getUserConfig().isClientActivated() ? new ChangeUsernameActivity() : new UserInfoActivity());
+                presentFragment(new UserInfoActivity());
             });
         } else if (position == channelInfoRow || position == userInfoRow || position == bioRow) {
             itemOptions.add(R.drawable.msg_edit, getString(R.string.ProfileEditBio), () -> {
@@ -15976,7 +15974,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         } else if (position == birthdayRow) {
             itemOptions.add(R.drawable.msg_edit, getString(R.string.ProfileBirthdayChange), () -> {
                 showDialog(AlertsCreator.createBirthdayPickerDialog(getContext(), getString(R.string.EditProfileBirthdayTitle), getString(R.string.EditProfileBirthdayButton), userFull != null ? userFull.birthday : null, birthday -> {
-                    if (!getUserConfig().isClientActivated()) {
+                    if (true) {
                         try {
                             org.json.JSONObject updates = new org.json.JSONObject();
                             int yr = (birthday.flags & 1) != 0 && birthday.year > 0 ? birthday.year : 2000;

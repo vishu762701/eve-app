@@ -265,9 +265,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
                     if (hasMainTabs) {
                         // no back on the main tab: the left button opens the QR code (with the search open, the action bar closes it instead)
                         final Bundle args = new Bundle();
-                        long effectiveUid = getUserConfig().isClientActivated()
-                                ? getUserConfig().getClientUserId()
-                                : org.telegram.ui.eve.auth.EveAuthManager.getInstance().ensureLocalUiUser(currentAccount);
+                        long effectiveUid = org.telegram.ui.eve.auth.EveAuthManager.getInstance().ensureLocalUiUser(currentAccount);
                         args.putLong("user_id", effectiveUid);
                         args.putBoolean(QrShareActivity.ARG_IMMEDIATE, true);
                         presentFragment(new QrShareActivity(args));
@@ -366,10 +364,8 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
         };
         topView.addView(avatarTouchView, LayoutHelper.createFrame(120, 120, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 0, 23 - 12, 0, 0));
         avatarTouchView.setOnClickListener(v -> {
-            TLRPC.User user = MessagesController.getInstance(currentAccount).getUser(UserConfig.getInstance(currentAccount).getClientUserId());
-            if (user == null) {
-                user = UserConfig.getInstance(currentAccount).getCurrentUser();
-            }
+            long uiUid = org.telegram.ui.eve.auth.EveAuthManager.getInstance().ensureLocalUiUser(currentAccount);
+            TLRPC.User user = uiUid != 0 ? MessagesController.getInstance(currentAccount).getUser(uiUid) : null;
             if (user == null) {
                 return;
             }
@@ -504,8 +500,8 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
     }
 
     public void setInfo() {
-        TLRPC.User current = getUserConfig().getCurrentUser();
-        if (current == null && org.telegram.ui.eve.auth.EveAuthManager.getInstance().isSignedInAccount()) {
+        TLRPC.User current = null;
+        if (org.telegram.ui.eve.auth.EveAuthManager.getInstance().isSignedInAccount()) {
             long uiId = org.telegram.ui.eve.auth.EveAuthManager.getInstance().ensureLocalUiUser(currentAccount);
             current = uiId != 0 ? getMessagesController().getUser(uiId) : null;
         }
@@ -726,21 +722,6 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
         items.add(UItem.asCustomShadow(topView, 200 - 12));
 
         accountNumbers.clear();
-        for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
-            if (UserConfig.getInstance(a).isClientActivated() && currentAccount != a) {
-                accountNumbers.add(a);
-            }
-        }
-        Collections.sort(accountNumbers, (o1, o2) -> {
-            long l1 = UserConfig.getInstance(o1).loginTime;
-            long l2 = UserConfig.getInstance(o2).loginTime;
-            if (l1 > l2) {
-                return 1;
-            } else if (l1 < l2) {
-                return -1;
-            }
-            return 0;
-        });
 
         final Set<String> suggestions = getMessagesController().pendingSuggestions;
         if (suggestions.contains("PREMIUM_GRACE")) {
@@ -910,7 +891,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
                 presentSettingFragment(new PrivacySettingsActivity());
                 break;
             case 5:
-                presentSettingFragment(new NotificationsSettingsActivity());
+                presentSettingFragment(new org.telegram.ui.eve.notifications.EveNotificationSettingsFragment());
                 break;
             case 6:
                 presentSettingFragment(new DataSettingsActivity());
@@ -1065,13 +1046,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
                         }
                     }))
                     .setNeutralButton(getString(R.string.LogOut), (d, w) -> auth.signOut(activity, () -> {
-                        if (!getUserConfig().isClientActivated()) {
-                            presentFragment(new org.telegram.ui.eve.auth.EveSignInFragment(), true);
-                            return;
-                        }
-                        if (listView != null && listView.adapter != null) {
-                            listView.adapter.update(true);
-                        }
+                        presentFragment(new org.telegram.ui.eve.auth.EveSignInFragment(), true);
                     }))
                     .setNegativeButton(getString(R.string.Cancel), null)
                     .create());
@@ -1115,9 +1090,8 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
                     }
                     break;
             }
-            // EVE-PATCH: Mission 1 - Display EVE brand version and clear third-party Telegram API disclosure.
-            return formatString(R.string.TelegramVersion, String.format(Locale.US, "v%s (%d)\n%s", pInfo.versionName, code, abi))
-                    + "\n" + getString(R.string.EveThirdPartyApiDisclosure);
+            // EVE-PATCH: Display EVE brand version without Telegram API notice.
+            return formatString(R.string.TelegramVersion, String.format(Locale.US, "v%s (%d)\n%s", pInfo.versionName, code, abi));
         } catch (Exception e) {
             FileLog.e(e);
         }

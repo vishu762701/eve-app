@@ -33,11 +33,11 @@
     <string name="ChatSettings">परीक्षा सेटिंग्स</string>
     <string name="SettingsChatInfo">वॉलपेपर, नाइट मोड, एनिमेशन</string>
     <string name="SettingsPrivacySecurity">गोपनीयता और सुरक्षा</string>
-    <string name="SettingsPrivacySecurityInfo">लास्ट सीन, डिवाइस, पासकी</string>
+    <string name="SettingsPrivacySecurityInfo">पासकोड, खाता हटाना</string>
     <string name="SettingsNotifications">सूचनाएँ</string>
-    <string name="SettingsNotificationsInfo">ध्वनि, कॉल, बैज</string>
+    <string name="SettingsNotificationsInfo">परीक्षा अलर्ट, रिमाइंडर, परिणाम</string>
     <string name="SettingsData">डेटा और स्टोरेज</string>
-    <string name="SettingsDataInfo">मीडिया डाउनलोड सेटिंग्स</string>
+    <string name="SettingsDataInfo">ऑफ़लाइन पैक, कैश और स्टोरेज</string>
     <string name="SettingsFolders">फ़ोल्डर</string>
     <string name="SettingsFoldersInfo">फ़ोल्डर सेटिंग्स</string>
     <string name="SettingsDevices">डिवाइस</string>
@@ -74,7 +74,7 @@
 
     <!-- EVE Branding, Help & Disclosure -->
     <string name="TelegramVersion">Android के लिए EVE %1$s</string>
-    <string name="EveThirdPartyApiDisclosure">Telegram API का उपयोग करने वाला स्वतंत्र तृतीय-पक्ष ऐप। यह आधिकारिक Telegram ऐप नहीं है।</string>
+    <string name="EveThirdPartyApiDisclosure">आपका स्वतंत्र सरकारी परीक्षा तैयारी ऐप।</string>
     <string name="EveCloudAccount">EVE क्लाउड खाता</string>
     <string name="EveCloudSignInSubtitle">परीक्षाएँ, परिणाम और एडमिन एक्सेस सिंक करने के लिए Google से साइन इन करें</string>
     <string name="EveAdminControlCenter">EVE एडमिन नियंत्रण केंद्र</string>
@@ -87,11 +87,11 @@
     <string name="EveFaq">EVE सामान्य प्रश्न</string>
     <string name="EveFaqBody">1. परीक्षाएँ और टेस्ट: प्रकाशित परीक्षाएँ देखने, समयबद्ध मॉक टेस्ट शुरू करने और व्याख्या सहित उत्तर देखने के लिए परीक्षाएँ टैब खोलें।\n\n2. भाषा: सेटिंग्स &gt; भाषा में जाकर कभी भी English और हिन्दी के बीच बदलें।\n\n3. गोपनीयता और सूचनाएँ: परीक्षा अलर्ट केवल EVE क्लाउड से आते हैं। कोई भी परीक्षा डेटा या परिणाम Telegram पर नहीं भेजा जाता।</string>
     <string name="PrivacyPolicy">गोपनीयता नीति</string>
-    <string name="EvePrivacyPolicyBody">EVE Telegram API का उपयोग करने वाला एक स्वतंत्र तृतीय-पक्ष परीक्षा तैयारी ऐप है और यह आधिकारिक Telegram ऐप नहीं है और न ही Telegram से संबद्ध है।\n\n• EVE क्लाउड (Cloudflare Worker + D1) आपका EVE छात्र प्रोफ़ाइल, परीक्षा प्रयास, स्कोर और सदस्यता अधिकार संग्रहीत करता है।\n• Firebase Authentication और FCM EVE खाता साइन-इन और EVE परीक्षा सूचनाएँ संभालते हैं।\n• EVE कभी भी आपकी परीक्षा सूचनाएँ, स्कोर या छात्र डेटा Telegram पर नहीं भेजता।\n\nसंपर्क: pronlike9@gmail.com</string>
+    <string name="EvePrivacyPolicyBody">EVE एक स्वतंत्र सरकारी परीक्षा तैयारी ऐप है और Telegram से संबद्ध नहीं है।\n\n• EVE क्लाउड (Cloudflare Worker + D1) आपका EVE छात्र प्रोफ़ाइल, परीक्षा प्रयास, स्कोर और सदस्यता अधिकार संग्रहीत करता है।\n• Firebase Authentication और FCM EVE खाता साइन-इन और EVE परीक्षा सूचनाएँ संभालते हैं।\n• EVE कभी भी आपकी परीक्षा सूचनाएँ, स्कोर या छात्र डेटा Telegram पर नहीं भेजता।\n\nसंपर्क: pronlike9@gmail.com</string>
 
     <!-- Intro / Onboarding -->
     <string name="Page1Title">EVE</string>
-    <string name="Page1Message">EVE सरकारी और प्रवेश परीक्षाओं की तैयारी के लिए आपका मॉक टेस्ट मंच है।</string>
+    <string name="Page1Message">आपका स्वतंत्र सरकारी परीक्षा तैयारी ऐप।</string>
     <string name="StartMessaging">शुरू करें</string>
 
     <!-- Exams Catalog & Player -->
@@ -116,6 +116,18 @@
     <string name="EveResultHistory">परिणाम इतिहास</string>
     <string name="EveLeaderboard">लीडरबोर्ड</string>
     <string name="EveAnnouncements">EVE सूचनाएँ</string>
+    <string name="EveDeleteAccountSummary">अपने EVE खाते, प्रोफ़ाइल और परीक्षा प्रगति को EVE क्लाउड से स्थायी रूप से हटाएँ।</string>
+    <string name="EveNotifCategoriesHeader">EVE सूचना श्रेणियाँ</string>
+    <string name="EveNotifExamReminders">परीक्षा रिमाइंडर</string>
+    <string name="EveNotifAnnouncements">परीक्षा घोषणाएँ और प्रसारण</string>
+    <string name="EveNotifResults">टेस्ट परिणाम और अंक</string>
+    <string name="EveNotifPayments">EVE प्रीमियम और भुगतान अपडेट</string>
+    <string name="EveNotifDeliveryHeader">अलर्ट व्यवहार</string>
+    <string name="EveNotifSound">सूचना ध्वनि</string>
+    <string name="EveNotifVibrate">कंपन</string>
+    <string name="EveNotifSyncToken">डिवाइस पुश पंजीकरण सिंक करें</string>
+    <string name="EveNotifTokenSynced">EVE पुश पंजीकरण सिंक हो गया।</string>
+    <string name="EveNotifIsolationInfo">सूचनाएँ केवल EVE Firebase Cloud Messaging के माध्यम से आती हैं और Telegram पर कभी नहीं भेजी जातीं।</string>
     <string name="EvePrevious">पिछला</string>
     <string name="EveNext">अगला</string>
     <string name="EveSaveAndNext">सहेजें और अगला</string>

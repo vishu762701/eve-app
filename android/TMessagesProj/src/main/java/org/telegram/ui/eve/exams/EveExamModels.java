@@ -69,7 +69,8 @@ public final class EveExamModels {
         }
 
         public boolean isPaused() {
-            return "paused".equalsIgnoreCase(publishMode.trim());
+            String m = publishMode.trim();
+            return "paused".equalsIgnoreCase(m) || "archived".equalsIgnoreCase(m);
         }
     }
 

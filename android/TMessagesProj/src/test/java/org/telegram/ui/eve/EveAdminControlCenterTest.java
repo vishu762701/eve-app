@@ -2,6 +2,7 @@ package org.telegram.ui.eve;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import org.json.JSONObject;
@@ -118,6 +119,15 @@ public class EveAdminControlCenterTest {
         JSONObject gen = repo.generateTestNow("admin-jwt", "ex1", 50, "Mock 3", "Focus Polity");
         assertTrue(gen.optBoolean("success"));
         assertEquals("SSC Full Mock 3", gen.optJSONObject("data").optString("title"));
+        assertEquals(1, snapshot.pendingTransactions);
+        assertTrue(org.telegram.ui.eve.exams.EveExamDialogsMapper.filterExams(
+                Collections.singletonList(new org.telegram.ui.eve.exams.EveExamModels.ExamSummary(
+                        "ex-arch", "Archived Exam", 60, "SSC", 50, "Mock 1", "0", "", "archived", 0L, 1, "Mock 1", 0)),
+                "").isEmpty());
+        assertNotNull(org.telegram.ui.eve.admin.EveAdminExamsFragment.class);
+        assertNotNull(org.telegram.ui.eve.admin.EveAdminContentAndCommsFragment.class);
+        assertNotNull(org.telegram.ui.eve.admin.EveAdminInsightsAndSystemFragment.class);
+        assertNotNull(org.telegram.ui.eve.admin.EveDebugDiagnosticsFragment.class);
 
         EveAdminModels.PremiumConfigModel cfg = new EveAdminModels.PremiumConfigModel(
                 true, "EVE Pro", 199, "INR", 90, false, "Full Access",

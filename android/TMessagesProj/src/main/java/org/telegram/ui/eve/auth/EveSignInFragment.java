@@ -108,7 +108,7 @@ public class EveSignInFragment extends BaseFragment {
         root.addView(langBtn, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 0, 4, 0, 12));
 
         TextView disclosure = new TextView(context);
-        disclosure.setText(LocaleController.getString(R.string.EveThirdPartyApiDisclosure));
+        disclosure.setText(LocaleController.getString(R.string.PrivacyPolicy));
         disclosure.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12);
         disclosure.setGravity(Gravity.CENTER);
         disclosure.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText));

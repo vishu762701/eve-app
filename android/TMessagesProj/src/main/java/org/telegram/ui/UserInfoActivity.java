@@ -311,21 +311,6 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
     private final ArrayList<Integer> accountNumbers = new ArrayList<>();
     private void updateAccounts() {
         accountNumbers.clear();
-        for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
-            if (UserConfig.getInstance(a).isClientActivated() && currentAccount != a) {
-                accountNumbers.add(a);
-            }
-        }
-        Collections.sort(accountNumbers, (o1, o2) -> {
-            long l1 = UserConfig.getInstance(o1).loginTime;
-            long l2 = UserConfig.getInstance(o2).loginTime;
-            if (l1 > l2) {
-                return 1;
-            } else if (l1 < l2) {
-                return -1;
-            }
-            return 0;
-        });
     }
 
     @Keep
@@ -364,20 +349,19 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
         items.add(UItem.asCustom(bioEdit));
         items.add(UItem.asShadow(bioInfo));
 
-        final long effectiveId = getUserConfig().isClientActivated()
-                ? getUserConfig().getClientUserId()
-                : org.telegram.ui.eve.auth.EveAuthManager.getInstance().ensureLocalUiUser(currentAccount);
+        final long effectiveId = org.telegram.ui.eve.auth.EveAuthManager.getInstance().ensureLocalUiUser(currentAccount);
         TLRPC.User user = effectiveId != 0 ? getMessagesController().getUser(effectiveId) : null;
-        if (user == null) {
-            user = getUserConfig().getCurrentUser();
-        }
         items.add(UItem.asHeader(getString(R.string.EditAccountInfoHeader)));
-        if (user != null) {
-            numberRow = items.size();
-            String phoneLabel = TextUtils.isEmpty(user.phone)
-                    ? getString(R.string.Phone)
-                    : PhoneFormat.getInstance().format("+" + user.phone);
-            items.add(SettingsActivity.SettingCell.Factory.of(INFO_PHONE, IconBackgroundColors.GREEN.top, IconBackgroundColors.GREEN.bottom, R.drawable.settings_calls, phoneLabel, getString(R.string.TapToChangePhone)));
+        numberRow = items.size();
+        org.telegram.ui.eve.auth.EveUserProfile eveCached = org.telegram.ui.eve.auth.EveAuthManager.getInstance().getCachedProfile();
+        String evePhone = eveCached != null && !TextUtils.isEmpty(eveCached.phone)
+                ? eveCached.phone
+                : (user != null ? user.phone : "");
+        if (!TextUtils.isEmpty(evePhone)) {
+            String phoneLabel = evePhone.startsWith("+") ? evePhone : PhoneFormat.getInstance().format("+" + evePhone);
+            items.add(SettingsActivity.SettingCell.Factory.of(INFO_PHONE, IconBackgroundColors.GREEN.top, IconBackgroundColors.GREEN.bottom, R.drawable.settings_calls, phoneLabel, getString(R.string.Phone)));
+        } else {
+            items.add(SettingsActivity.SettingCell.Factory.of(INFO_PHONE, IconBackgroundColors.GREEN.top, IconBackgroundColors.GREEN.bottom, R.drawable.settings_calls, getString(R.string.Phone), null));
         }
         usernameRow = items.size();
         String publicUsername = UserObject.getPublicUsername(user);
@@ -487,23 +471,15 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
             
 
         } else if (item.id == INFO_PHONE) {
-            if (getUserConfig().isClientActivated()) {
-                presentFragment(new ActionIntroActivity(ActionIntroActivity.ACTION_TYPE_CHANGE_PHONE_NUMBER));
-            } else {
-                showEveFieldEditDialog(getString(R.string.Phone), "phone",
-                        org.telegram.ui.eve.auth.EveAuthManager.getInstance().getCachedProfile() != null
-                                ? org.telegram.ui.eve.auth.EveAuthManager.getInstance().getCachedProfile().phone : "",
-                        "+91 9876543210");
-            }
+            showEveFieldEditDialog(getString(R.string.Phone), "phone",
+                    org.telegram.ui.eve.auth.EveAuthManager.getInstance().getCachedProfile() != null
+                            ? org.telegram.ui.eve.auth.EveAuthManager.getInstance().getCachedProfile().phone : "",
+                    "+91 9876543210");
         } else if (item.id == INFO_USERNAME) {
-            if (getUserConfig().isClientActivated()) {
-                presentFragment(new ChangeUsernameActivity());
-            } else {
-                showEveFieldEditDialog(getString(R.string.Username), "username",
-                        org.telegram.ui.eve.auth.EveAuthManager.getInstance().getCachedProfile() != null
-                                ? org.telegram.ui.eve.auth.EveAuthManager.getInstance().getCachedProfile().username : "",
-                        "student_handle");
-            }
+            showEveFieldEditDialog(getString(R.string.Username), "username",
+                    org.telegram.ui.eve.auth.EveAuthManager.getInstance().getCachedProfile() != null
+                            ? org.telegram.ui.eve.auth.EveAuthManager.getInstance().getCachedProfile().username : "",
+                    "student_handle");
         } else if (item.id == BUTTON_LOGOUT) {
             presentFragment(new LogoutActivity());
         }
@@ -610,20 +586,15 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
     private void setValue() {
         if (valueSet) return;
 
-        final long selfId = getUserConfig().isClientActivated()
-                ? getUserConfig().getClientUserId()
-                : org.telegram.ui.eve.auth.EveAuthManager.getInstance().ensureLocalUiUser(currentAccount);
+        final long selfId = org.telegram.ui.eve.auth.EveAuthManager.getInstance().ensureLocalUiUser(currentAccount);
         TLRPC.UserFull userFull = selfId != 0 ? getMessagesController().getUserFull(selfId) : null;
         if (userFull == null) {
-            if (getUserConfig().isClientActivated() && getUserConfig().getCurrentUser() != null) {
-                getMessagesController().loadUserInfo(getUserConfig().getCurrentUser(), true, getClassGuid());
-            }
             return;
         }
 
         TLRPC.User user = userFull.user;
         if (user == null) {
-            user = selfId != 0 ? getMessagesController().getUser(selfId) : getUserConfig().getCurrentUser();
+            user = selfId != 0 ? getMessagesController().getUser(selfId) : null;
         }
 
         if (user == null) {
@@ -683,7 +654,7 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
         }
 
         doneButton.setLoading(true, true);
-        if (!getUserConfig().isClientActivated()) {
+        if (true) {
             if (!hasChanges()) {
                 wasSaved = true;
                 doneButton.setLoading(false, true);

@@ -618,12 +618,16 @@ public final class EveAuthManager {
         // Preserve any previously confirmed eveId while syncing so we never regress UI state.
         final EveUserProfile existing = cachedProfile;
         final EveUserProfile workingProfile = (existing != null && user.getUid().equals(existing.uid) && !existing.eveId.isEmpty())
-                ? new EveUserProfile(
-                baseProfile.uid, existing.eveId, baseProfile.displayName, baseProfile.email,
-                baseProfile.photoUrl, baseProfile.authProvider, baseProfile.emailVerified,
-                baseProfile.accountStatus, existing.isAdmin, existing.username, existing.category,
-                existing.bio, baseProfile.createdAt, baseProfile.updatedAt, baseProfile.lastLoginAt,
-                existing.syncedWithBackend)
+                ? baseProfile.withBackendSync(
+                existing.eveId,
+                baseProfile.displayName,
+                existing.username,
+                existing.category,
+                existing.bio,
+                existing.dob,
+                existing.phone,
+                existing.isAdmin,
+                baseProfile.updatedAt)
                 : baseProfile;
         saveCachedProfile(workingProfile);
 
@@ -1018,6 +1022,33 @@ public final class EveAuthManager {
                             });
                         } catch (Throwable t) {
                             String msg = t.getMessage() != null ? t.getMessage() : "Could not update EVE profile.";
+                            mainHandler.post(() -> callback.onError(msg));
+                        }
+                    });
+                })
+                .addOnFailureListener(e -> mainHandler.post(() -> callback.onError(mapFirebaseError(e))));
+    }
+
+    public void deleteEveAccount(@Nullable Activity activity, @NonNull SimpleCallback callback) {
+        ensureInitialized();
+        FirebaseUser user = getCurrentUser();
+        if (user == null || user.isAnonymous()) {
+            mainHandler.post(() -> callback.onError("Please sign in to EVE first."));
+            return;
+        }
+        user.getIdToken(true)
+                .addOnSuccessListener(result -> {
+                    String token = result != null ? result.getToken() : null;
+                    if (token == null || token.trim().isEmpty()) {
+                        mainHandler.post(() -> callback.onError("Authentication token unavailable."));
+                        return;
+                    }
+                    ioExecutor.execute(() -> {
+                        try {
+                            backendClient.deleteAccount(token);
+                            signOut(activity, () -> callback.onSuccess("EVE account deleted."));
+                        } catch (Throwable t) {
+                            String msg = t.getMessage() != null ? t.getMessage() : "Could not delete EVE account.";
                             mainHandler.post(() -> callback.onError(msg));
                         }
                     });

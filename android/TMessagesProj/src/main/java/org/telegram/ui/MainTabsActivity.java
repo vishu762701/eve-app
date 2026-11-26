@@ -584,78 +584,10 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
     }
 
     public boolean openAccountSelector(View button) {
-        final ArrayList<Integer> accountNumbers = new ArrayList<>();
-
-        accountNumbers.clear();
-        for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
-            if (UserConfig.getInstance(a).isClientActivated()) {
-                accountNumbers.add(a);
-            }
+        // EVE-PATCH: Telegram multi-account switcher disabled; EVE uses a single independent Google/Firebase session.
+        if (button != null) {
+            selectTab(POSITION_PROFILE, true);
         }
-        Collections.sort(accountNumbers, (o1, o2) -> {
-            long l1 = UserConfig.getInstance(o1).loginTime;
-            long l2 = UserConfig.getInstance(o2).loginTime;
-            if (l1 > l2) {
-                return 1;
-            } else if (l1 < l2) {
-                return -1;
-            }
-            return 0;
-        });
-
-        ItemOptions o = ItemOptions.makeOptions(this, button);
-        if (UserConfig.getActivatedAccountsCount() < UserConfig.MAX_ACCOUNT_COUNT) {
-            o.add(R.drawable.msg_addbot, getString(R.string.AddAccount), () -> {
-                int freeAccounts = 0;
-                Integer availableAccount = null;
-                for (int a = UserConfig.MAX_ACCOUNT_COUNT - 1; a >= 0; a--) {
-                    if (!UserConfig.getInstance(a).isClientActivated()) {
-                        freeAccounts++;
-                        if (availableAccount == null) {
-                            availableAccount = a;
-                        }
-                    }
-                }
-                if (!UserConfig.hasPremiumOnAccounts()) {
-                    freeAccounts -= (UserConfig.MAX_ACCOUNT_COUNT - UserConfig.MAX_ACCOUNT_DEFAULT_COUNT);
-                }
-                if (freeAccounts > 0 && availableAccount != null) {
-                    presentFragment(createAddAccountLoginFragment(availableAccount));
-                } else if (!UserConfig.hasPremiumOnAccounts()) {
-                    showDialog(new LimitReachedBottomSheet(this, getContext(), TYPE_ACCOUNTS, currentAccount, null));
-                }
-            });
-        }
-
-        if (BuildConfig.DEBUG_PRIVATE_VERSION) {
-            o.add(R.drawable.menu_download_round, "Dump Canvas", () -> AndroidUtilities.runOnUIThread(this::dumpCanvas, 1000));
-        }
-
-        if (accountNumbers.size() > 0) {
-            if (o.getItemsCount() > 0) o.addGap();
-            for (int acc : accountNumbers) {
-                final int account = acc;
-                final View btn = accountView(acc, currentAccount == acc);
-                btn.setOnClickListener(v -> {
-                    if (currentAccount == account) return;
-                    o.dismiss();
-                    if (LaunchActivity.instance != null) {
-                        LaunchActivity.instance.switchToAccount(account, true);
-                    }
-                });
-                o.addView(btn, LayoutHelper.createLinear(230, 48));
-            }
-        }
-
-        o.setBlur(true);
-        o.translate(0, -dp(4));
-        final ShapeDrawable bg = Theme.createRoundRectDrawable(dp(28), getThemedColor(Theme.key_windowBackgroundWhite));
-        bg.getPaint().setShadowLayer(dp(6), 0, dp(1), Theme.multAlpha(0xFF000000, 0.15f));
-        o.setScrimViewBackground(bg);
-        o.show();
-
-        HintsController.Hint.AccountSwitchHint.doNotShowAgain();
-
         return true;
     }
 
@@ -805,9 +737,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
             dialogsActivity.setMainTabsActivityController(new MainTabsActivityControllerImpl());
             return dialogsActivity;
         } else if (position == POSITION_PROFILE) {
-            long profileUid = UserConfig.getInstance(currentAccount).isClientActivated()
-                    ? UserConfig.getInstance(currentAccount).getClientUserId()
-                    : org.telegram.ui.eve.auth.EveAuthManager.getInstance().ensureLocalUiUser(currentAccount);
+            long profileUid = org.telegram.ui.eve.auth.EveAuthManager.getInstance().ensureLocalUiUser(currentAccount);
             if (profileUid == 0) {
                 return new org.telegram.ui.eve.auth.EveSignInFragment();
             }

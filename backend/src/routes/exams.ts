@@ -186,8 +186,8 @@ examRoutes.post("/", requirePermission("manage_exams"), async (c) => {
   let publishMode = "inherit";
   if (body.publishMode !== undefined && body.publishMode !== null) {
     const mode = String(body.publishMode).trim().toLowerCase();
-    if (mode !== "inherit" && mode !== "live" && mode !== "paused") {
-      return c.json({ success: false, error: "publishMode must be 'inherit', 'live', or 'paused'" }, 400);
+    if (mode !== "inherit" && mode !== "live" && mode !== "paused" && mode !== "archived") {
+      return c.json({ success: false, error: "publishMode must be 'inherit', 'live', 'paused', or 'archived'" }, 400);
     }
     publishMode = mode;
   }
@@ -331,8 +331,8 @@ examRoutes.put("/:id", requirePermission("manage_exams"), async (c) => {
   let publishMode = existing.publish_mode || "inherit";
   if (body.publishMode !== undefined && body.publishMode !== null) {
     const mode = String(body.publishMode).trim().toLowerCase();
-    if (mode !== "inherit" && mode !== "live" && mode !== "paused") {
-      return c.json({ success: false, error: "publishMode must be 'inherit', 'live', or 'paused'" }, 400);
+    if (mode !== "inherit" && mode !== "live" && mode !== "paused" && mode !== "archived") {
+      return c.json({ success: false, error: "publishMode must be 'inherit', 'live', 'paused', or 'archived'" }, 400);
     }
     publishMode = mode;
   }

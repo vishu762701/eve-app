@@ -175,22 +175,57 @@ public class IntroActivity extends BaseFragment implements NotificationCenter.No
             protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
                 super.onLayout(changed, left, top, right, bottom);
 
-                int oneFourth = (bottom - top) / 4;
+                int height = bottom - top;
+                int oneFourth = height / 4;
 
-                int y = (oneFourth * 3 - dp(275)) / 2;
-                frameLayout2.layout(0, y, frameLayout2.getMeasuredWidth(), y + frameLayout2.getMeasuredHeight());
-                y += dp(ICON_HEIGHT_DP);
-                y += dp(122 + 17);
-                int x = (getMeasuredWidth() - bottomPages.getMeasuredWidth()) / 2;
-                bottomPages.layout(x, y, x + bottomPages.getMeasuredWidth(), y + bottomPages.getMeasuredHeight());
+                int minIconTop = (AndroidUtilities.isTablet() ? 0 : AndroidUtilities.statusBarHeight) + dp(16);
+                int iconY = Math.max(minIconTop, (oneFourth * 3 - dp(275)) / 2);
+
+                int buttonY = oneFourth * 3 + (oneFourth - startMessagingButton.getMeasuredHeight()) / 2;
+                int switchY = buttonY - dp(24);
+                boolean hasSwitchText = switchLanguageTextView.getVisibility() == View.VISIBLE
+                        && switchLanguageTextView.getText() != null
+                        && switchLanguageTextView.getText().length() > 0;
+                int switchHeight = hasSwitchText ? switchLanguageTextView.getMeasuredHeight() : 0;
+
                 viewPager.layout(0, 0, viewPager.getMeasuredWidth(), viewPager.getMeasuredHeight());
 
-                y = oneFourth * 3 + (oneFourth - startMessagingButton.getMeasuredHeight()) / 2;
+                // EVE-PATCH: Compute actual bottom of pager description text across pages so dots never overlap text on any screen or font scale.
+                int maxMessageBottom = iconY + dp(ICON_HEIGHT_DP) + dp(122);
+                for (int i = 0; i < viewPager.getChildCount(); i++) {
+                    View page = viewPager.getChildAt(i);
+                    View msgView = page.findViewWithTag(pagerMessageTag);
+                    if (msgView != null && msgView.getBottom() > maxMessageBottom) {
+                        maxMessageBottom = msgView.getBottom();
+                    }
+                }
+
+                int dotsHeight = bottomPages.getMeasuredHeight();
+                int preferredDotsY = Math.max(iconY + dp(ICON_HEIGHT_DP) + dp(122 + 17), maxMessageBottom + dp(18));
+                int maxAllowedDotsY = (hasSwitchText ? switchY - switchHeight - dp(16) : buttonY - dp(18)) - dotsHeight;
+                if (preferredDotsY > maxAllowedDotsY) {
+                    int neededShift = preferredDotsY - maxAllowedDotsY;
+                    int shiftUp = Math.min(neededShift, Math.max(0, iconY - minIconTop));
+                    iconY -= shiftUp;
+                    maxMessageBottom -= shiftUp;
+                    preferredDotsY = Math.max(iconY + dp(ICON_HEIGHT_DP) + dp(122 + 17), maxMessageBottom + dp(18));
+                }
+
+                frameLayout2.layout(0, iconY, frameLayout2.getMeasuredWidth(), iconY + frameLayout2.getMeasuredHeight());
+                int dotsY = preferredDotsY;
+                if (dotsY + dotsHeight + dp(16) > (hasSwitchText ? switchY - switchHeight : buttonY)) {
+                    int push = (dotsY + dotsHeight + dp(16)) - (hasSwitchText ? switchY - switchHeight : buttonY);
+                    switchY += push;
+                    buttonY += push;
+                }
+
+                int x = (getMeasuredWidth() - bottomPages.getMeasuredWidth()) / 2;
+                bottomPages.layout(x, dotsY, x + bottomPages.getMeasuredWidth(), dotsY + dotsHeight);
+
                 x = (getMeasuredWidth() - startMessagingButton.getMeasuredWidth()) / 2;
-                startMessagingButton.layout(x, y, x + startMessagingButton.getMeasuredWidth(), y + startMessagingButton.getMeasuredHeight());
-                y -= dp(30);
+                startMessagingButton.layout(x, buttonY, x + startMessagingButton.getMeasuredWidth(), buttonY + startMessagingButton.getMeasuredHeight());
                 x = (getMeasuredWidth() - switchLanguageTextView.getMeasuredWidth()) / 2;
-                switchLanguageTextView.layout(x, y - switchLanguageTextView.getMeasuredHeight(), x + switchLanguageTextView.getMeasuredWidth(), y);
+                switchLanguageTextView.layout(x, switchY - switchHeight, x + switchLanguageTextView.getMeasuredWidth(), switchY);
 
                 MarginLayoutParams marginLayoutParams = (MarginLayoutParams) themeFrameLayout.getLayoutParams();
                 int newTopMargin = dp(themeMargin) + (AndroidUtilities.isTablet() ? 0 : AndroidUtilities.statusBarHeight);
@@ -427,8 +462,6 @@ public class IntroActivity extends BaseFragment implements NotificationCenter.No
 
         NotificationCenter.getGlobalInstance().addWeakObserver(this, NotificationCenter.suggestedLangpack);
         NotificationCenter.getInstance(currentAccount).addWeakObserver(this, NotificationCenter.configLoaded);
-        ConnectionsManager.getInstance(currentAccount).updateDcSettings();
-        LocaleController.getInstance().loadRemoteLanguages(currentAccount);
         checkContinueText();
         justCreated = true;
 
@@ -476,62 +509,23 @@ public class IntroActivity extends BaseFragment implements NotificationCenter.No
     }
 
     private void checkContinueText() {
-        LocaleController.LocaleInfo englishInfo = null;
-        LocaleController.LocaleInfo systemInfo = null;
+        // EVE-PATCH: Offer local English/Hindi switch on Onboarding without calling Telegram langpack MTProto RPCs.
+        LocaleController.LocaleInfo englishInfo = LocaleController.getInstance().getLanguageFromDict("en");
+        LocaleController.LocaleInfo hindiInfo = LocaleController.getInstance().getLanguageFromDict(LocaleController.EVE_HINDI_LANGUAGE_CODE);
         LocaleController.LocaleInfo currentLocaleInfo = LocaleController.getInstance().getCurrentLocaleInfo();
-        String systemLang = MessagesController.getInstance(currentAccount).suggestedLangCode;
-        if (systemLang == null || systemLang.equals("en") && LocaleController.getInstance().getSystemDefaultLocale().getLanguage() != null && !LocaleController.getInstance().getSystemDefaultLocale().getLanguage().equals("en")) {
-            systemLang = LocaleController.getInstance().getSystemDefaultLocale().getLanguage();
-            if (systemLang == null) {
-                systemLang = "en";
-            }
-        }
-
-        String arg = systemLang.contains("-") ? systemLang.split("-")[0] : systemLang;
-        String alias = LocaleController.getLocaleAlias(arg);
-        for (int a = 0; a < LocaleController.getInstance().languages.size(); a++) {
-            LocaleController.LocaleInfo info = LocaleController.getInstance().languages.get(a);
-            if (info.shortName.equals("en")) {
-                englishInfo = info;
-            }
-            if (info.shortName.replace("_", "-").equals(systemLang) || info.shortName.equals(arg) || info.shortName.equals(alias)) {
-                systemInfo = info;
-            }
-            if (englishInfo != null && systemInfo != null) {
-                break;
-            }
-        }
-        if (englishInfo == null || systemInfo == null || englishInfo == systemInfo) {
-            return;
-        }
-        TLRPC.TL_langpack_getStrings req = new TLRPC.TL_langpack_getStrings();
-        if (systemInfo != currentLocaleInfo) {
-            req.lang_code = systemInfo.getLangCode();
-            localeInfo = systemInfo;
-        } else {
-            req.lang_code = englishInfo.getLangCode();
+        String currentCode = currentLocaleInfo != null ? currentLocaleInfo.shortName : "en";
+        if (LocaleController.EVE_HINDI_LANGUAGE_CODE.equalsIgnoreCase(currentCode) && englishInfo != null) {
             localeInfo = englishInfo;
+            switchLanguageTextView.setText("Continue in English");
+            switchLanguageTextView.setVisibility(View.VISIBLE);
+        } else if (hindiInfo != null) {
+            localeInfo = hindiInfo;
+            switchLanguageTextView.setText("हिन्दी में जारी रखें");
+            switchLanguageTextView.setVisibility(View.VISIBLE);
+        } else {
+            localeInfo = null;
+            switchLanguageTextView.setVisibility(View.GONE);
         }
-        req.keys.add("ContinueOnThisLanguage");
-        String finalSystemLang = systemLang;
-        ConnectionsManager.getInstance(currentAccount).sendRequest(req, (response, error) -> {
-            if (response instanceof Vector) {
-                Vector vector = (Vector) response;
-                if (vector.objects.isEmpty()) {
-                    return;
-                }
-                final TLRPC.LangPackString string = (TLRPC.LangPackString) vector.objects.get(0);
-                if (string instanceof TLRPC.TL_langPackString) {
-                    AndroidUtilities.runOnUIThread(() -> {
-                        if (!destroyed) {
-                            switchLanguageTextView.setText(string.value);
-                            SharedPreferences preferences = MessagesController.getGlobalMainSettings();
-                            preferences.edit().putString("language_showed2", finalSystemLang.toLowerCase()).apply();
-                        }
-                    });
-                }
-            }
-        }, ConnectionsManager.RequestFlagWithoutLogin);
     }
 
     @Override
@@ -574,14 +568,14 @@ public class IntroActivity extends BaseFragment implements NotificationCenter.No
                 @Override
                 protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
                     int oneFourth = (bottom - top) / 4;
-                    int y = (oneFourth * 3 - dp(275)) / 2;
+                    int minIconTop = (AndroidUtilities.isTablet() ? 0 : AndroidUtilities.statusBarHeight) + dp(16);
+                    int y = Math.max(minIconTop, (oneFourth * 3 - dp(275)) / 2);
                     y += dp(ICON_HEIGHT_DP);
                     y += dp(16 + 9);
                     int x = dp(18);
                     headerTextView.layout(x, y, x + headerTextView.getMeasuredWidth(), y + headerTextView.getMeasuredHeight());
 
-                    y += (int) headerTextView.getTextSize();
-                    y += dp(18);
+                    y += headerTextView.getMeasuredHeight() + dp(14);
                     x = dp(16);
                     messageTextView.layout(x, y, x + messageTextView.getMeasuredWidth(), y + messageTextView.getMeasuredHeight());
                 }

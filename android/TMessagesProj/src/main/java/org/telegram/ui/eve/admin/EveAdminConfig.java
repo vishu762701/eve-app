@@ -85,6 +85,9 @@ public final class EveAdminConfig {
     }
 
     public static boolean isSectionVisible(String sectionKey) {
+        if (SECTION_CHAT_FOLDERS.equals(sectionKey) || SECTION_DEVICES.equals(sectionKey)) {
+            return false;
+        }
         if (!isAdminAvailable() || sectionKey == null) {
             return true;
         }

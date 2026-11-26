@@ -568,10 +568,12 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
     public static final String EVE_SECTION_NAME_COLOR = "name_color";
     public static final String EVE_SECTION_COLOR_THEME = "color_theme";
     public static final String EVE_SECTION_AUTO_NIGHT_MODE = "auto_night_mode";
+    public static final String EVE_SECTION_MESSAGING_EXTRAS = "messaging_extras";
 
     public static boolean isEveExamSettingSectionEnabled(String sectionKey) {
         return !EVE_SECTION_APP_ICON.equals(sectionKey)
-                && !EVE_SECTION_CHAT_LIST_SWIPE.equals(sectionKey);
+                && !EVE_SECTION_CHAT_LIST_SWIPE.equals(sectionKey)
+                && !EVE_SECTION_MESSAGING_EXTRAS.equals(sectionKey);
     }
 
     public ThemeActivity(int type) {
@@ -807,29 +809,33 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
             nightThemeRow = rowCount++;
             browserRow = rowCount++;
             liteModeRow = rowCount++;
-            stickersRow = rowCount++;
-            stickersSectionRow = rowCount++;
+            if (isEveExamSettingSectionEnabled(EVE_SECTION_MESSAGING_EXTRAS)) {
+                stickersRow = rowCount++;
+                stickersSectionRow = rowCount++;
 
-            mediaSoundHeaderRow = rowCount++;
-            nextMediaTapRow = rowCount++;
-            raiseToListenRow = rowCount++;
-            if (SharedConfig.raiseToListen) {
-                raiseToSpeakRow = rowCount++;
-            }
-            pauseOnRecordRow = rowCount++;
-            pauseOnMediaRow = rowCount++;
-            bluetoothScoRow = rowCount++;
-            mediaSoundSectionRow = rowCount++;
+                mediaSoundHeaderRow = rowCount++;
+                nextMediaTapRow = rowCount++;
+                raiseToListenRow = rowCount++;
+                if (SharedConfig.raiseToListen) {
+                    raiseToSpeakRow = rowCount++;
+                }
+                pauseOnRecordRow = rowCount++;
+                pauseOnMediaRow = rowCount++;
+                bluetoothScoRow = rowCount++;
+                mediaSoundSectionRow = rowCount++;
 
-            otherHeaderRow = rowCount++;
-            directShareRow = rowCount++;
-            TL_account.contentSettings contentSettings = getMessagesController().getContentSettings();
-            if (contentSettings != null && contentSettings.sensitive_can_change) {
-                sensitiveContentRow = rowCount++;
+                otherHeaderRow = rowCount++;
+                directShareRow = rowCount++;
+                TL_account.contentSettings contentSettings = getMessagesController().getContentSettings();
+                if (contentSettings != null && contentSettings.sensitive_can_change) {
+                    sensitiveContentRow = rowCount++;
+                }
+                sendByEnterRow = rowCount++;
+                distanceRow = rowCount++;
+                otherSectionRow = rowCount++;
+            } else {
+                stickersSectionRow = rowCount++;
             }
-            sendByEnterRow = rowCount++;
-            distanceRow = rowCount++;
-            otherSectionRow = rowCount++;
         } else {
             nightDisabledRow = rowCount++;  // TYPE_THEME_TYPE
             nightScheduledRow = rowCount++; // TYPE_THEME_TYPE

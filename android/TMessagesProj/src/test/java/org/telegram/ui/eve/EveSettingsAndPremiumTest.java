@@ -49,11 +49,21 @@ public class EveSettingsAndPremiumTest {
     public void telegramFeatures_isRemovedAndHelpStringsAreEveBranded() {
         assertFalse(SettingsActivity.isEveSettingsItemEnabled(SettingsActivity.EVE_SETTINGS_ITEM_TELEGRAM_FEATURES));
         assertTrue(SettingsActivity.isEveSettingsItemEnabled(SettingsActivity.EVE_SETTINGS_ITEM_PREMIUM));
+        assertFalse(org.telegram.ui.eve.admin.EveAdminConfig.isSectionVisible(org.telegram.ui.eve.admin.EveAdminConfig.SECTION_CHAT_FOLDERS));
+        assertFalse(org.telegram.ui.eve.admin.EveAdminConfig.isSectionVisible(org.telegram.ui.eve.admin.EveAdminConfig.SECTION_DEVICES));
+        assertFalse(org.telegram.ui.ThemeActivity.isEveExamSettingSectionEnabled(org.telegram.ui.ThemeActivity.EVE_SECTION_MESSAGING_EXTRAS));
         assertEquals("EVE Help & Support", appContext.getString(R.string.EveHelpSupport));
         assertEquals("EVE FAQ", appContext.getString(R.string.EveFaq));
         assertEquals("Privacy Policy", appContext.getString(R.string.PrivacyPolicy));
-        assertTrue(appContext.getString(R.string.EvePrivacyPolicyBody).contains("Telegram API"));
+        assertFalse(appContext.getString(R.string.EvePrivacyPolicyBody).contains("Telegram API"));
         assertTrue(appContext.getString(R.string.EvePrivacyPolicyBody).contains("never sends"));
+        assertNotNull(org.telegram.ui.eve.notifications.EveNotificationSettingsFragment.class);
+        assertTrue(org.telegram.ui.eve.notifications.EveNotificationHelper.isCategoryEnabled(
+                appContext, org.telegram.ui.eve.notifications.EveNotificationHelper.PREF_EXAM_REMINDERS));
+        assertFalse(org.telegram.ui.eve.notifications.EveNotificationHelper.toggleCategory(
+                appContext, org.telegram.ui.eve.notifications.EveNotificationHelper.PREF_EXAM_REMINDERS));
+        assertTrue(org.telegram.ui.eve.notifications.EveNotificationHelper.toggleCategory(
+                appContext, org.telegram.ui.eve.notifications.EveNotificationHelper.PREF_EXAM_REMINDERS));
     }
 
     @Test

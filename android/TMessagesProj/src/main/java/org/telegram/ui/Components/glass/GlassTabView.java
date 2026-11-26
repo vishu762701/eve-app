@@ -450,7 +450,8 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
     }
 
     public void updateUserAvatar(int currentAccount) {
-        TLRPC.User user = MessagesController.getInstance(currentAccount).getUser(UserConfig.getInstance(currentAccount).getClientUserId());
+        long uid = org.telegram.ui.eve.auth.EveAuthManager.getInstance().ensureLocalUiUser(currentAccount);
+        TLRPC.User user = uid != 0 ? MessagesController.getInstance(currentAccount).getUser(uid) : null;
         AvatarDrawable avatarDrawable = new AvatarDrawable(user);
         backupImageView.setForUserOrChat(user, avatarDrawable);
     }

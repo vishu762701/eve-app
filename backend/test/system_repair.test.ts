@@ -227,7 +227,7 @@ test('dashboard returns real aggregates, submission activity, safe failures and 
 });
 test('health distinguishes schema failure, unavailable Firebase and configured-only AI', async () => {
   const db = new LocalD1(); const admin = harness(db, true); db.sqlite.exec('DROP TABLE generation_jobs'); const original = globalThis.fetch; globalThis.fetch = async () => { throw new Error('offline'); };
-  try { const data = (await (await admin('/api/admin/system/health')).json()).data; assert.equal(data.database.status, 'degraded'); assert.equal(data.firebase.status, 'unavailable'); assert.equal(data.ai.status, 'configured'); } finally { globalThis.fetch = original; }
+  try { const data = (await (await admin('/api/admin/system/health')).json()).data; assert.equal(data.database.status, 'degraded'); assert.equal(data.firebase.status, 'unavailable'); assert.equal(data.ai.status, 'configured'); assert.equal(data.r2.status, 'unconfigured'); } finally { globalThis.fetch = original; }
 });
 
 test('queued submission cannot be reassigned by an account switch', async () => {

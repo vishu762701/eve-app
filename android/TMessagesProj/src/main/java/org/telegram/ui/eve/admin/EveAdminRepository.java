@@ -100,6 +100,8 @@ public final class EveAdminRepository {
         }
 
         int totalAttempts = 0;
+        double scoreSum = 0.0;
+        int scoreCount = 0;
         List<EveAdminModels.AuditLogEntry> recentActions = new ArrayList<>();
         if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_VIEW_ANALYTICS_LOGS)) {
             JSONArray examAnalytics = client.getJsonRoot("/api/admin/analytics/exams", token).optJSONArray("data");
@@ -107,17 +109,25 @@ public final class EveAdminRepository {
                 for (int i = 0; i < examAnalytics.length(); i++) {
                     JSONObject row = examAnalytics.optJSONObject(i);
                     if (row != null) {
-                        totalAttempts += row.optInt("attemptCount", 0);
+                        int count = row.optInt("attemptCount", 0);
+                        totalAttempts += count;
+                        if (count > 0 && row.has("averageScore")) {
+                            scoreSum += row.optDouble("averageScore", 0.0) * count;
+                            scoreCount += count;
+                        }
                     }
                 }
             }
             JSONArray logs = client.getJsonRoot("/api/admin/audit-log?limit=15", token).optJSONArray("data");
             recentActions = EveAdminModels.AuditLogEntry.parseList(logs);
         }
+        double averageScorePct = scoreCount > 0 ? (scoreSum / scoreCount) : 0.0;
 
         int totalTransactions = 0;
         int paidTransactions = 0;
+        int pendingTransactions = 0;
         long totalRevenueInr = 0;
+        int activePremiumUsers = 0;
         if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_PREMIUM)) {
             List<EveAdminModels.PaymentTransactionItem> txList = fetchTransactions(token, 100);
             totalTransactions = txList.size();
@@ -125,7 +135,25 @@ public final class EveAdminRepository {
                 if ("PAID".equalsIgnoreCase(tx.status)) {
                     paidTransactions++;
                     totalRevenueInr += tx.amount;
+                } else if ("PENDING".equalsIgnoreCase(tx.status)) {
+                    pendingTransactions++;
                 }
+            }
+            try {
+                activePremiumUsers = fetchPremiumUsers(token).size();
+            } catch (Throwable ignored) {
+            }
+        }
+
+        int pendingReports = 0;
+        if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MODERATE_FEEDBACK)) {
+            try {
+                for (EveAdminModels.QuestionReportItem r : fetchReports(token, null)) {
+                    if ("pending".equalsIgnoreCase(r.status)) {
+                        pendingReports++;
+                    }
+                }
+            } catch (Throwable ignored) {
             }
         }
 
@@ -144,6 +172,10 @@ public final class EveAdminRepository {
                 totalTransactions,
                 paidTransactions,
                 totalRevenueInr,
+                pendingTransactions,
+                activePremiumUsers,
+                pendingReports,
+                averageScorePct,
                 exams,
                 tests,
                 recentActions
@@ -425,6 +457,278 @@ public final class EveAdminRepository {
         return EveAdminModels.AuditLogEntry.parseList(root.optJSONArray("data"));
     }
 
+    public JSONObject fetchExamDeletionInfo(String token, String examId) throws EveBackendClient.BackendException {
+        return client.getJsonRoot("/api/exams/" + encode(examId) + "/deletion-info", token).optJSONObject("data");
+    }
+
+    public void deleteExam(String token, String examId) throws EveBackendClient.BackendException {
+        client.deleteJsonRoot("/api/exams/" + encode(examId), token);
+    }
+
+    public void removeSyllabus(String token, String examId) throws EveBackendClient.BackendException {
+        client.deleteJsonRoot("/api/exams/" + encode(examId) + "/syllabus", token);
+    }
+
+    public void reassignSyllabus(String token, String sourceExamId, String targetExamId) throws EveBackendClient.BackendException {
+        JSONObject payload = new JSONObject();
+        try {
+            payload.put("targetExamId", targetExamId);
+        } catch (JSONException ignored) {
+        }
+        client.postJsonRoot("/api/exams/" + encode(sourceExamId) + "/syllabus/reassign", token, payload);
+    }
+
+    public List<EveAdminModels.PremiumUserItem> fetchPremiumUsers(String token) throws EveBackendClient.BackendException {
+        JSONObject root = client.getJsonRoot("/api/admin/premium/users", token);
+        return EveAdminModels.PremiumUserItem.parseList(root.optJSONArray("data"));
+    }
+
+    public List<EveAdminModels.BannerItem> fetchBanners(String token) throws EveBackendClient.BackendException {
+        JSONObject root = client.getJsonRoot("/api/banners", token);
+        return EveAdminModels.BannerItem.parseList(root.optJSONArray("data"));
+    }
+
+    public void updateBannerLink(String token, String bannerId, String linkUrl, String linkLabel) throws EveBackendClient.BackendException {
+        JSONObject payload = new JSONObject();
+        try {
+            payload.put("linkUrl", linkUrl != null ? linkUrl : "");
+            payload.put("linkLabel", linkLabel != null ? linkLabel : "");
+        } catch (JSONException ignored) {
+        }
+        client.putJsonRoot("/api/banners/" + encode(bannerId) + "/link", token, payload);
+    }
+
+    public void reorderBanner(String token, String bannerId, boolean moveUp) throws EveBackendClient.BackendException {
+        JSONObject payload = new JSONObject();
+        try {
+            payload.put("moveUp", moveUp);
+        } catch (JSONException ignored) {
+        }
+        client.putJsonRoot("/api/banners/" + encode(bannerId) + "/reorder", token, payload);
+    }
+
+    public void deleteBanner(String token, String bannerId) throws EveBackendClient.BackendException {
+        client.deleteJsonRoot("/api/banners/" + encode(bannerId), token);
+    }
+
+    public JSONObject fetchFloatingLink(String token) throws EveBackendClient.BackendException {
+        return client.getJsonRoot("/api/admin/floating-link", token);
+    }
+
+    public void updateFloatingLink(String token, String url) throws EveBackendClient.BackendException {
+        JSONObject payload = new JSONObject();
+        try {
+            payload.put("url", url != null ? url.trim() : "");
+        } catch (JSONException ignored) {
+        }
+        client.putJsonRoot("/api/admin/floating-link", token, payload);
+    }
+
+    public List<EveAdminModels.PollItem> fetchPolls(String token) throws EveBackendClient.BackendException {
+        JSONObject root = client.getJsonRoot("/api/polls", token);
+        return EveAdminModels.PollItem.parseList(root.optJSONArray("data"));
+    }
+
+    public void createPoll(String token, String question, List<String> options) throws EveBackendClient.BackendException {
+        JSONObject payload = new JSONObject();
+        try {
+            payload.put("question", question);
+            JSONArray arr = new JSONArray();
+            if (options != null) {
+                for (String opt : options) {
+                    if (opt != null && !opt.trim().isEmpty()) {
+                        arr.put(opt.trim());
+                    }
+                }
+            }
+            payload.put("options", arr);
+        } catch (JSONException ignored) {
+        }
+        client.postJsonRoot("/api/polls", token, payload);
+    }
+
+    public void setPollActive(String token, String pollId, boolean active) throws EveBackendClient.BackendException {
+        JSONObject payload = new JSONObject();
+        try {
+            payload.put("isActive", active);
+        } catch (JSONException ignored) {
+        }
+        client.putJsonRoot("/api/polls/" + encode(pollId) + "/status", token, payload);
+    }
+
+    public void deletePoll(String token, String pollId) throws EveBackendClient.BackendException {
+        client.deleteJsonRoot("/api/polls/" + encode(pollId), token);
+    }
+
+    public List<EveAdminModels.BroadcastItem> fetchBroadcasts(String token) throws EveBackendClient.BackendException {
+        JSONObject root = client.getJsonRoot("/api/broadcasts?limit=50", token);
+        return EveAdminModels.BroadcastItem.parseList(root.optJSONArray("data"));
+    }
+
+    public void sendBroadcast(String token, String title, String message) throws EveBackendClient.BackendException {
+        JSONObject payload = new JSONObject();
+        try {
+            payload.put("title", title);
+            payload.put("message", message);
+        } catch (JSONException ignored) {
+        }
+        client.postJsonRoot("/api/broadcasts", token, payload);
+    }
+
+    public void deleteBroadcast(String token, String id) throws EveBackendClient.BackendException {
+        client.deleteJsonRoot("/api/broadcasts/" + encode(id), token);
+    }
+
+    public List<EveAdminModels.QuestionReportItem> fetchReports(String token, String type) throws EveBackendClient.BackendException {
+        String path = "/api/admin/reports" + (type != null && !type.isEmpty() ? "?type=" + encode(type) : "");
+        JSONObject root = client.getJsonRoot(path, token);
+        return EveAdminModels.QuestionReportItem.parseList(root.optJSONArray("data"));
+    }
+
+    public void dismissReport(String token, String id) throws EveBackendClient.BackendException {
+        client.putJsonRoot("/api/admin/reports/" + encode(id) + "/dismiss", token, new JSONObject());
+    }
+
+    public void deleteReport(String token, String id) throws EveBackendClient.BackendException {
+        client.deleteJsonRoot("/api/admin/reports/" + encode(id), token);
+    }
+
+    public List<EveAdminModels.FeedbackMessageItem> fetchFeedbackMessages(String token) throws EveBackendClient.BackendException {
+        JSONObject root = client.getJsonRoot("/api/feedback/messages", token);
+        return EveAdminModels.FeedbackMessageItem.parseList(root.optJSONArray("data"));
+    }
+
+    public void replyFeedbackMessage(String token, String id, String reply) throws EveBackendClient.BackendException {
+        JSONObject payload = new JSONObject();
+        try {
+            payload.put("reply", reply);
+        } catch (JSONException ignored) {
+        }
+        client.postJsonRoot("/api/feedback/messages/" + encode(id) + "/reply", token, payload);
+    }
+
+    public void markFeedbackRead(String token, String id) throws EveBackendClient.BackendException {
+        client.putJsonRoot("/api/feedback/messages/" + encode(id) + "/read", token, new JSONObject());
+    }
+
+    public void deleteFeedbackMessage(String token, String id) throws EveBackendClient.BackendException {
+        client.deleteJsonRoot("/api/feedback/messages/" + encode(id), token);
+    }
+
+    public List<EveAdminModels.FeedbackPostItem> fetchFeedbackPosts(String token) throws EveBackendClient.BackendException {
+        JSONObject root = client.getJsonRoot("/api/feedback/posts", token);
+        return EveAdminModels.FeedbackPostItem.parseList(root.optJSONArray("data"));
+    }
+
+    public void createFeedbackPost(String token, String title, String message) throws EveBackendClient.BackendException {
+        JSONObject payload = new JSONObject();
+        try {
+            payload.put("title", title);
+            payload.put("body", message);
+        } catch (JSONException ignored) {
+        }
+        client.postJsonRoot("/api/feedback/posts", token, payload);
+    }
+
+    public void deleteFeedbackPost(String token, String id) throws EveBackendClient.BackendException {
+        client.deleteJsonRoot("/api/feedback/posts/" + encode(id), token);
+    }
+
+    public JSONObject fetchAppContent(String token, String type) throws EveBackendClient.BackendException {
+        return client.getJsonRoot("/api/app-content/" + encode(type), token).optJSONObject("data");
+    }
+
+    public void updateAppContent(String token, String type, String title, String body) throws EveBackendClient.BackendException {
+        JSONObject payload = new JSONObject();
+        try {
+            payload.put("title", title);
+            payload.put("body", body);
+        } catch (JSONException ignored) {
+        }
+        client.putJsonRoot("/api/app-content/" + encode(type), token, payload);
+    }
+
+    public EveAdminModels.AppConfigModel fetchAppConfig(String token) throws EveBackendClient.BackendException {
+        JSONObject root = client.getJsonRoot("/api/app-config", token);
+        return EveAdminModels.AppConfigModel.fromJson(root.optJSONObject("data"));
+    }
+
+    public EveAdminModels.AppConfigModel updateAppConfig(
+            String token,
+            int minVersionCode,
+            boolean maintenanceMode,
+            String maintenanceMessage,
+            String defaultPublishMode) throws EveBackendClient.BackendException {
+        JSONObject payload = new JSONObject();
+        try {
+            payload.put("minimum_supported_version_code", Math.max(1, minVersionCode));
+            payload.put("maintenance_mode", maintenanceMode);
+            payload.put("maintenance_message", maintenanceMessage != null ? maintenanceMessage : "");
+            payload.put("default_publish_mode", defaultPublishMode != null ? defaultPublishMode : "paused");
+        } catch (JSONException ignored) {
+        }
+        JSONObject root = client.putJsonRoot("/api/admin/config", token, payload);
+        return EveAdminModels.AppConfigModel.fromJson(root.optJSONObject("data"));
+    }
+
+    public List<EveAdminModels.ExamAnalyticsItem> fetchExamAnalytics(String token) throws EveBackendClient.BackendException {
+        JSONObject root = client.getJsonRoot("/api/admin/analytics/exams", token);
+        return EveAdminModels.ExamAnalyticsItem.parseList(root.optJSONArray("data"));
+    }
+
+    public List<EveAdminModels.CrashSignatureItem> fetchCrashSignatures(String token) throws EveBackendClient.BackendException {
+        JSONObject root = client.getJsonRoot("/api/admin/system/crashes", token);
+        return EveAdminModels.CrashSignatureItem.parseList(root.optJSONArray("data"));
+    }
+
+    public JSONObject fetchApiUsage(String token) throws EveBackendClient.BackendException {
+        return client.getJsonRoot("/api/admin/api-usage", token).optJSONObject("data");
+    }
+
+    public JSONObject exportExams(String token) throws EveBackendClient.BackendException {
+        return client.getJsonRoot("/api/admin/export/exams?limit=50&offset=0", token).optJSONObject("data");
+    }
+
+    public List<EveAdminModels.SystemServiceStatus> fetchSystemHealth(String token) throws EveBackendClient.BackendException {
+        JSONObject data = client.getJsonRoot("/api/admin/system/health", token).optJSONObject("data");
+        List<EveAdminModels.SystemServiceStatus> list = new ArrayList<>();
+        if (data != null) {
+            java.util.Iterator<String> keys = data.keys();
+            while (keys.hasNext()) {
+                String k = keys.next();
+                JSONObject item = data.optJSONObject(k);
+                if (item != null) {
+                    list.add(new EveAdminModels.SystemServiceStatus(k, item.optString("status", "unknown"), item.optString("detail", "")));
+                }
+            }
+        }
+        return list;
+    }
+
+    public List<EveAdminModels.GenerationJobItem> fetchFailedJobs(String token) throws EveBackendClient.BackendException {
+        JSONObject data = client.getJsonRoot("/api/admin/system/operations?offset=0", token).optJSONObject("data");
+        return EveAdminModels.GenerationJobItem.parseList(data != null ? data.optJSONArray("jobs") : null);
+    }
+
+    public void retryGenerationJob(String token, String jobId) throws EveBackendClient.BackendException {
+        client.postJsonRoot("/api/admin/system/jobs/" + encode(jobId) + "/retry", token, new JSONObject());
+    }
+
+    public JSONObject checkAiHealth(String token) throws EveBackendClient.BackendException {
+        return client.postJsonRoot("/api/admin/ai-health", token, new JSONObject()).optJSONObject("data");
+    }
+
+    public String reformatExplanation(String token, String questionText, String explanation) throws EveBackendClient.BackendException {
+        JSONObject payload = new JSONObject();
+        try {
+            payload.put("questionText", questionText);
+            payload.put("explanation", explanation);
+        } catch (JSONException ignored) {
+        }
+        JSONObject data = client.postJsonRoot("/api/admin/questions/reformat-explanation", token, payload).optJSONObject("data");
+        return data != null ? data.optString("explanation", explanation) : explanation;
+    }
+
     public interface TokenWork {
         void run(String token) throws EveBackendClient.BackendException;
     }
@@ -434,6 +738,10 @@ public final class EveAdminRepository {
     }
 
     private void withAdminToken(ResultCallback<?> callback, TokenWork work) {
+        withAdminTokenInternal(callback, work, true);
+    }
+
+    private void withAdminTokenInternal(ResultCallback<?> callback, TokenWork work, boolean allowRetryOn401) {
         executor.execute(() -> {
             FirebaseUser user = resolveFirebaseUser();
             if (user == null || user.isAnonymous()) {
@@ -450,6 +758,10 @@ public final class EveAdminRepository {
                     try {
                         work.run(token);
                     } catch (EveBackendClient.BackendException e) {
+                        if (e.unauthorized && allowRetryOn401) {
+                            withAdminTokenInternal(callback, work, false);
+                            return;
+                        }
                         postError(callback, e.getMessage() != null ? e.getMessage() : "Admin operation failed.", e.httpStatus);
                     }
                 });

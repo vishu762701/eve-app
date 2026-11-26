@@ -38,10 +38,49 @@ public final class EveNotificationHelper {
     public static final String CHANNEL_NAME = "EVE Exam & Result Alerts";
     public static final String TOPIC_NEW_EXAMS = "new_exams";
 
+    private static final String PREFS_NAME = "eve_notification_prefs";
+    public static final String PREF_EXAM_REMINDERS = "notif_exam_reminders";
+    public static final String PREF_ANNOUNCEMENTS = "notif_announcements";
+    public static final String PREF_RESULTS = "notif_results";
+    public static final String PREF_PAYMENTS = "notif_payments";
+    public static final String PREF_SOUND = "notif_sound";
+    public static final String PREF_VIBRATE = "notif_vibrate";
+
     private static final ExecutorService IO_EXECUTOR = Executors.newSingleThreadExecutor();
     private static volatile String lastRegisteredToken = "";
 
     private EveNotificationHelper() {
+    }
+
+    public static boolean isCategoryEnabled(@Nullable Context context, @NonNull String key) {
+        Context ctx = context != null ? context : ApplicationLoader.applicationContext;
+        if (ctx == null) {
+            return true;
+        }
+        return ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getBoolean(key, true);
+    }
+
+    public static boolean toggleCategory(@Nullable Context context, @NonNull String key) {
+        Context ctx = context != null ? context : ApplicationLoader.applicationContext;
+        boolean next = !isCategoryEnabled(ctx, key);
+        if (ctx != null) {
+            ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putBoolean(key, next).apply();
+        }
+        return next;
+    }
+
+    private static boolean shouldDisplayForType(@NonNull Context context, @Nullable String eveType) {
+        String t = eveType != null ? eveType.trim().toLowerCase(java.util.Locale.US) : "";
+        if (t.contains("remind")) {
+            return isCategoryEnabled(context, PREF_EXAM_REMINDERS);
+        } else if (t.contains("result") || t.contains("score")) {
+            return isCategoryEnabled(context, PREF_RESULTS);
+        } else if (t.contains("payment") || t.contains("premium")) {
+            return isCategoryEnabled(context, PREF_PAYMENTS);
+        } else if (!t.isEmpty()) {
+            return isCategoryEnabled(context, PREF_ANNOUNCEMENTS);
+        }
+        return isCategoryEnabled(context, PREF_ANNOUNCEMENTS) || isCategoryEnabled(context, PREF_EXAM_REMINDERS);
     }
 
     public static boolean isTelegramPushPayload(@Nullable Map<String, String> data) {
@@ -90,7 +129,11 @@ public final class EveNotificationHelper {
         if (body.isEmpty()) {
             body = "A new update is available in EVE.";
         }
-        showExamNotification(context, title, body, safeData(data, "examId"), safeData(data, "eve_type"));
+        String eveType = safeData(data, "eve_type");
+        if (!shouldDisplayForType(context, eveType)) {
+            return;
+        }
+        showExamNotification(context, title, body, safeData(data, "examId"), eveType);
     }
 
     public static void showExamNotification(
@@ -129,12 +172,20 @@ public final class EveNotificationHelper {
             }
             PendingIntent pendingIntent = PendingIntent.getActivity(context, 0, launchIntent, flags);
 
+            int defaults = 0;
+            if (isCategoryEnabled(context, PREF_SOUND)) {
+                defaults |= android.app.Notification.DEFAULT_SOUND;
+            }
+            if (isCategoryEnabled(context, PREF_VIBRATE)) {
+                defaults |= android.app.Notification.DEFAULT_VIBRATE;
+            }
             NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CHANNEL_ID)
                     .setSmallIcon(R.drawable.notification)
                     .setContentTitle(title)
                     .setContentText(body)
                     .setStyle(new NotificationCompat.BigTextStyle().bigText(body))
                     .setPriority(NotificationCompat.PRIORITY_HIGH)
+                    .setDefaults(defaults)
                     .setAutoCancel(true)
                     .setContentIntent(pendingIntent);
 
