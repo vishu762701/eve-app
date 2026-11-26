@@ -697,3 +697,60 @@ test('syllabus reassign rejects a racing destination and rolls back audit failur
     db.sqlite.close();
   }
 });
+
+test('GET /api/admin/dashboard aggregates metrics in one request with RBAC enforcement', async () => {
+  const db = new LocalD1();
+  const now = Date.now();
+  db.sqlite.exec(`INSERT INTO users (id, email, display_name, created_at, last_active) VALUES ('u2', 's2@example.com', 'Active Student', ${now}, ${now})`);
+  db.sqlite.exec("INSERT INTO exams (id, exam_name, category, publish_mode) VALUES ('exam2', 'Paused Exam', 'SSC', 'paused')");
+  seed(db, 3, 'published');
+  db.sqlite.prepare('INSERT INTO generated_tests (id, exam_id, exam_name, test_number, title, generated_at, status, question_count, questions_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run('draft1', 'exam', 'Exam', 'Test 2', 'Draft Test', now, 'draft', 3, JSON.stringify([q(0), q(1), q(2)]));
+  db.sqlite.exec(`INSERT INTO attempts (id, user_id, exam_id, exam_name, score, total, correct, wrong, unattempted, timestamp, counted) VALUES ('att1', 'u2', 'exam__test', 'Exam', 80.0, 100, 80, 20, 0, ${now}, 1)`);
+  db.sqlite.exec(`INSERT INTO premium_orders (id, user_id, user_email, plan_name, amount, payment_method, status, created_at, expires_at, paid_at) VALUES ('ord1', 'u2', 's2@example.com', 'EVE Pro', 199, 'UPI', 'PAID', ${now}, ${now + 86400000}, ${now}), ('ord2', 'u', 'student@example.com', 'EVE Pro', 199, 'QR', 'PENDING', ${now}, ${now + 86400000}, 0)`);
+  db.sqlite.exec(`INSERT INTO premium_entitlements (user_id, plan_name, activated_at, expires_at, is_lifetime, status, created_at, updated_at) VALUES ('u2', 'EVE Pro', ${now}, ${now + 86400000}, 0, 'ACTIVE', ${now}, ${now})`);
+  db.sqlite.exec(`INSERT INTO question_reports (id, question_id, exam_id, exam_name, question_text, reason, student_id, student_email, timestamp, status, report_type) VALUES ('rep1', 'q1', 'exam', 'Exam', 'Q1', 'typo', 'u', 'student@example.com', ${now}, 'pending', 'error')`);
+  db.sqlite.exec(`INSERT INTO admin_audit_log (id, action_type, description, admin_email, timestamp) VALUES ('aud1', 'EXAM_CREATED', 'Created Exam', 'owner@example.com', ${now})`);
+
+  const studentReq = harness(db, false);
+  const studentRes = await studentReq('/api/admin/dashboard');
+  assert.equal(studentRes.status, 403);
+
+  const ownerReq = harness(db, true);
+  const res = await ownerReq('/api/admin/dashboard');
+  assert.equal(res.status, 200);
+  const payload = await res.json();
+  assert.equal(payload.success, true);
+  assert.equal(payload.data.metrics.totalStudents, 2);
+  assert.equal(payload.data.metrics.activeStudents, 1);
+  assert.equal(payload.data.metrics.totalExams, 2);
+  assert.equal(payload.data.metrics.publishedExams, 1);
+  assert.equal(payload.data.metrics.draftExams, 1);
+  assert.equal(payload.data.metrics.totalTests, 2);
+  assert.equal(payload.data.metrics.liveTests, 1);
+  assert.equal(payload.data.metrics.draftTests, 1);
+  assert.equal(payload.data.metrics.completedAttempts, 1);
+  assert.equal(payload.data.metrics.averageScorePct, 80);
+  assert.equal(payload.data.metrics.totalRevenueInr, 199);
+  assert.equal(payload.data.metrics.paidTransactions, 1);
+  assert.equal(payload.data.metrics.pendingTransactions, 1);
+  assert.equal(payload.data.metrics.activePremiumUsers, 1);
+  assert.equal(payload.data.metrics.pendingReports, 1);
+  assert.equal(payload.data.recentActions.length, 1);
+  assert.ok(!JSON.stringify(payload).includes('questions_json'));
+
+  // Restricted sub-admin without manage_premium / manage_users only sees permitted summaries
+  db.sqlite.exec(`INSERT INTO admins (email, created_at) VALUES ('mod@example.com', ${now})`);
+  db.sqlite.exec(`INSERT INTO admin_rights (email, rights, custom_title, updated_at) VALUES ('mod@example.com', '["manage_exams"]', 'Exam Mod', ${now})`);
+  const modApp = new Hono();
+  modApp.use('*', async (c, next) => { c.set('user', { uid: 'mod', email: 'mod@example.com', displayName: 'Mod', isAdmin: true }); await next(); });
+  modApp.route('/api/admin', adminRoutes as any);
+  const modRes = await modApp.request('/api/admin/dashboard', { method: 'GET', headers: { 'X-Eve-Client': '2' } }, envFor(db));
+  assert.equal(modRes.status, 200);
+  const modPayload = await modRes.json();
+  assert.equal(modPayload.data.metrics.totalExams, 2);
+  assert.equal(modPayload.data.metrics.totalStudents, 0);
+  assert.equal(modPayload.data.metrics.totalRevenueInr, 0);
+  assert.equal(modPayload.data.metrics.activePremiumUsers, 0);
+  assert.equal(modPayload.data.recentActions.length, 0);
+  db.sqlite.close();
+});

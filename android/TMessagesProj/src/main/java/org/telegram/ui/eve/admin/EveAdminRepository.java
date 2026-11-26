@@ -1,5 +1,7 @@
 package org.telegram.ui.eve.admin;
 
+import android.content.Context;
+import android.content.SharedPreferences;
 import android.os.Handler;
 import android.os.Looper;
 
@@ -10,7 +12,10 @@ import com.google.firebase.auth.FirebaseUser;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.telegram.messenger.ApplicationLoader;
+import org.telegram.ui.eve.auth.EveAuthManager;
 import org.telegram.ui.eve.auth.EveBackendClient;
+import org.telegram.ui.eve.auth.EveUserProfile;
 
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
@@ -36,9 +41,16 @@ public final class EveAdminRepository {
 
     private static volatile EveAdminRepository instance;
 
+    private static final String PREFS_DASHBOARD_CACHE = "eve_admin_dashboard_cache";
+    private static final String KEY_SNAPSHOT_PREFIX = "dashboard_snapshot_v2_";
+    private static final long DASHBOARD_STALE_AFTER_MS = 60_000L;
+
     private final EveBackendClient client;
     private final ExecutorService executor = Executors.newFixedThreadPool(6);
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private final Object dashboardLock = new Object();
+    private final List<ResultCallback<EveAdminModels.DashboardSnapshot>> pendingDashboardCallbacks = new ArrayList<>();
+    private boolean dashboardRefreshInFlight;
     private volatile EveAdminModels.DashboardSnapshot cachedSnapshot;
     private volatile long cachedSnapshotAtMs;
 
@@ -61,7 +73,17 @@ public final class EveAdminRepository {
     }
 
     public EveAdminModels.DashboardSnapshot getCachedSnapshot() {
-        return cachedSnapshot;
+        EveAdminModels.DashboardSnapshot memory = cachedSnapshot;
+        if (memory != null) {
+            boolean stale = (System.currentTimeMillis() - cachedSnapshotAtMs) > DASHBOARD_STALE_AFTER_MS;
+            return stale != memory.isStale || !memory.isFromCache ? memory.asCacheCopy(stale) : memory;
+        }
+        EveAdminModels.DashboardSnapshot disk = readPersistedSnapshot();
+        if (disk != null) {
+            cachedSnapshot = disk;
+            cachedSnapshotAtMs = disk.loadedAtMs;
+        }
+        return disk;
     }
 
     public long getCachedSnapshotAtMs() {
@@ -71,6 +93,16 @@ public final class EveAdminRepository {
     public void invalidateCache() {
         cachedSnapshot = null;
         cachedSnapshotAtMs = 0L;
+        clearPersistedSnapshot();
+    }
+
+    public void cancelDashboardCallback(ResultCallback<EveAdminModels.DashboardSnapshot> callback) {
+        if (callback == null) {
+            return;
+        }
+        synchronized (dashboardLock) {
+            pendingDashboardCallbacks.remove(callback);
+        }
     }
 
     public static final class ExamsCatalogData {
@@ -151,15 +183,83 @@ public final class EveAdminRepository {
     }
 
     public void loadDashboardAsync(ResultCallback<EveAdminModels.DashboardSnapshot> callback) {
-        withAdminToken(callback, token -> {
+        final boolean startRefresh;
+        synchronized (dashboardLock) {
+            if (callback != null && !pendingDashboardCallbacks.contains(callback)) {
+                pendingDashboardCallbacks.add(callback);
+            }
+            if (dashboardRefreshInFlight) {
+                startRefresh = false;
+            } else {
+                dashboardRefreshInFlight = true;
+                startRefresh = true;
+            }
+        }
+        if (!startRefresh) {
+            return;
+        }
+        ResultCallback<EveAdminModels.DashboardSnapshot> dispatcher = new ResultCallback<EveAdminModels.DashboardSnapshot>() {
+            @Override
+            public void onSuccess(EveAdminModels.DashboardSnapshot data) {
+                List<ResultCallback<EveAdminModels.DashboardSnapshot>> targets;
+                synchronized (dashboardLock) {
+                    dashboardRefreshInFlight = false;
+                    targets = new ArrayList<>(pendingDashboardCallbacks);
+                    pendingDashboardCallbacks.clear();
+                }
+                for (ResultCallback<EveAdminModels.DashboardSnapshot> target : targets) {
+                    if (target != null) {
+                        target.onSuccess(data);
+                    }
+                }
+            }
+
+            @Override
+            public void onError(String message, int httpStatus) {
+                List<ResultCallback<EveAdminModels.DashboardSnapshot>> targets;
+                synchronized (dashboardLock) {
+                    dashboardRefreshInFlight = false;
+                    targets = new ArrayList<>(pendingDashboardCallbacks);
+                    pendingDashboardCallbacks.clear();
+                }
+                for (ResultCallback<EveAdminModels.DashboardSnapshot> target : targets) {
+                    if (target != null) {
+                        target.onError(message, httpStatus);
+                    }
+                }
+            }
+        };
+        withAdminToken(dispatcher, token -> {
             EveAdminModels.DashboardSnapshot snapshot = loadDashboardSnapshot(token);
             cachedSnapshot = snapshot;
-            cachedSnapshotAtMs = System.currentTimeMillis();
-            postSuccess(callback, snapshot);
+            cachedSnapshotAtMs = snapshot != null ? snapshot.loadedAtMs : System.currentTimeMillis();
+            persistSnapshot(snapshot);
+            postSuccess(dispatcher, snapshot);
         });
     }
 
     public EveAdminModels.DashboardSnapshot loadDashboardSnapshot(String token) throws EveBackendClient.BackendException {
+        long startNs = System.nanoTime();
+        try {
+            JSONObject root = client.getJsonRoot("/api/admin/dashboard", token);
+            JSONObject data = root != null ? root.optJSONObject("data") : null;
+            if (data != null && data.optJSONObject("adminProfile") != null) {
+                long elapsedMs = Math.max(1L, (System.nanoTime() - startNs) / 1_000_000L);
+                EveAdminModels.DashboardSnapshot unified = EveAdminModels.DashboardSnapshot.fromDashboardJson(data, elapsedMs);
+                if (unified != null) {
+                    return unified;
+                }
+            }
+        } catch (EveBackendClient.BackendException e) {
+            // Propagate auth failures immediately; fall back only if aggregated route is unavailable on an older deployment.
+            if (e.httpStatus != 404 && e.httpStatus != 405 && e.httpStatus != 501) {
+                throw e;
+            }
+        }
+        return loadDashboardLegacyParallel(token, startNs);
+    }
+
+    private EveAdminModels.DashboardSnapshot loadDashboardLegacyParallel(String token, long startNs) throws EveBackendClient.BackendException {
         Future<EveAdminModels.AdminProfile> meFuture = executor.submit(() -> {
             JSONObject meRoot = client.getJsonRoot("/api/admin/me", token);
             return EveAdminModels.AdminProfile.fromJson(meRoot.optJSONObject("data"));
@@ -170,14 +270,24 @@ public final class EveAdminRepository {
                 EveAdminModels.AdminGeneratedTestItem.parseList(client.fetchGeneratedTestsJson(token, null)));
 
         final EveAdminModels.AdminProfile profile;
-        final List<EveAdminModels.AdminExamItem> exams;
-        final List<EveAdminModels.AdminGeneratedTestItem> tests;
         try {
             profile = meFuture.get();
-            exams = examsFuture.get();
-            tests = testsFuture.get();
         } catch (Exception ex) {
             throw unwrapBackendException(ex, "/api/admin/me");
+        }
+
+        final List<String> partialWarnings = new ArrayList<>();
+        List<EveAdminModels.AdminExamItem> exams = Collections.emptyList();
+        List<EveAdminModels.AdminGeneratedTestItem> tests = Collections.emptyList();
+        try {
+            exams = examsFuture.get();
+        } catch (Exception ex) {
+            partialWarnings.add("Exams summary unavailable");
+        }
+        try {
+            tests = testsFuture.get();
+        } catch (Exception ex) {
+            partialWarnings.add("Generated tests count unavailable");
         }
 
         int publishedExams = 0;
@@ -216,7 +326,7 @@ public final class EveAdminRepository {
             if (!EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_VIEW_ANALYTICS_LOGS)) {
                 return new ArrayList<>();
             }
-            JSONArray logs = client.getJsonRoot("/api/admin/audit-log?limit=15", token).optJSONArray("data");
+            JSONArray logs = client.getJsonRoot("/api/admin/audit-log?limit=5", token).optJSONArray("data");
             return EveAdminModels.AuditLogEntry.parseList(logs);
         });
         Future<List<EveAdminModels.PaymentTransactionItem>> txFuture = executor.submit(() -> {
@@ -229,27 +339,19 @@ public final class EveAdminRepository {
             if (!EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_PREMIUM)) {
                 return 0;
             }
-            try {
-                return fetchPremiumUsers(token).size();
-            } catch (Throwable ignored) {
-                return 0;
-            }
+            return fetchPremiumUsers(token).size();
         });
         Future<Integer> pendingReportsFuture = executor.submit(() -> {
             if (!EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MODERATE_FEEDBACK)) {
                 return 0;
             }
-            try {
-                int count = 0;
-                for (EveAdminModels.QuestionReportItem r : fetchReports(token, null)) {
-                    if ("pending".equalsIgnoreCase(r.status)) {
-                        count++;
-                    }
+            int count = 0;
+            for (EveAdminModels.QuestionReportItem r : fetchReports(token, null)) {
+                if ("pending".equalsIgnoreCase(r.status)) {
+                    count++;
                 }
-                return count;
-            } catch (Throwable ignored) {
-                return 0;
             }
+            return count;
         });
 
         int totalStudents = 0;
@@ -271,6 +373,10 @@ public final class EveAdminRepository {
                 totalStudents = userStats.optInt("totalUsers", 0);
                 activeStudents = userStats.optInt("onlineUsers", 0);
             }
+        } catch (Exception ignored) {
+            partialWarnings.add("Student counts unavailable");
+        }
+        try {
             JSONArray examAnalytics = examAnalyticsFuture.get();
             if (examAnalytics != null) {
                 for (int i = 0; i < examAnalytics.length(); i++) {
@@ -285,7 +391,15 @@ public final class EveAdminRepository {
                     }
                 }
             }
+        } catch (Exception ignored) {
+            partialWarnings.add("Exam analytics unavailable");
+        }
+        try {
             recentActions = logsFuture.get();
+        } catch (Exception ignored) {
+            partialWarnings.add("Audit log preview unavailable");
+        }
+        try {
             List<EveAdminModels.PaymentTransactionItem> txList = txFuture.get();
             totalTransactions = txList.size();
             for (EveAdminModels.PaymentTransactionItem tx : txList) {
@@ -296,12 +410,22 @@ public final class EveAdminRepository {
                     pendingTransactions++;
                 }
             }
-            activePremiumUsers = premiumCountFuture.get();
-            pendingReports = pendingReportsFuture.get();
-        } catch (Exception ex) {
-            throw unwrapBackendException(ex, "/api/admin/dashboard");
+        } catch (Exception ignored) {
+            partialWarnings.add("Payment summary unavailable");
         }
+        try {
+            activePremiumUsers = premiumCountFuture.get();
+        } catch (Exception ignored) {
+            partialWarnings.add("Premium subscriber count unavailable");
+        }
+        try {
+            pendingReports = pendingReportsFuture.get();
+        } catch (Exception ignored) {
+            partialWarnings.add("Moderation count unavailable");
+        }
+
         double averageScorePct = scoreCount > 0 ? (scoreSum / scoreCount) : 0.0;
+        long elapsedMs = Math.max(1L, (System.nanoTime() - startNs) / 1_000_000L);
 
         return new EveAdminModels.DashboardSnapshot(
                 profile,
@@ -324,8 +448,85 @@ public final class EveAdminRepository {
                 averageScorePct,
                 exams,
                 tests,
-                recentActions
+                recentActions,
+                false,
+                false,
+                partialWarnings,
+                System.currentTimeMillis(),
+                elapsedMs
         );
+    }
+
+    private static SharedPreferences getCachePrefs() {
+        try {
+            Context ctx = ApplicationLoader.applicationContext;
+            if (ctx == null) {
+                return null;
+            }
+            return ctx.getSharedPreferences(PREFS_DASHBOARD_CACHE, Context.MODE_PRIVATE);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private static String resolveCurrentEmailScope() {
+        try {
+            EveUserProfile profile = EveAuthManager.getInstance().getCachedProfile();
+            if (profile != null && profile.email != null && !profile.email.trim().isEmpty()) {
+                return profile.email.trim().toLowerCase(Locale.US);
+            }
+        } catch (Throwable ignored) {
+        }
+        return "";
+    }
+
+    private static void persistSnapshot(EveAdminModels.DashboardSnapshot snapshot) {
+        if (snapshot == null || snapshot.adminProfile == null) {
+            return;
+        }
+        SharedPreferences prefs = getCachePrefs();
+        if (prefs == null) {
+            return;
+        }
+        String email = snapshot.adminProfile.email != null ? snapshot.adminProfile.email.trim().toLowerCase(Locale.US) : "";
+        if (email.isEmpty()) {
+            return;
+        }
+        prefs.edit().putString(KEY_SNAPSHOT_PREFIX + email, snapshot.toCacheJson().toString()).apply();
+    }
+
+    private static EveAdminModels.DashboardSnapshot readPersistedSnapshot() {
+        SharedPreferences prefs = getCachePrefs();
+        if (prefs == null) {
+            return null;
+        }
+        String email = resolveCurrentEmailScope();
+        if (email.isEmpty()) {
+            return null;
+        }
+        String raw = prefs.getString(KEY_SNAPSHOT_PREFIX + email, null);
+        if (raw == null || raw.isEmpty()) {
+            return null;
+        }
+        try {
+            JSONObject json = new JSONObject(raw);
+            EveAdminModels.DashboardSnapshot restored = EveAdminModels.DashboardSnapshot.fromDashboardJson(json, json.optLong("durationMs", 0L));
+            if (restored == null) {
+                return null;
+            }
+            boolean stale = (System.currentTimeMillis() - restored.loadedAtMs) > DASHBOARD_STALE_AFTER_MS;
+            return restored.asCacheCopy(stale);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private static void clearPersistedSnapshot() {
+        SharedPreferences prefs = getCachePrefs();
+        if (prefs == null) {
+            return;
+        }
+        prefs.edit().clear().apply();
     }
 
     private static EveBackendClient.BackendException unwrapBackendException(Throwable t, String fallbackEndpoint) {

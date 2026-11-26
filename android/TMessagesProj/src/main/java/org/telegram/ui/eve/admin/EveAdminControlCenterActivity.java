@@ -11,10 +11,10 @@ import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.R;
 import org.telegram.ui.ActionBar.ActionBar;
 import org.telegram.ui.ActionBar.ActionBarMenu;
-import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.BulletinFactory;
+import org.telegram.ui.Components.FlickerLoadingView;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.UItem;
 import org.telegram.ui.Components.UniversalAdapter;
@@ -42,6 +42,16 @@ public class EveAdminControlCenterActivity extends BaseFragment {
     private static final int ID_ADMIN_REFRESH = 1001;
     private static final int ID_ADMIN_SIGN_IN = 1002;
 
+    private static final int ID_KPI_STUDENTS = 1011;
+    private static final int ID_KPI_EXAMS = 1012;
+    private static final int ID_KPI_TESTS = 1013;
+    private static final int ID_KPI_ATTEMPTS = 1014;
+    private static final int ID_KPI_SCORE = 1015;
+    private static final int ID_KPI_REVENUE = 1016;
+    private static final int ID_KPI_PENDING = 1017;
+    private static final int ID_KPI_PREMIUM = 1018;
+    private static final int ID_KPI_MODERATION = 1019;
+
     private static final int ID_MOD_EXAMS = 1101;
     private static final int ID_MOD_GENERATE_TEST = 1102;
     private static final int ID_MOD_QUESTIONS = 1201;
@@ -59,8 +69,11 @@ public class EveAdminControlCenterActivity extends BaseFragment {
     private final EveAdminRepository repo = EveAdminRepository.getInstance();
 
     private boolean loading;
+    private boolean destroyed;
     private String loadError = "";
     private int lastHttpStatus;
+    private int activeRequestSeq;
+    private EveAdminRepository.ResultCallback<EveAdminModels.DashboardSnapshot> activeCallback;
     private EveAdminModels.DashboardSnapshot snapshot;
 
     @Override
@@ -73,10 +86,11 @@ public class EveAdminControlCenterActivity extends BaseFragment {
 
     @Override
     public View createView(Context context) {
+        destroyed = false;
         actionBar.setBackButtonImage(R.drawable.ic_ab_back);
         actionBar.setAllowOverlayTitle(true);
         actionBar.setTitle(LocaleController.getString(R.string.EveAdminControlCenter));
-        actionBar.setSubtitle("Worker + D1 Ecosystem Control");
+        actionBar.setSubtitle("Worker + D1 Control Center");
         ActionBarMenu menu = actionBar.createMenu();
         menu.addItem(MENU_REFRESH, R.drawable.msg_retry);
         actionBar.setActionBarMenuOnItemClick(new ActionBar.ActionBarMenuOnItemClick() {
@@ -108,37 +122,64 @@ public class EveAdminControlCenterActivity extends BaseFragment {
     public void onResume() {
         super.onResume();
         EveAdminModels.DashboardSnapshot latestCached = repo.getCachedSnapshot();
-        if (latestCached != null && latestCached != snapshot) {
+        if (latestCached != null && latestCached != snapshot && snapshot == null) {
             snapshot = latestCached;
             updateList();
         }
     }
 
+    @Override
+    public void onFragmentDestroy() {
+        destroyed = true;
+        activeRequestSeq++;
+        if (activeCallback != null) {
+            repo.cancelDashboardCallback(activeCallback);
+            activeCallback = null;
+        }
+        super.onFragmentDestroy();
+    }
+
     private void refreshDashboard() {
+        if (destroyed) {
+            return;
+        }
+        final int requestSeq = ++activeRequestSeq;
+        if (activeCallback != null) {
+            repo.cancelDashboardCallback(activeCallback);
+        }
         loading = true;
         loadError = "";
         updateList();
-        repo.loadDashboardAsync(new EveAdminRepository.ResultCallback<EveAdminModels.DashboardSnapshot>() {
-            @Override
-            public void onSuccess(EveAdminModels.DashboardSnapshot data) {
-                loading = false;
-                loadError = "";
-                lastHttpStatus = 200;
-                snapshot = data;
-                if (actionBar != null && data != null && data.adminProfile != null) {
-                    actionBar.setSubtitle(data.adminProfile.customTitle + " • " + data.adminProfile.email);
-                }
-                updateList();
-            }
+        EveAdminRepository.ResultCallback<EveAdminModels.DashboardSnapshot> callback =
+                new EveAdminRepository.ResultCallback<EveAdminModels.DashboardSnapshot>() {
+                    @Override
+                    public void onSuccess(EveAdminModels.DashboardSnapshot data) {
+                        if (destroyed || requestSeq != activeRequestSeq) {
+                            return;
+                        }
+                        loading = false;
+                        loadError = "";
+                        lastHttpStatus = 200;
+                        snapshot = data;
+                        if (actionBar != null && data != null && data.adminProfile != null) {
+                            actionBar.setSubtitle(data.adminProfile.customTitle + " • " + data.adminProfile.email);
+                        }
+                        updateList();
+                    }
 
-            @Override
-            public void onError(String message, int httpStatus) {
-                loading = false;
-                loadError = message != null ? message : "Unable to load admin dashboard.";
-                lastHttpStatus = httpStatus;
-                updateList();
-            }
-        });
+                    @Override
+                    public void onError(String message, int httpStatus) {
+                        if (destroyed || requestSeq != activeRequestSeq) {
+                            return;
+                        }
+                        loading = false;
+                        loadError = message != null ? message : "Unable to load admin dashboard.";
+                        lastHttpStatus = httpStatus;
+                        updateList();
+                    }
+                };
+        activeCallback = callback;
+        repo.loadDashboardAsync(callback);
     }
 
     private void updateList() {
@@ -151,73 +192,127 @@ public class EveAdminControlCenterActivity extends BaseFragment {
         EveUserProfile cached = EveAuthManager.getInstance().getCachedProfile();
         String accountLabel = cached != null && !cached.email.isEmpty() ? cached.email : "Not signed in";
 
-        items.add(UItem.asHeader("Admin Session & Server Authorization"));
+        items.add(UItem.asHeader("Admin Session & Access"));
+        String sessionTitle;
         String sessionSubtitle;
         String sessionBadge = null;
         if (loading && snapshot == null) {
-            sessionSubtitle = "Syncing live dashboard metrics for " + accountLabel + "...";
+            sessionTitle = "Loading Dashboard";
+            sessionSubtitle = "Connecting to Worker for " + accountLabel;
         } else if (snapshot != null && snapshot.adminProfile != null) {
-            sessionSubtitle = (loading ? "Refreshing • " : "Verified • ") + snapshot.adminProfile.email;
+            if (loading && snapshot.isFromCache) {
+                sessionTitle = "Syncing Live Metrics";
+                sessionSubtitle = "Showing cached summary • " + snapshot.adminProfile.email;
+            } else if (loading) {
+                sessionTitle = "Refreshing Metrics";
+                sessionSubtitle = "Updating from Worker • " + snapshot.adminProfile.email;
+            } else if (!snapshot.partialWarnings.isEmpty()) {
+                sessionTitle = "Dashboard Partial Sync";
+                sessionSubtitle = snapshot.adminProfile.email + " • Tap to retry";
+            } else {
+                sessionTitle = "Refresh Dashboard";
+                String timing = snapshot.loadDurationMs > 0 ? " (" + snapshot.loadDurationMs + " ms)" : "";
+                sessionSubtitle = (snapshot.isStale ? "Cached • " : "Verified • ") + snapshot.adminProfile.email + timing;
+            }
             sessionBadge = snapshot.adminProfile.customTitle + " (" + snapshot.adminProfile.rights.size() + ")";
         } else {
+            sessionTitle = "Retry Dashboard Sync";
             sessionSubtitle = accountLabel;
         }
         items.add(SettingsActivity.SettingCell.Factory.of(
                 ID_ADMIN_REFRESH,
                 0xFF3D8BEB, 0xFF2A6FD9, R.drawable.msg_retry,
-                loading ? "Syncing Admin Dashboard..." : "Refresh Dashboard",
+                sessionTitle,
                 sessionSubtitle,
                 sessionBadge));
-        if (lastHttpStatus == 401 || lastHttpStatus == 403 || cached == null) {
+
+        boolean needsAuthAction = cached == null || lastHttpStatus == 401 || lastHttpStatus == 403;
+        if (needsAuthAction) {
             items.add(SettingsActivity.SettingCell.Factory.of(
                     ID_ADMIN_SIGN_IN,
                     0xFF56C35A, 0xFF2FA138, R.drawable.settings_account,
-                    "Sign In with EVE Google Admin Account",
+                    cached == null || lastHttpStatus == 401 ? "Sign In Admin Account" : "Switch Admin Account",
                     accountLabel,
                     null));
         }
         if (!loadError.isEmpty()) {
             items.add(UItem.asShadow("Status (" + (lastHttpStatus > 0 ? "HTTP " + lastHttpStatus : "Offline") + "): " + loadError));
+        } else if (snapshot != null && !snapshot.partialWarnings.isEmpty()) {
+            items.add(UItem.asShadow("Partial load warning: " + snapshot.partialWarnings.get(0)));
         } else {
             items.add(UItem.asShadow("Server-verified RBAC enforced on Cloudflare Worker + D1."));
         }
 
         if (snapshot == null || snapshot.adminProfile == null) {
+            if (loading) {
+                items.add(UItem.asHeader("A. Dashboard Overview"));
+                for (int i = 0; i < 6; i++) {
+                    items.add(UItem.asFlicker(FlickerLoadingView.DIALOG_CELL_TYPE));
+                }
+            }
             return;
         }
         EveAdminModels.AdminProfile profile = snapshot.adminProfile;
 
-        // A. DASHBOARD OVERVIEW
+        // A. DASHBOARD OVERVIEW (all 9 required metrics clearly separated, zero truncation)
         items.add(UItem.asHeader("A. Dashboard Overview"));
         items.add(SettingsActivity.SettingCell.Factory.of(
-                ID_MOD_STUDENTS, 0, 0, 0,
+                ID_KPI_STUDENTS,
+                0xFF3D8BEB, 0xFF2A6FD9, R.drawable.settings_account,
                 "Students",
-                snapshot.totalStudents + " registered • " + snapshot.activeStudents + " active",
+                snapshot.activeStudents + " active right now",
                 String.valueOf(snapshot.totalStudents)));
         items.add(SettingsActivity.SettingCell.Factory.of(
-                ID_MOD_EXAMS, 0, 0, 0,
-                "Exams & Mock Tests",
-                snapshot.publishedExams + "/" + snapshot.totalExams + " live exams • "
-                        + snapshot.liveTests + "/" + snapshot.totalTests + " live tests",
-                snapshot.publishedExams + "/" + snapshot.totalExams));
+                ID_KPI_EXAMS,
+                0xFFFF9800, 0xFFEF6C00, R.drawable.msg_list,
+                "Exams",
+                snapshot.publishedExams + " live • " + snapshot.draftExams + " paused",
+                String.valueOf(snapshot.totalExams)));
         items.add(SettingsActivity.SettingCell.Factory.of(
-                ID_MOD_INSIGHTS_SYSTEM, 0, 0, 0,
-                "Attempts & Average Score",
-                snapshot.completedAttempts + " completed • Avg " + String.format(Locale.US, "%.1f", snapshot.averageScorePct),
+                ID_KPI_TESTS,
+                0xFF9C27B0, 0xFF6A1B9A, R.drawable.msg_add,
+                "Generated Tests",
+                snapshot.liveTests + " live • " + snapshot.draftTests + " draft",
+                String.valueOf(snapshot.totalTests)));
+        items.add(SettingsActivity.SettingCell.Factory.of(
+                ID_KPI_ATTEMPTS,
+                0xFF3F51B5, 0xFF283593, R.drawable.msg_stats,
+                "Exam Attempts",
+                "Counted mock test submissions",
                 String.valueOf(snapshot.completedAttempts)));
         items.add(SettingsActivity.SettingCell.Factory.of(
-                ID_MOD_PAYMENTS, 0, 0, 0,
-                "Revenue & Pending Payments",
-                snapshot.paidTransactions + " paid • " + snapshot.pendingTransactions + " pending • " + snapshot.activePremiumUsers + " premium",
+                ID_KPI_SCORE,
+                0xFF00BCD4, 0xFF00838F, R.drawable.msg_info,
+                "Average Score",
+                "Across counted submissions",
+                String.format(Locale.US, "%.1f", snapshot.averageScorePct)));
+        items.add(SettingsActivity.SettingCell.Factory.of(
+                ID_KPI_REVENUE,
+                0xFF4CAF50, 0xFF2E7D32, R.drawable.settings_premium,
+                "Revenue",
+                snapshot.paidTransactions + " paid orders completed",
                 "₹" + snapshot.totalRevenueInr));
-        if (snapshot.pendingReports > 0) {
-            items.add(SettingsActivity.SettingCell.Factory.of(
-                    ID_MOD_CONTENT_COMMS, 0, 0, 0,
-                    "Pending Moderation Alerts",
-                    snapshot.pendingReports + " flagged question reports awaiting review",
-                    String.valueOf(snapshot.pendingReports)));
-        }
-        items.add(UItem.asShadow(buildRecentActionsSummary(snapshot.recentActions)));
+        items.add(SettingsActivity.SettingCell.Factory.of(
+                ID_KPI_PENDING,
+                0xFFFFA000, 0xFFE65100, R.drawable.msg_retry,
+                "Pending Payments",
+                snapshot.totalTransactions + " total checkout orders",
+                String.valueOf(snapshot.pendingTransactions)));
+        items.add(SettingsActivity.SettingCell.Factory.of(
+                ID_KPI_PREMIUM,
+                0xFFB659FF, 0xFF617CFF, R.drawable.msg_groups,
+                "Premium Subscribers",
+                "Active EVE Premium memberships",
+                String.valueOf(snapshot.activePremiumUsers)));
+        items.add(SettingsActivity.SettingCell.Factory.of(
+                ID_KPI_MODERATION,
+                snapshot.pendingReports > 0 ? 0xFFE53935 : 0xFF607D8B,
+                snapshot.pendingReports > 0 ? 0xFFB71C1C : 0xFF37474F,
+                R.drawable.settings_privacy,
+                "Pending Moderation",
+                snapshot.pendingReports > 0 ? "Flagged question reports awaiting review" : "No pending question flags",
+                String.valueOf(snapshot.pendingReports)));
+        items.add(UItem.asShadow(null));
 
         // B & C. EXAMS & QUESTION BANK
         if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_EXAMS)
@@ -230,24 +325,24 @@ public class EveAdminControlCenterActivity extends BaseFragment {
                 items.add(SettingsActivity.SettingCell.Factory.of(
                         ID_MOD_EXAMS,
                         0xFFFF9800, 0xFFEF6C00, R.drawable.msg_list,
-                        "Exam & Syllabus Manager",
-                        "Edit, duplicate, preview, publish, pause, archive & syllabus",
-                        snapshot.totalExams + " exams"));
+                        "Exams & Syllabus",
+                        "Edit, publish, pause, archive & syllabus",
+                        String.valueOf(snapshot.totalExams)));
             }
             if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_GENERATED_TESTS)) {
                 items.add(SettingsActivity.SettingCell.Factory.of(
                         ID_MOD_GENERATE_TEST,
                         0xFF9C27B0, 0xFF6A1B9A, R.drawable.msg_add,
-                        "Generate AI Mock Test",
+                        "Generate AI Test",
                         "Create & schedule new mock test sets",
-                        snapshot.generatedTests.size() + " tests"));
+                        String.valueOf(snapshot.totalTests)));
             }
             if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_QUESTIONS)) {
                 items.add(SettingsActivity.SettingCell.Factory.of(
                         ID_MOD_QUESTIONS,
                         0xFF2196F3, 0xFF1565C0, R.drawable.msg_stats,
-                        "Question Bank & Bulk JSON Import",
-                        "Add, edit, AI-format explanations & import",
+                        "Question Bank",
+                        "Add, edit, AI-format & bulk JSON import",
                         null));
             }
             items.add(UItem.asShadow(null));
@@ -256,34 +351,34 @@ public class EveAdminControlCenterActivity extends BaseFragment {
         // D, F & G. STUDENTS, PAYMENTS & EVE PREMIUM
         if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_USERS)
                 || EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_PREMIUM)) {
-            items.add(UItem.asHeader("D, F & G. Students, Payments & EVE Premium"));
+            items.add(UItem.asHeader("D, F & G. Students, Payments & Premium"));
             if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_USERS)) {
                 items.add(SettingsActivity.SettingCell.Factory.of(
                         ID_MOD_STUDENTS,
                         0xFF4CAF50, 0xFF2E7D32, R.drawable.settings_account,
-                        "Student Directory & Attempts",
-                        "Search, suspend/enable, grant premium & inspect attempts",
-                        snapshot.totalStudents + " users"));
+                        "Student Directory",
+                        "Search, suspend/enable & inspect attempts",
+                        String.valueOf(snapshot.totalStudents)));
             }
             if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_PREMIUM)) {
                 items.add(SettingsActivity.SettingCell.Factory.of(
                         ID_MOD_PAYMENTS,
                         0xFF009688, 0xFF00695C, R.drawable.msg_stats,
-                        "Payment Orders & Verification",
-                        "Filter paid, pending, failed & expired orders",
-                        snapshot.totalTransactions + " orders"));
+                        "Payment Orders",
+                        "Filter paid, pending, failed & expired",
+                        String.valueOf(snapshot.totalTransactions)));
                 items.add(SettingsActivity.SettingCell.Factory.of(
                         ID_MOD_PREMIUM,
                         0xFFB659FF, 0xFF617CFF, R.drawable.settings_premium,
-                        "EVE Premium Pricing, UPI VPA & QR",
-                        "Edit plan pricing, duration & checkout settings",
+                        "Premium & UPI",
+                        "Pricing, duration, VPA & checkout config",
                         null));
                 items.add(SettingsActivity.SettingCell.Factory.of(
                         ID_MOD_PREMIUM_USERS,
-                        0xFFFF7043, 0xFFD84315, R.drawable.settings_premium,
-                        "Premium Subscribers",
+                        0xFFFF7043, 0xFFD84315, R.drawable.msg_groups,
+                        "Premium Users",
                         "View active subscribers, extend or revoke",
-                        snapshot.activePremiumUsers + " active"));
+                        String.valueOf(snapshot.activePremiumUsers)));
             }
             items.add(UItem.asShadow(null));
         }
@@ -292,13 +387,13 @@ public class EveAdminControlCenterActivity extends BaseFragment {
         if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_CONTENT)
                 || EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_SEND_BROADCASTS)
                 || EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MODERATE_FEEDBACK)) {
-            items.add(UItem.asHeader("H, I & J. Content, Notifications & Media Packs"));
+            items.add(UItem.asHeader("H, I & J. Content, Polls & Media"));
             items.add(SettingsActivity.SettingCell.Factory.of(
                     ID_MOD_CONTENT_COMMS,
                     0xFF3F51B5, 0xFF283593, R.drawable.settings_sounds,
-                    "Content, Banners, Polls & Moderation",
-                    "Banners, floating link, broadcasts, flagged questions, feedback",
-                    snapshot.pendingReports > 0 ? snapshot.pendingReports + " flagged" : null));
+                    "Content & Moderation",
+                    "Banners, polls, broadcasts & question flags",
+                    snapshot.pendingReports > 0 ? String.valueOf(snapshot.pendingReports) : null));
             if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_CONTENT)) {
                 items.add(SettingsActivity.SettingCell.Factory.of(
                         ID_MOD_PACK_MANAGER,
@@ -311,30 +406,48 @@ public class EveAdminControlCenterActivity extends BaseFragment {
         }
 
         // E, K, L & M. ANALYTICS, ROLES, APP CONFIG & SYSTEM HEALTH
-        items.add(UItem.asHeader("E, K, L & M. Analytics, Roles, Config & Health"));
+        items.add(UItem.asHeader("E, K, L & M. Analytics, Roles & Health"));
         items.add(SettingsActivity.SettingCell.Factory.of(
                 ID_MOD_INSIGHTS_SYSTEM,
                 0xFF00BCD4, 0xFF00838F, R.drawable.settings_devices,
-                "Analytics, Crash Reports, Config & Health",
-                "Scores, D1 crashes, AI usage, export JSON, maintenance & Worker/D1/R2",
+                "Insights & System",
+                "Analytics, crashes, export, config & Worker/D1/R2",
                 null));
         if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_ADMINS_RIGHTS)) {
             items.add(SettingsActivity.SettingCell.Factory.of(
                     ID_MOD_ADMINS,
                     0xFF607D8B, 0xFF37474F, R.drawable.settings_privacy,
-                    "Admin Users & RBAC Permissions",
-                    "Manage admin emails, custom titles & 13 granular rights",
+                    "Admin Roles",
+                    "Manage admin emails, titles & 13 rights",
                     null));
         }
         if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_VIEW_ANALYTICS_LOGS)) {
             items.add(SettingsActivity.SettingCell.Factory.of(
                     ID_MOD_AUDIT,
                     0xFF795548, 0xFF4E342E, R.drawable.msg_list,
-                    "Server Audit Log",
+                    "Audit Log",
                     "Recent server-verified admin operations",
-                    snapshot.recentActions.size() + " recent"));
+                    snapshot.recentActions.isEmpty() ? null : String.valueOf(snapshot.recentActions.size())));
         }
         items.add(UItem.asShadow(null));
+
+        // RECENT SERVER ACTIVITY (compact preview)
+        items.add(UItem.asHeader("Recent Activity"));
+        if (snapshot.recentActions.isEmpty()) {
+            items.add(UItem.asShadow("No recent admin operations recorded yet."));
+        } else {
+            int previewLimit = Math.min(snapshot.recentActions.size(), 3);
+            for (int i = 0; i < previewLimit; i++) {
+                EveAdminModels.AuditLogEntry entry = snapshot.recentActions.get(i);
+                items.add(SettingsActivity.SettingCell.Factory.of(
+                        ID_MOD_AUDIT,
+                        0, 0, 0,
+                        formatActionTitle(entry.actionType),
+                        entry.description,
+                        null));
+            }
+            items.add(UItem.asShadow("Tap any activity entry above to open full audit log."));
+        }
     }
 
     private void onClick(UItem item, View view, int position, float x, float y) {
@@ -349,6 +462,8 @@ public class EveAdminControlCenterActivity extends BaseFragment {
             case ID_ADMIN_SIGN_IN:
                 startAdminSignIn();
                 break;
+            case ID_KPI_EXAMS:
+            case ID_KPI_TESTS:
             case ID_MOD_EXAMS:
                 presentFragment(new EveAdminExamsFragment());
                 break;
@@ -358,24 +473,31 @@ public class EveAdminControlCenterActivity extends BaseFragment {
             case ID_MOD_QUESTIONS:
                 EveAdminDialogs.showQuestionBankPicker(this, repo, getExams());
                 break;
+            case ID_KPI_STUDENTS:
             case ID_MOD_STUDENTS:
                 EveAdminDialogs.showStudentSearchDialog(this, repo, this::refreshDashboard);
                 break;
+            case ID_KPI_REVENUE:
+            case ID_KPI_PENDING:
             case ID_MOD_PAYMENTS:
                 EveAdminDialogs.showTransactionsDialog(this, repo);
                 break;
             case ID_MOD_PREMIUM:
                 EveAdminDialogs.showPricingAndUpiDialog(this, repo, this::refreshDashboard);
                 break;
+            case ID_KPI_PREMIUM:
             case ID_MOD_PREMIUM_USERS:
                 EveAdminDialogs.showPremiumUsersDialog(this, repo, this::refreshDashboard);
                 break;
+            case ID_KPI_MODERATION:
             case ID_MOD_CONTENT_COMMS:
                 presentFragment(new EveAdminContentAndCommsFragment(profile));
                 break;
             case ID_MOD_PACK_MANAGER:
                 presentFragment(new EveAdminPackManagerFragment());
                 break;
+            case ID_KPI_ATTEMPTS:
+            case ID_KPI_SCORE:
             case ID_MOD_INSIGHTS_SYSTEM:
                 presentFragment(new EveAdminInsightsAndSystemFragment(profile));
                 break;
@@ -411,16 +533,11 @@ public class EveAdminControlCenterActivity extends BaseFragment {
         return snapshot != null ? snapshot.exams : Collections.emptyList();
     }
 
-    private static String buildRecentActionsSummary(List<EveAdminModels.AuditLogEntry> actions) {
-        if (actions == null || actions.isEmpty()) {
-            return "Recent admin actions: none recorded yet.";
+    private static String formatActionTitle(String rawType) {
+        if (rawType == null || rawType.trim().isEmpty()) {
+            return "Admin Action";
         }
-        StringBuilder sb = new StringBuilder("Recent admin actions:");
-        int limit = Math.min(actions.size(), 3);
-        for (int i = 0; i < limit; i++) {
-            EveAdminModels.AuditLogEntry e = actions.get(i);
-            sb.append("\n• [").append(e.actionType).append("] ").append(e.description);
-        }
-        return sb.toString();
+        String normalized = rawType.trim().replace('_', ' ').toLowerCase(Locale.US);
+        return Character.toUpperCase(normalized.charAt(0)) + normalized.substring(1);
     }
 }

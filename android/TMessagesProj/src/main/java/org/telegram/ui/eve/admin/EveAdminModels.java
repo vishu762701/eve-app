@@ -627,6 +627,11 @@ public final class EveAdminModels {
         public final List<AdminExamItem> exams;
         public final List<AdminGeneratedTestItem> generatedTests;
         public final List<AuditLogEntry> recentActions;
+        public final boolean isFromCache;
+        public final boolean isStale;
+        public final List<String> partialWarnings;
+        public final long loadedAtMs;
+        public final long loadDurationMs;
 
         public DashboardSnapshot(
                 AdminProfile adminProfile,
@@ -674,6 +679,41 @@ public final class EveAdminModels {
                 List<AdminExamItem> exams,
                 List<AdminGeneratedTestItem> generatedTests,
                 List<AuditLogEntry> recentActions) {
+            this(adminProfile, totalStudents, activeStudents, totalExams, publishedExams, draftExams,
+                    totalTests, liveTests, draftTests, totalAttempts, completedAttempts,
+                    totalTransactions, paidTransactions, totalRevenueInr,
+                    pendingTransactions, activePremiumUsers, pendingReports, averageScorePct,
+                    exams, generatedTests, recentActions,
+                    false, false, Collections.emptyList(), System.currentTimeMillis(), 0L);
+        }
+
+        public DashboardSnapshot(
+                AdminProfile adminProfile,
+                int totalStudents,
+                int activeStudents,
+                int totalExams,
+                int publishedExams,
+                int draftExams,
+                int totalTests,
+                int liveTests,
+                int draftTests,
+                int totalAttempts,
+                int completedAttempts,
+                int totalTransactions,
+                int paidTransactions,
+                long totalRevenueInr,
+                int pendingTransactions,
+                int activePremiumUsers,
+                int pendingReports,
+                double averageScorePct,
+                List<AdminExamItem> exams,
+                List<AdminGeneratedTestItem> generatedTests,
+                List<AuditLogEntry> recentActions,
+                boolean isFromCache,
+                boolean isStale,
+                List<String> partialWarnings,
+                long loadedAtMs,
+                long loadDurationMs) {
             this.adminProfile = adminProfile;
             this.totalStudents = totalStudents;
             this.activeStudents = activeStudents;
@@ -695,6 +735,167 @@ public final class EveAdminModels {
             this.exams = exams != null ? exams : Collections.emptyList();
             this.generatedTests = generatedTests != null ? generatedTests : Collections.emptyList();
             this.recentActions = recentActions != null ? recentActions : Collections.emptyList();
+            this.isFromCache = isFromCache;
+            this.isStale = isStale;
+            this.partialWarnings = partialWarnings != null ? partialWarnings : Collections.emptyList();
+            this.loadedAtMs = loadedAtMs;
+            this.loadDurationMs = loadDurationMs;
+        }
+
+        public DashboardSnapshot asCacheCopy(boolean stale) {
+            return new DashboardSnapshot(
+                    adminProfile, totalStudents, activeStudents,
+                    totalExams, publishedExams, draftExams,
+                    totalTests, liveTests, draftTests,
+                    totalAttempts, completedAttempts,
+                    totalTransactions, paidTransactions, totalRevenueInr,
+                    pendingTransactions, activePremiumUsers, pendingReports, averageScorePct,
+                    exams, generatedTests, recentActions,
+                    true, stale, partialWarnings, loadedAtMs, loadDurationMs);
+        }
+
+        public static DashboardSnapshot fromDashboardJson(JSONObject data, long fallbackDurationMs) {
+            if (data == null) {
+                return null;
+            }
+            JSONObject profileJson = data.optJSONObject("adminProfile");
+            if (profileJson == null) {
+                return null;
+            }
+            AdminProfile profile = AdminProfile.fromJson(profileJson);
+            JSONObject metrics = data.optJSONObject("metrics");
+            if (metrics == null) {
+                metrics = new JSONObject();
+            }
+            List<AdminExamItem> exams = AdminExamItem.parseList(data.optJSONArray("exams"));
+            List<AdminGeneratedTestItem> tests = AdminGeneratedTestItem.parseList(data.optJSONArray("generatedTests"));
+            List<AuditLogEntry> recent = AuditLogEntry.parseList(data.optJSONArray("recentActions"));
+            List<String> warnings = new ArrayList<>();
+            JSONArray warnArr = data.optJSONArray("partialErrors");
+            if (warnArr != null) {
+                for (int i = 0; i < warnArr.length(); i++) {
+                    String w = warnArr.optString(i, "").trim();
+                    if (!w.isEmpty()) {
+                        warnings.add(w);
+                    }
+                }
+            }
+            int totalExams = metrics.has("totalExams") ? metrics.optInt("totalExams", exams.size()) : exams.size();
+            int publishedExams = metrics.optInt("publishedExams", 0);
+            int draftExams = metrics.optInt("draftExams", Math.max(0, totalExams - publishedExams));
+            int totalTests = metrics.optInt("totalTests", tests.size());
+            int liveTests = metrics.optInt("liveTests", 0);
+            int draftTests = metrics.optInt("draftTests", Math.max(0, totalTests - liveTests));
+            int totalAttempts = metrics.optInt("totalAttempts", 0);
+            int completedAttempts = metrics.optInt("completedAttempts", totalAttempts);
+            long loadedAt = data.optLong("loadedAt", System.currentTimeMillis());
+            long durationMs = fallbackDurationMs > 0 ? fallbackDurationMs : data.optLong("durationMs", 0L);
+
+            return new DashboardSnapshot(
+                    profile,
+                    metrics.optInt("totalStudents", 0),
+                    metrics.optInt("activeStudents", 0),
+                    totalExams,
+                    publishedExams,
+                    draftExams,
+                    totalTests,
+                    liveTests,
+                    draftTests,
+                    totalAttempts,
+                    completedAttempts,
+                    metrics.optInt("totalTransactions", 0),
+                    metrics.optInt("paidTransactions", 0),
+                    metrics.optLong("totalRevenueInr", 0L),
+                    metrics.optInt("pendingTransactions", 0),
+                    metrics.optInt("activePremiumUsers", 0),
+                    metrics.optInt("pendingReports", 0),
+                    metrics.optDouble("averageScorePct", 0.0),
+                    exams,
+                    tests,
+                    recent,
+                    false,
+                    false,
+                    warnings,
+                    loadedAt,
+                    durationMs
+            );
+        }
+
+        public JSONObject toCacheJson() {
+            JSONObject root = new JSONObject();
+            try {
+                if (adminProfile != null) {
+                    JSONObject p = new JSONObject();
+                    p.put("email", adminProfile.email);
+                    p.put("isOwner", adminProfile.isOwner);
+                    p.put("customTitle", adminProfile.customTitle);
+                    JSONArray rArr = new JSONArray();
+                    for (String r : adminProfile.rights) {
+                        rArr.put(r);
+                    }
+                    p.put("rights", rArr);
+                    root.put("adminProfile", p);
+                }
+                JSONObject m = new JSONObject();
+                m.put("totalStudents", totalStudents);
+                m.put("activeStudents", activeStudents);
+                m.put("totalExams", totalExams);
+                m.put("publishedExams", publishedExams);
+                m.put("draftExams", draftExams);
+                m.put("totalTests", totalTests);
+                m.put("liveTests", liveTests);
+                m.put("draftTests", draftTests);
+                m.put("totalAttempts", totalAttempts);
+                m.put("completedAttempts", completedAttempts);
+                m.put("totalTransactions", totalTransactions);
+                m.put("paidTransactions", paidTransactions);
+                m.put("totalRevenueInr", totalRevenueInr);
+                m.put("pendingTransactions", pendingTransactions);
+                m.put("activePremiumUsers", activePremiumUsers);
+                m.put("pendingReports", pendingReports);
+                m.put("averageScorePct", averageScorePct);
+                root.put("metrics", m);
+
+                JSONArray exArr = new JSONArray();
+                for (AdminExamItem ex : exams) {
+                    JSONObject o = new JSONObject();
+                    o.put("id", ex.id);
+                    o.put("examName", ex.examName);
+                    o.put("category", ex.category);
+                    o.put("timeLimitMinutes", ex.timeLimitMinutes);
+                    o.put("questionCount", ex.questionCount);
+                    o.put("testNumber", ex.testNumber);
+                    o.put("negativeMarkingText", ex.negativeMarkingText);
+                    o.put("publishMode", ex.publishMode);
+                    o.put("parentExamId", ex.parentExamId);
+                    o.put("syllabusFileName", ex.syllabusFileName);
+                    o.put("syllabusUrl", ex.syllabusUrl);
+                    o.put("imageUrl", ex.imageUrl);
+                    exArr.put(o);
+                }
+                root.put("exams", exArr);
+
+                JSONArray actArr = new JSONArray();
+                for (AuditLogEntry entry : recentActions) {
+                    JSONObject o = new JSONObject();
+                    o.put("id", entry.id);
+                    o.put("actionType", entry.actionType);
+                    o.put("description", entry.description);
+                    o.put("adminEmail", entry.adminEmail);
+                    o.put("timestamp", entry.timestamp);
+                    actArr.put(o);
+                }
+                root.put("recentActions", actArr);
+                JSONArray warnArr = new JSONArray();
+                for (String w : partialWarnings) {
+                    warnArr.put(w);
+                }
+                root.put("partialErrors", warnArr);
+                root.put("loadedAt", loadedAtMs);
+                root.put("durationMs", loadDurationMs);
+            } catch (Exception ignored) {
+            }
+            return root;
         }
     }
 

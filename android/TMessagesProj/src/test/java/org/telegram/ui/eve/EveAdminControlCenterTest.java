@@ -162,4 +162,98 @@ public class EveAdminControlCenterTest {
         repo.invalidateCache();
         assertEquals(0L, repo.getCachedSnapshotAtMs());
     }
+
+    @Test
+    public void unifiedDashboardEndpoint_loadsInSingleRequestAndSupportsCacheAndPartialFallback() throws Exception {
+        java.util.List<String> calls = new java.util.ArrayList<>();
+        EveBackendClient unifiedClient = new EveBackendClient("https://eve-backend.anyqueairdrop.workers.dev", (method, url, token, body) -> {
+            calls.add(method + " " + url);
+            assertEquals("admin-jwt", token);
+            if ("GET".equals(method) && url.endsWith("/api/admin/dashboard")) {
+                return new EveBackendClient.HttpResponse(200,
+                        "{\"success\":true,\"data\":{"
+                                + "\"adminProfile\":{\"email\":\"owner@example.com\",\"isOwner\":true,\"customTitle\":\"Owner\",\"rights\":[\"manage_exams\",\"manage_users\",\"manage_premium\",\"view_analytics_logs\",\"moderate_feedback\"]},"
+                                + "\"metrics\":{\"totalStudents\":500,\"activeStudents\":42,\"totalExams\":4,\"publishedExams\":3,\"draftExams\":1,\"totalTests\":12,\"liveTests\":10,\"draftTests\":2,\"totalAttempts\":99,\"completedAttempts\":99,\"averageScorePct\":68.4,\"totalTransactions\":8,\"paidTransactions\":6,\"pendingTransactions\":2,\"totalRevenueInr\":1194,\"activePremiumUsers\":6,\"pendingReports\":3},"
+                                + "\"exams\":[{\"id\":\"ex1\",\"examName\":\"SSC CGL\",\"category\":\"SSC\",\"timeLimitMinutes\":60,\"questionCount\":100,\"publishMode\":\"live\"}],"
+                                + "\"recentActions\":[{\"id\":\"a1\",\"actionType\":\"EXAM_CREATED\",\"description\":\"Created SSC CGL\",\"adminEmail\":\"owner@example.com\",\"timestamp\":1700000200000}],"
+                                + "\"partialErrors\":[],"
+                                + "\"loadedAt\":1700000500000,"
+                                + "\"durationMs\":27"
+                                + "}}");
+            }
+            return new EveBackendClient.HttpResponse(500, "{\"success\":false,\"error\":\"Unexpected extra call\"}");
+        });
+
+        EveAdminRepository repo = new EveAdminRepository(unifiedClient);
+        EveAdminModels.DashboardSnapshot snapshot = repo.loadDashboardSnapshot("admin-jwt");
+        assertEquals(1, calls.size());
+        assertEquals("GET https://eve-backend.anyqueairdrop.workers.dev/api/admin/dashboard", calls.get(0));
+        assertEquals(500, snapshot.totalStudents);
+        assertEquals(42, snapshot.activeStudents);
+        assertEquals(4, snapshot.totalExams);
+        assertEquals(12, snapshot.totalTests);
+        assertEquals(99, snapshot.completedAttempts);
+        assertEquals(68.4, snapshot.averageScorePct, 0.01);
+        assertEquals(1194L, snapshot.totalRevenueInr);
+        assertEquals(2, snapshot.pendingTransactions);
+        assertEquals(6, snapshot.activePremiumUsers);
+        assertEquals(3, snapshot.pendingReports);
+        assertEquals(27L, snapshot.loadDurationMs);
+        assertFalse(snapshot.isFromCache);
+        assertTrue(snapshot.partialWarnings.isEmpty());
+
+        JSONObject cachedJson = snapshot.toCacheJson();
+        EveAdminModels.DashboardSnapshot restored = EveAdminModels.DashboardSnapshot.fromDashboardJson(cachedJson, 0L);
+        assertNotNull(restored);
+        assertEquals(500, restored.totalStudents);
+        assertEquals(1194L, restored.totalRevenueInr);
+        assertTrue(restored.asCacheCopy(true).isFromCache);
+        assertTrue(restored.asCacheCopy(true).isStale);
+
+        // 404 from unified endpoint triggers legacy fallback and tolerates optional section failures
+        EveBackendClient fallbackClient = new EveBackendClient("https://eve-backend.anyqueairdrop.workers.dev", (method, url, token, body) -> {
+            if (url.endsWith("/api/admin/dashboard")) {
+                return new EveBackendClient.HttpResponse(404, "{\"success\":false,\"error\":\"Route not found\"}");
+            }
+            if (url.endsWith("/api/admin/me")) {
+                return new EveBackendClient.HttpResponse(200,
+                        "{\"success\":true,\"data\":{\"email\":\"owner@example.com\",\"isOwner\":true,\"customTitle\":\"Owner\",\"rights\":[\"manage_users\",\"manage_premium\",\"view_analytics_logs\"]}}");
+            }
+            if (url.endsWith("/api/admin/stats/users")) {
+                return new EveBackendClient.HttpResponse(500, "{\"success\":false,\"error\":\"Temporary D1 timeout\"}");
+            }
+            if (url.endsWith("/api/exams")) {
+                return new EveBackendClient.HttpResponse(200, "{\"success\":true,\"data\":[{\"id\":\"ex1\",\"examName\":\"SSC\",\"publishMode\":\"live\"}]}");
+            }
+            if (url.endsWith("/api/generated-tests")) {
+                return new EveBackendClient.HttpResponse(200, "{\"success\":true,\"data\":[]}");
+            }
+            if (url.contains("/api/admin/analytics/exams") || url.contains("/api/admin/audit-log")
+                    || url.contains("/api/admin/premium/transactions") || url.contains("/api/admin/premium/users")
+                    || url.contains("/api/admin/reports")) {
+                return new EveBackendClient.HttpResponse(200, "{\"success\":true,\"data\":[]}");
+            }
+            return new EveBackendClient.HttpResponse(200, "{\"success\":true,\"data\":[]}");
+        });
+
+        EveAdminRepository fallbackRepo = new EveAdminRepository(fallbackClient);
+        EveAdminModels.DashboardSnapshot partial = fallbackRepo.loadDashboardSnapshot("admin-jwt");
+        assertEquals(1, partial.totalExams);
+        assertEquals(0, partial.totalStudents);
+        assertFalse(partial.partialWarnings.isEmpty());
+
+        // 403 on unified dashboard rejects immediately without calling /api/admin/me
+        java.util.List<String> authRejectedCalls = new java.util.ArrayList<>();
+        EveBackendClient forbiddenClient = new EveBackendClient("https://eve-backend.anyqueairdrop.workers.dev", (method, url, token, body) -> {
+            authRejectedCalls.add(url);
+            return new EveBackendClient.HttpResponse(403, "{\"success\":false,\"error\":\"Forbidden\"}");
+        });
+        try {
+            new EveAdminRepository(forbiddenClient).loadDashboardSnapshot("student-jwt");
+            org.junit.Assert.fail("Expected BackendException for 403 /api/admin/dashboard");
+        } catch (EveBackendClient.BackendException expected) {
+            assertEquals(403, expected.httpStatus);
+            assertEquals(1, authRejectedCalls.size());
+        }
+    }
 }

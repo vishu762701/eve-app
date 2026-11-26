@@ -37,6 +37,210 @@ adminRoutes.get("/me", async (c) => {
   });
 });
 
+// GET /api/admin/dashboard - Single-call aggregated Admin Control Center summary
+adminRoutes.get("/dashboard", async (c) => {
+  const startedAt = Date.now();
+  const user = c.get("user");
+  const db = c.env.DB;
+  const perms = await getAdminPermissions(db, user?.email);
+  if (!perms) return c.json({ success: false, error: "Admin permissions could not be verified" }, 403);
+
+  const rightSet = new Set<string>(perms.rights || []);
+  const hasRight = (right: string) => perms.isOwner || rightSet.has(right);
+
+  const canManageUsers = hasRight("manage_users");
+  const canViewAnalytics = hasRight("view_analytics_logs");
+  const canManagePremium = hasRight("manage_premium");
+  const canModerate = hasRight("moderate_feedback");
+  const canViewExamCatalog = hasRight("manage_exams") || hasRight("manage_generated_tests") || hasRight("manage_questions");
+
+  const partialErrors: string[] = [];
+  const runSafely = async <T>(label: string, fallback: T, fn: () => Promise<T>): Promise<T> => {
+    try {
+      return await fn();
+    } catch (err: any) {
+      partialErrors.push(`${label}: ${err?.message || "query failed"}`);
+      return fallback;
+    }
+  };
+
+  const ONLINE_WINDOW_MS = 5 * 60 * 1000;
+  const cutoff = startedAt - ONLINE_WINDOW_MS;
+
+  const [examsResult, testsAgg, usersAgg, attemptsAgg, auditRows, ordersAgg, premiumAgg, reportsAgg] = await Promise.all([
+    runSafely("exams", [] as any[], async () => {
+      const { results } = await db
+        .prepare(
+          `SELECT id, exam_name, category, time_limit_minutes, question_count, test_number,
+                  negative_marking_text, publish_mode, parent_exam_id, syllabus_file_name,
+                  syllabus_url, image_url
+           FROM exams
+           ORDER BY exam_name ASC`
+        )
+        .all<any>();
+      return results || [];
+    }),
+    runSafely("generated_tests", { total: 0, live_count: 0 }, async () => {
+      const row = await db
+        .prepare(
+          `SELECT COUNT(*) AS total,
+                  COALESCE(SUM(CASE WHEN LOWER(status) IN ('live', 'published') THEN 1 ELSE 0 END), 0) AS live_count
+           FROM generated_tests`
+        )
+        .first<{ total: number; live_count: number }>();
+      return row || { total: 0, live_count: 0 };
+    }),
+    canManageUsers
+      ? runSafely("users", { total: 0, active: 0 }, async () => {
+          const row = await db
+            .prepare(
+              `SELECT COUNT(*) AS total,
+                      COALESCE(SUM(CASE WHEN last_active >= ? THEN 1 ELSE 0 END), 0) AS active
+               FROM users`
+            )
+            .bind(cutoff)
+            .first<{ total: number; active: number }>();
+          return row || { total: 0, active: 0 };
+        })
+      : Promise.resolve({ total: 0, active: 0 }),
+    canViewAnalytics
+      ? runSafely("attempts", { total: 0, avg_score: 0 }, async () => {
+          const row = await db
+            .prepare(
+              `SELECT COUNT(*) AS total,
+                      COALESCE(AVG(score), 0.0) AS avg_score
+               FROM attempts
+               WHERE counted = 1`
+            )
+            .first<{ total: number; avg_score: number }>();
+          return row || { total: 0, avg_score: 0 };
+        })
+      : Promise.resolve({ total: 0, avg_score: 0 }),
+    canViewAnalytics
+      ? runSafely("audit_log", [] as any[], async () => {
+          const { results } = await db
+            .prepare(
+              `SELECT id, action_type, description, admin_email, timestamp
+               FROM admin_audit_log
+               ORDER BY timestamp DESC
+               LIMIT 5`
+            )
+            .all<any>();
+          return results || [];
+        })
+      : Promise.resolve([] as any[]),
+    canManagePremium
+      ? runSafely("premium_orders", { total: 0, paid_count: 0, pending_count: 0, revenue_inr: 0 }, async () => {
+          const row = await db
+            .prepare(
+              `SELECT COUNT(*) AS total,
+                      COALESCE(SUM(CASE WHEN status = 'PAID' THEN 1 ELSE 0 END), 0) AS paid_count,
+                      COALESCE(SUM(CASE WHEN status = 'PENDING' THEN 1 ELSE 0 END), 0) AS pending_count,
+                      COALESCE(SUM(CASE WHEN status = 'PAID' THEN amount ELSE 0 END), 0) AS revenue_inr
+               FROM premium_orders`
+            )
+            .first<{ total: number; paid_count: number; pending_count: number; revenue_inr: number }>();
+          return row || { total: 0, paid_count: 0, pending_count: 0, revenue_inr: 0 };
+        })
+      : Promise.resolve({ total: 0, paid_count: 0, pending_count: 0, revenue_inr: 0 }),
+    canManagePremium
+      ? runSafely("premium_entitlements", { active_count: 0 }, async () => {
+          const row = await db
+            .prepare(
+              `SELECT COUNT(*) AS active_count
+               FROM premium_entitlements
+               WHERE status = 'ACTIVE'
+                 AND (is_lifetime = 1 OR expires_at IS NULL OR expires_at > ?)`
+            )
+            .bind(startedAt)
+            .first<{ active_count: number }>();
+          return row || { active_count: 0 };
+        })
+      : Promise.resolve({ active_count: 0 }),
+    canModerate
+      ? runSafely("question_reports", { pending_count: 0 }, async () => {
+          const row = await db
+            .prepare(`SELECT COUNT(*) AS pending_count FROM question_reports WHERE status = 'pending'`)
+            .first<{ pending_count: number }>();
+          return row || { pending_count: 0 };
+        })
+      : Promise.resolve({ pending_count: 0 }),
+  ]);
+
+  let publishedExams = 0;
+  let draftExams = 0;
+  const exams = examsResult.map((r) => {
+    const mode = String(r.publish_mode || "inherit").toLowerCase();
+    if (mode === "paused") {
+      draftExams++;
+    } else {
+      publishedExams++;
+    }
+    return {
+      id: r.id,
+      examName: r.exam_name,
+      category: r.category || "General",
+      timeLimitMinutes: r.time_limit_minutes ?? 30,
+      questionCount: r.question_count ?? 20,
+      testNumber: r.test_number || "Test 1",
+      negativeMarkingText: r.negative_marking_text || "0",
+      publishMode: mode,
+      parentExamId: r.parent_exam_id || "",
+      syllabusFileName: r.syllabus_file_name || "",
+      syllabusUrl: r.syllabus_url || "",
+      imageUrl: r.image_url || "",
+    };
+  });
+
+  const totalTests = Number(testsAgg.total || 0);
+  const liveTests = Number(testsAgg.live_count || 0);
+  const draftTests = Math.max(0, totalTests - liveTests);
+  const totalAttempts = Number(attemptsAgg.total || 0);
+  const avgScorePct = Math.round(Number(attemptsAgg.avg_score || 0) * 10.0) / 10.0;
+
+  return c.json({
+    success: true,
+    data: {
+      adminProfile: {
+        email: user?.email || "",
+        isOwner: perms.isOwner ?? false,
+        rights: perms.rights ?? [],
+        customTitle: perms.customTitle ?? null,
+      },
+      metrics: {
+        totalStudents: Number(usersAgg.total || 0),
+        activeStudents: Number(usersAgg.active || 0),
+        totalExams: exams.length,
+        publishedExams,
+        draftExams,
+        totalTests,
+        liveTests,
+        draftTests,
+        totalAttempts,
+        completedAttempts: totalAttempts,
+        averageScorePct: avgScorePct,
+        totalTransactions: Number(ordersAgg.total || 0),
+        paidTransactions: Number(ordersAgg.paid_count || 0),
+        pendingTransactions: Number(ordersAgg.pending_count || 0),
+        totalRevenueInr: Number(ordersAgg.revenue_inr || 0),
+        activePremiumUsers: Number(premiumAgg.active_count || 0),
+        pendingReports: Number(reportsAgg.pending_count || 0),
+      },
+      exams: canViewExamCatalog ? exams : [],
+      recentActions: auditRows.map((row) => ({
+        id: row.id,
+        actionType: row.action_type || "",
+        description: row.description || "",
+        adminEmail: row.admin_email || "",
+        timestamp: Number(row.timestamp || 0),
+      })),
+      partialErrors,
+      loadedAt: startedAt,
+      durationMs: Math.max(1, Date.now() - startedAt),
+    },
+  });
+});
+
 // GET /api/admin/admins - List dynamic admins with rights and titles
 adminRoutes.get("/admins", requirePermission("manage_admins_rights"), async (c) => {
   const db = c.env.DB;
