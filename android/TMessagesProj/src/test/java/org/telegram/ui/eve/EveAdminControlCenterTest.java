@@ -314,10 +314,56 @@ public class EveAdminControlCenterTest {
                 "org.telegram.ui.eve.admin.EveAdminPaymentsFragment",
                 "org.telegram.ui.eve.admin.EveAdminPremiumConfigFragment",
                 "org.telegram.ui.eve.admin.EveAdminRolesFragment",
-                "org.telegram.ui.eve.admin.EveAdminAuditLogFragment"
+                "org.telegram.ui.eve.admin.EveAdminAuditLogFragment",
+                "org.telegram.ui.eve.admin.EveAdminPollsFragment",
+                "org.telegram.ui.eve.admin.EveAdminPollCreateFragment",
+                "org.telegram.ui.eve.admin.EveAdminBroadcastsFragment",
+                "org.telegram.ui.eve.admin.EveAdminBannersFragment",
+                "org.telegram.ui.eve.admin.EveAdminFlaggedReportsFragment",
+                "org.telegram.ui.eve.admin.EveAdminFeedbackFragment",
+                "org.telegram.ui.eve.admin.EveAdminContentEditorFragment"
         };
         for (String name : classes) {
             assertNotNull(Class.forName(name));
         }
+    }
+
+    @Test
+    public void adminPollContracts_parseVoteCountsAndSendActiveBooleanOnToggle() throws Exception {
+        org.json.JSONArray pollArr = new org.json.JSONArray("[{"
+                + "\"id\":\"p-42\","
+                + "\"question\":\"Best Daily Test Time?\","
+                + "\"options\":[\"8 AM\",\"8 PM\",\"10 PM\"],"
+                + "\"voteCounts\":{\"0\":5,\"1\":12,\"2\":3},"
+                + "\"active\":true,"
+                + "\"createdAt\":1700001000000,"
+                + "\"endsAt\":0,"
+                + "\"createdBy\":\"owner@example.com\""
+                + "}]");
+        java.util.List<EveAdminModels.PollItem> parsed = EveAdminModels.PollItem.parseList(pollArr);
+        assertEquals(1, parsed.size());
+        EveAdminModels.PollItem item = parsed.get(0);
+        assertEquals("p-42", item.id);
+        assertEquals(3, item.options.size());
+        assertEquals(20, item.totalVotes);
+        assertEquals(12, item.getVotesForOption(1));
+        assertTrue(item.active);
+        assertEquals("owner@example.com", item.createdBy);
+
+        Map<String, String> captured = new HashMap<>();
+        EveBackendClient client = new EveBackendClient("https://eve-backend.anyqueairdrop.workers.dev", (method, url, token, body) -> {
+            captured.put("method", method);
+            captured.put("url", url);
+            captured.put("body", body);
+            return new EveBackendClient.HttpResponse(200, "{\"success\":true}");
+        });
+        EveAdminRepository repo = new EveAdminRepository(client);
+        repo.setPollActive("admin-jwt", "p-42", false);
+        assertEquals("PUT", captured.get("method"));
+        assertTrue(captured.get("url").endsWith("/api/polls/p-42/status"));
+        JSONObject sent = new JSONObject(captured.get("body"));
+        assertTrue(sent.has("active"));
+        assertFalse(sent.has("isActive"));
+        assertFalse(sent.getBoolean("active"));
     }
 }

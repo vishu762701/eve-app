@@ -979,13 +979,41 @@ public final class EveAdminModels {
         public final List<String> options;
         public final boolean active;
         public final int totalVotes;
+        public final java.util.Map<Integer, Integer> voteCounts;
+        public final long createdAt;
+        public final long endsAt;
+        public final String createdBy;
 
         public PollItem(String id, String question, List<String> options, boolean active, int totalVotes) {
+            this(id, question, options, active, totalVotes, null, 0L, 0L, "");
+        }
+
+        public PollItem(
+                String id,
+                String question,
+                List<String> options,
+                boolean active,
+                int totalVotes,
+                java.util.Map<Integer, Integer> voteCounts,
+                long createdAt,
+                long endsAt,
+                String createdBy) {
             this.id = id != null ? id : "";
             this.question = question != null ? question : "";
-            this.options = options != null ? options : Collections.emptyList();
+            this.options = options != null ? Collections.unmodifiableList(new ArrayList<>(options)) : Collections.emptyList();
             this.active = active;
-            this.totalVotes = totalVotes;
+            this.totalVotes = Math.max(0, totalVotes);
+            this.voteCounts = voteCounts != null
+                    ? Collections.unmodifiableMap(new java.util.HashMap<>(voteCounts))
+                    : Collections.emptyMap();
+            this.createdAt = createdAt;
+            this.endsAt = endsAt;
+            this.createdBy = createdBy != null ? createdBy : "";
+        }
+
+        public int getVotesForOption(int index) {
+            Integer v = voteCounts.get(index);
+            return v != null ? Math.max(0, v) : 0;
         }
 
         public static List<PollItem> parseList(JSONArray arr) {
@@ -1002,12 +1030,29 @@ public final class EveAdminModels {
                         if (!s.isEmpty()) opts.add(s);
                     }
                 }
+                java.util.Map<Integer, Integer> countsMap = new java.util.HashMap<>();
+                int sumVotes = 0;
+                JSONObject vc = o.optJSONObject("voteCounts");
+                if (vc != null) {
+                    for (int j = 0; j < opts.size(); j++) {
+                        int count = Math.max(0, vc.optInt(String.valueOf(j), 0));
+                        countsMap.put(j, count);
+                        sumVotes += count;
+                    }
+                } else {
+                    sumVotes = Math.max(0, o.optInt("totalVotes", 0));
+                }
+                int total = o.has("totalVotes") && vc == null ? Math.max(0, o.optInt("totalVotes", sumVotes)) : sumVotes;
                 out.add(new PollItem(
                         clean(o, "id", ""),
                         clean(o, "question", ""),
                         opts,
-                        o.optBoolean("isActive", o.optBoolean("active", o.optInt("is_active", 1) == 1)),
-                        o.optInt("totalVotes", 0)
+                        o.optBoolean("active", o.optBoolean("isActive", o.optInt("is_active", 1) == 1)),
+                        total,
+                        countsMap,
+                        o.optLong("createdAt", o.optLong("created_at", 0L)),
+                        o.optLong("endsAt", o.optLong("ends_at", 0L)),
+                        clean(o, "createdBy", clean(o, "created_by", ""))
                 ));
             }
             return out;

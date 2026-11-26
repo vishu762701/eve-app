@@ -14,6 +14,7 @@ import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.FileLog;
 import org.telegram.ui.eve.auth.EveAuthManager;
 import org.telegram.ui.eve.auth.EveBackendClient;
+import org.telegram.ui.eve.polls.EvePollModel;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -547,6 +548,97 @@ public final class EveExamRepository {
                 }
             }
             postComplete(callback, items, "");
+        });
+    }
+
+    public void loadActivePolls(ApiCallback<List<EvePollModel>> callback) {
+        withFreshToken(callback, token -> {
+            JSONObject root = backendClient.getJsonRoot("/api/polls", token);
+            JSONArray arr = root.optJSONArray("data");
+            List<EvePollModel> activePolls = new ArrayList<>();
+            long nowMs = System.currentTimeMillis();
+            if (arr != null) {
+                for (int i = 0; i < arr.length(); i++) {
+                    JSONObject o = arr.optJSONObject(i);
+                    if (o == null) continue;
+                    boolean active = o.optBoolean("active", o.optBoolean("isActive", true));
+                    long endsAt = o.optLong("endsAt", 0L);
+                    if (!active || (endsAt > 0L && nowMs > endsAt)) {
+                        continue;
+                    }
+                    String id = o.optString("id", "");
+                    String question = o.optString("question", "");
+                    List<String> opts = new ArrayList<>();
+                    JSONArray optArr = o.optJSONArray("options");
+                    if (optArr != null) {
+                        for (int j = 0; j < optArr.length(); j++) {
+                            String opt = optArr.optString(j, "").trim();
+                            if (!opt.isEmpty()) opts.add(opt);
+                        }
+                    }
+                    if (id.isEmpty() || question.isEmpty() || opts.size() < 2) {
+                        continue;
+                    }
+                    Map<Integer, Integer> counts = new HashMap<>();
+                    int sumVotes = 0;
+                    JSONObject vc = o.optJSONObject("voteCounts");
+                    if (vc != null) {
+                        for (int j = 0; j < opts.size(); j++) {
+                            int count = Math.max(0, vc.optInt(String.valueOf(j), 0));
+                            counts.put(j, count);
+                            sumVotes += count;
+                        }
+                    }
+                    Integer myVote = null;
+                    try {
+                        JSONObject voteRoot = backendClient.getJsonRoot("/api/polls/" + urlEncode(id) + "/vote", token);
+                        JSONObject voteData = voteRoot.optJSONObject("data");
+                        if (voteData != null && !voteData.isNull("optionIndex")) {
+                            myVote = voteData.optInt("optionIndex");
+                        }
+                    } catch (Exception ignored) {
+                    }
+                    activePolls.add(new EvePollModel(
+                            id,
+                            question,
+                            opts,
+                            counts,
+                            sumVotes,
+                            true,
+                            o.optLong("createdAt", 0L),
+                            endsAt,
+                            o.optString("createdBy", ""),
+                            myVote
+                    ));
+                }
+            }
+            postComplete(callback, activePolls, "");
+        });
+    }
+
+    public void fetchMyPollVote(String pollId, ApiCallback<Integer> callback) {
+        if (pollId == null || pollId.trim().isEmpty()) {
+            postComplete(callback, null, "Invalid poll ID.");
+            return;
+        }
+        withFreshToken(callback, token -> {
+            JSONObject root = backendClient.getJsonRoot("/api/polls/" + urlEncode(pollId.trim()) + "/vote", token);
+            JSONObject data = root.optJSONObject("data");
+            Integer optionIndex = (data != null && !data.isNull("optionIndex")) ? data.optInt("optionIndex") : null;
+            postComplete(callback, optionIndex, "");
+        });
+    }
+
+    public void submitPollVote(String pollId, int optionIndex, ApiCallback<Boolean> callback) {
+        if (pollId == null || pollId.trim().isEmpty() || optionIndex < 0) {
+            postComplete(callback, false, "Invalid poll vote.");
+            return;
+        }
+        withFreshToken(callback, token -> {
+            JSONObject payload = new JSONObject();
+            payload.put("optionIndex", optionIndex);
+            backendClient.postJsonRoot("/api/polls/" + urlEncode(pollId.trim()) + "/vote", token, payload);
+            postComplete(callback, true, "");
         });
     }
 

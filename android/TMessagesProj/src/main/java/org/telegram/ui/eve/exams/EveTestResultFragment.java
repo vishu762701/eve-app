@@ -1,38 +1,53 @@
 package org.telegram.ui.eve.exams;
 
+import static org.telegram.messenger.AndroidUtilities.dp;
+
 import android.app.Activity;
 import android.content.Context;
-import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
+import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
+import androidx.annotation.Nullable;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.R;
 import org.telegram.ui.ActionBar.ActionBar;
-import org.telegram.ui.ActionBar.ActionBarMenu;
-import org.telegram.ui.ActionBar.ActionBarMenuItem;
 import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.BaseFragment;
+import org.telegram.ui.ActionBar.SimpleActionBarMenu;
+import org.telegram.ui.ActionBar.SimpleActionBarMenuItem;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.BulletinFactory;
+import org.telegram.ui.Components.IconBackgroundColors;
 import org.telegram.ui.Components.LayoutHelper;
+import org.telegram.ui.Components.RecyclerListView;
+import org.telegram.ui.Components.UItem;
+import org.telegram.ui.Components.UniversalAdapter;
+import org.telegram.ui.Components.UniversalRecyclerView;
+import org.telegram.ui.SettingsActivity;
+import org.telegram.ui.eve.admin.EveAdminUiChrome;
 
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 
 /**
- * Displays server-graded score summary, rank/percentile, question-by-question
- * answer review with English/Hindi explanations, bookmarking, question reporting,
- * leaderboard access, and server-verified reattempt flow.
+ * Telegram-native Card Mode Performance & Answer Review screen.
+ * Preserves server-graded metrics, bilingual explanations, bookmarking,
+ * question reporting, leaderboard navigation, and reattempt confirmation.
  */
 public class EveTestResultFragment extends BaseFragment {
 
@@ -41,19 +56,26 @@ public class EveTestResultFragment extends BaseFragment {
     private static final int FILTER_WRONG = 2;
     private static final int FILTER_SKIPPED = 3;
 
-    private static final int ID_TOGGLE_LANG = 1;
-    private static final int ID_LEADERBOARD = 2;
+    private static final int MENU_TOGGLE_LANG = 1;
+    private static final int MENU_LEADERBOARD = 2;
+
+    private static final int ID_HERO_CARD = 100;
+    private static final int ID_ACTION_LEADERBOARD = 201;
+    private static final int ID_ACTION_RETAKE = 202;
+    private static final int ID_ACTION_BACK = 203;
+    private static final int ID_FILTER_BAR = 300;
+    private static final int BASE_ANSWER_ID = 1000;
 
     private final EveExamModels.ExamSummary exam;
     private final EveExamModels.GeneratedTestSummary test;
     private final String attemptKey;
     private final EveExamModels.AttemptResult result;
 
+    private UniversalRecyclerView listView;
     private boolean preferHindi = LocaleController.isHindiSelected();
     private int currentFilter = FILTER_ALL;
-    private LinearLayout questionsContainer;
-    private LinearLayout filterRow;
-    private TextView rankBannerView;
+    private String rankText = "";
+    private boolean destroyed = false;
 
     public EveTestResultFragment(
             EveExamModels.ExamSummary exam,
@@ -69,268 +91,212 @@ public class EveTestResultFragment extends BaseFragment {
     }
 
     @Override
+    protected boolean useSimpleActionBar() {
+        return true;
+    }
+
+    @Override
+    protected boolean useFadeDrawableForActionBar() {
+        return false;
+    }
+
+    @Nullable
+    @Override
+    protected RecyclerListView getListViewForSimpleGlass() {
+        return listView;
+    }
+
+    @Override
+    public boolean isSupportEdgeToEdge() {
+        return true;
+    }
+
+    @Override
+    public boolean drawEdgeNavigationBar() {
+        return false;
+    }
+
+    @Override
     public View createView(Context context) {
-        actionBar.setBackButtonImage(R.drawable.ic_ab_back);
-        actionBar.setAllowOverlayTitle(true);
-        actionBar.setTitle(result != null && !result.examName.isEmpty() ? result.examName : "Test Result");
-        if (result != null) {
-            actionBar.setSubtitle(LocaleController.getString(R.string.EveScore) + ": " + formatScore(result.score) + " / " + result.total);
-        }
+        destroyed = false;
+        setHasOwnBackground(true);
 
-        ActionBarMenu menu = actionBar.createMenu();
-        ActionBarMenuItem langItem = menu.addItem(ID_TOGGLE_LANG, R.drawable.msg_translate);
-        boolean hasHindi = false;
-        if (result != null) {
-            for (EveExamModels.AttemptAnswerReview ans : result.answers) {
-                if (!ans.questionTextHi.isEmpty() || !ans.explanationHi.isEmpty()) {
-                    hasHindi = true;
-                    break;
-                }
-            }
-        }
-        langItem.setVisibility(hasHindi ? View.VISIBLE : View.GONE);
-        menu.addItem(ID_LEADERBOARD, R.drawable.msg_stats);
+        String title = result != null && !result.examName.isEmpty() ? result.examName : "Test Result";
+        String sub = result != null
+                ? (LocaleController.getString(R.string.EveScore) + ": " + formatScore(result.score) + " / " + result.total)
+                : null;
 
-        actionBar.setActionBarMenuOnItemClick(new ActionBar.ActionBarMenuOnItemClick() {
-            @Override
-            public void onItemClick(int id) {
-                if (id == -1) {
-                    finishFragment();
-                } else if (id == ID_TOGGLE_LANG) {
-                    preferHindi = !preferHindi;
-                    renderAnswers();
-                } else if (id == ID_LEADERBOARD) {
-                    openLeaderboard();
-                }
-            }
-        });
-
-        ScrollView scrollView = new ScrollView(context);
-        scrollView.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundGray));
-
-        LinearLayout root = new LinearLayout(context);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(AndroidUtilities.dp(12), AndroidUtilities.dp(12), AndroidUtilities.dp(12), AndroidUtilities.dp(24));
-        scrollView.addView(root, LayoutHelper.createScroll(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP));
-
-        if (result == null) {
-            TextView empty = new TextView(context);
-            empty.setText("Result unavailable.");
-            empty.setPadding(AndroidUtilities.dp(16), AndroidUtilities.dp(24), AndroidUtilities.dp(16), AndroidUtilities.dp(24));
-            root.addView(empty);
-            fragmentView = scrollView;
-            return scrollView;
-        }
-
-        LinearLayout summaryCard = createCard(context);
-        summaryCard.setOrientation(LinearLayout.VERTICAL);
-        root.addView(summaryCard, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 12));
-
-        TextView headline = new TextView(context);
-        headline.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 22);
-        headline.setTypeface(AndroidUtilities.bold());
-        headline.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
-        headline.setText(LocaleController.getString(R.string.EveScore) + ": " + formatScore(result.score) + " / " + result.total + "  (" + result.getAccuracyPercent() + "% " + LocaleController.getString(R.string.EveAccuracy) + ")");
-        summaryCard.addView(headline, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 8));
-
-        TextView breakdown = new TextView(context);
-        breakdown.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
-        breakdown.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText));
-        breakdown.setText(
-                LocaleController.getString(R.string.EveCorrect) + ": " + result.correct
-                        + "  •  " + LocaleController.getString(R.string.EveWrong) + ": " + result.wrong
-                        + "  •  " + LocaleController.getString(R.string.EveUnattempted) + ": " + result.unattempted
-                        + "\n" + LocaleController.getString(R.string.EveTimeTaken) + ": " + formatDuration(result.timeTakenSeconds)
-                        + (result.counted == 0 ? "  •  Extra Attempt" : "")
+        EveAdminUiChrome.Chrome chrome = EveAdminUiChrome.setup(
+                this,
+                context,
+                simpleActionBar,
+                getBaseSimpleGlass(),
+                glassEngine,
+                getResourceProvider(),
+                title,
+                sub,
+                true,
+                this::fillItems,
+                this::onClick,
+                new ActionBar.ActionBarMenuOnItemClick() {
+                    @Override
+                    public void onItemClick(int id) {
+                        if (id == -1) {
+                            finishFragment();
+                        } else if (id == MENU_TOGGLE_LANG) {
+                            preferHindi = !preferHindi;
+                            updateList();
+                        } else if (id == MENU_LEADERBOARD) {
+                            openLeaderboard();
+                        }
+                    }
+                },
+                null
         );
-        summaryCard.addView(breakdown, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 8));
+        listView = chrome.listView;
 
-        rankBannerView = new TextView(context);
-        rankBannerView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
-        rankBannerView.setTypeface(AndroidUtilities.bold());
-        rankBannerView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText));
-        rankBannerView.setText(LocaleController.getString(R.string.EveYourRank) + ": Loading...");
-        summaryCard.addView(rankBannerView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 12));
-
-        LinearLayout actionBtns = new LinearLayout(context);
-        actionBtns.setOrientation(LinearLayout.HORIZONTAL);
-        summaryCard.addView(actionBtns, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
-
-        TextView lbBtn = makePillButton(context, LocaleController.getString(R.string.EveLeaderboard), false);
-        lbBtn.setOnClickListener(v -> openLeaderboard());
-        actionBtns.addView(lbBtn, LayoutHelper.createLinear(0, 40, 1f, 0, 0, 8, 0));
-
-        if (exam != null || !attemptKey.isEmpty()) {
-            TextView reattemptBtn = makePillButton(context, LocaleController.getString(R.string.EveReattempt), true);
-            reattemptBtn.setOnClickListener(v -> promptReattempt());
-            actionBtns.addView(reattemptBtn, LayoutHelper.createLinear(0, 40, 1f));
+        if (simpleActionBar != null) {
+            SimpleActionBarMenu menu = simpleActionBar.createMenu();
+            SimpleActionBarMenuItem langItem = menu.addItem(MENU_TOGGLE_LANG, R.drawable.msg_translate, getResourceProvider());
+            boolean hasHindi = false;
+            if (result != null) {
+                for (EveExamModels.AttemptAnswerReview ans : result.answers) {
+                    if (!ans.questionTextHi.isEmpty() || !ans.explanationHi.isEmpty()) {
+                        hasHindi = true;
+                        break;
+                    }
+                }
+            }
+            langItem.setVisibility(hasHindi ? View.VISIBLE : View.GONE);
+            menu.addItem(MENU_LEADERBOARD, R.drawable.msg_stats, getResourceProvider());
         }
 
-        filterRow = new LinearLayout(context);
-        filterRow.setOrientation(LinearLayout.HORIZONTAL);
-        root.addView(filterRow, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 10));
-        rebuildFilterChips(context);
-
-        questionsContainer = new LinearLayout(context);
-        questionsContainer.setOrientation(LinearLayout.VERTICAL);
-        root.addView(questionsContainer, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
-
-        renderAnswers();
+        fragmentView = chrome.rootView;
         loadRankBanner();
+        return chrome.rootView;
+    }
 
-        fragmentView = scrollView;
-        return scrollView;
+    @Override
+    public void onFragmentDestroy() {
+        destroyed = true;
+        super.onFragmentDestroy();
     }
 
     private void loadRankBanner() {
-        String key = attemptKey;
-        if (key.isEmpty()) {
-            rankBannerView.setVisibility(View.GONE);
+        if (TextUtils.isEmpty(attemptKey) || result == null) {
             return;
         }
-        EveExamRepository.getInstance().loadLeaderboard(key, (bundle, err) -> {
-            if (getParentActivity() == null) return;
+        rankText = LocaleController.getString(R.string.EveYourRank) + ": Loading...";
+        updateList();
+        EveExamRepository.getInstance().loadLeaderboard(attemptKey, (bundle, err) -> {
+            if (destroyed) return;
             if (bundle == null || bundle.stats == null || bundle.stats.myRank == null) {
-                rankBannerView.setText(LocaleController.getString(R.string.EveYourRank) + ": —");
-                return;
+                rankText = LocaleController.getString(R.string.EveYourRank) + ": Unranked";
+            } else {
+                String pct = bundle.stats.myPercentile != null
+                        ? String.format(Locale.US, " • %.1f%%ile", bundle.stats.myPercentile)
+                        : "";
+                rankText = LocaleController.getString(R.string.EveYourRank)
+                        + ": #" + bundle.stats.myRank + " / " + bundle.stats.participants
+                        + pct
+                        + " (Topper: " + formatScore(bundle.stats.topperScore) + ")";
             }
-            String pct = bundle.stats.myPercentile != null
-                    ? String.format(Locale.US, " • %.1f%%ile", bundle.stats.myPercentile)
-                    : "";
-            rankBannerView.setText(
-                    LocaleController.getString(R.string.EveYourRank)
-                            + ": #" + bundle.stats.myRank + " / " + bundle.stats.participants
-                            + pct
-                            + "  (Topper: " + formatScore(bundle.stats.topperScore) + ")"
-            );
+            updateList();
         });
     }
 
-    private void rebuildFilterChips(Context context) {
-        filterRow.removeAllViews();
-        addFilterChip(context, FILTER_ALL, "All (" + result.answers.size() + ")");
-        addFilterChip(context, FILTER_CORRECT, LocaleController.getString(R.string.EveCorrect) + " (" + result.correct + ")");
-        addFilterChip(context, FILTER_WRONG, LocaleController.getString(R.string.EveWrong) + " (" + result.wrong + ")");
-        addFilterChip(context, FILTER_SKIPPED, LocaleController.getString(R.string.EveUnattempted) + " (" + result.unattempted + ")");
+    private void updateList() {
+        if (listView != null && listView.adapter != null) {
+            listView.adapter.update(true);
+        }
     }
 
-    private void addFilterChip(Context context, int filterId, String title) {
-        TextView tv = new TextView(context);
-        tv.setText(title);
-        tv.setGravity(Gravity.CENTER);
-        tv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 11);
-        tv.setTypeface(AndroidUtilities.bold());
-        tv.setPadding(AndroidUtilities.dp(8), AndroidUtilities.dp(6), AndroidUtilities.dp(8), AndroidUtilities.dp(6));
-        boolean active = currentFilter == filterId;
-        GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(AndroidUtilities.dp(8));
-        bg.setColor(active ? Theme.getColor(Theme.key_featuredStickers_addButton) : Theme.getColor(Theme.key_windowBackgroundWhite));
-        tv.setBackground(bg);
-        tv.setTextColor(active ? Theme.getColor(Theme.key_featuredStickers_buttonText) : Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
-        tv.setOnClickListener(v -> {
-            currentFilter = filterId;
-            rebuildFilterChips(context);
-            renderAnswers();
-        });
-        filterRow.addView(tv, LayoutHelper.createLinear(0, LayoutHelper.WRAP_CONTENT, 1f, 3, 0, 3, 0));
-    }
+    private void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
+        EveAdminUiChrome.addTopSpace(items);
 
-    private void renderAnswers() {
-        Activity activity = getParentActivity();
-        if (activity == null || result == null) return;
-        questionsContainer.removeAllViews();
+        if (result == null) {
+            items.add(UItem.asShadow("Result unavailable."));
+            return;
+        }
+
+        items.add(HeroSummaryView.Factory.of(ID_HERO_CARD, result, rankText));
+        items.add(UItem.asShadow(null));
+
+        items.add(UItem.asHeader("Actions"));
+        items.add(SettingsActivity.SettingCell.Factory.of(
+                ID_ACTION_LEADERBOARD,
+                IconBackgroundColors.BLUE.top, IconBackgroundColors.BLUE.bottom,
+                R.drawable.msg_stats,
+                LocaleController.getString(R.string.EveLeaderboard),
+                "Compare score, rank & percentile",
+                null));
+        if (exam != null || !TextUtils.isEmpty(attemptKey)) {
+            items.add(SettingsActivity.SettingCell.Factory.of(
+                    ID_ACTION_RETAKE,
+                    IconBackgroundColors.GREEN.top, IconBackgroundColors.GREEN.bottom,
+                    R.drawable.msg_retry,
+                    "Retake Test",
+                    "Reset attempt and practice again",
+                    null));
+        }
+        items.add(SettingsActivity.SettingCell.Factory.of(
+                ID_ACTION_BACK,
+                IconBackgroundColors.GRAY.top, IconBackgroundColors.GRAY.bottom,
+                R.drawable.ic_ab_back,
+                "Back to Exams",
+                "Return to test list",
+                null));
+        items.add(UItem.asShadow(null));
+
+        items.add(UItem.asHeader("Answer Review"));
+        items.add(FilterRowView.Factory.of(ID_FILTER_BAR, result, currentFilter, f -> {
+            currentFilter = f;
+            updateList();
+        }));
 
         List<EveExamModels.AttemptAnswerReview> answers = result.answers;
+        int addedCount = 0;
         for (int i = 0; i < answers.size(); i++) {
             EveExamModels.AttemptAnswerReview ans = answers.get(i);
             if (currentFilter == FILTER_CORRECT && !ans.isCorrect()) continue;
             if (currentFilter == FILTER_WRONG && (ans.isUnattempted() || ans.isCorrect())) continue;
             if (currentFilter == FILTER_SKIPPED && !ans.isUnattempted()) continue;
+            addedCount++;
+            items.add(AnswerReviewView.Factory.of(
+                    BASE_ANSWER_ID + i,
+                    ans,
+                    preferHindi,
+                    this::toggleBookmark,
+                    this::showReportDialog));
+        }
+        if (addedCount == 0) {
+            items.add(UItem.asShadow("No questions match this filter."));
+        }
+        items.add(UItem.asShadow(null));
+    }
 
-            LinearLayout card = createCard(activity);
-            card.setOrientation(LinearLayout.VERTICAL);
-            questionsContainer.addView(card, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 10));
-
-            TextView qHeader = new TextView(activity);
-            qHeader.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
-            qHeader.setTypeface(AndroidUtilities.bold());
-            String statusText;
-            int statusColor;
-            if (ans.isUnattempted()) {
-                statusText = LocaleController.getString(R.string.EveUnattempted);
-                statusColor = Theme.getColor(Theme.key_windowBackgroundWhiteGrayText);
-            } else if (ans.isCorrect()) {
-                statusText = LocaleController.getString(R.string.EveCorrect);
-                statusColor = 0xFF2E9E5B;
-            } else {
-                statusText = LocaleController.getString(R.string.EveWrong);
-                statusColor = 0xFFD93025;
-            }
-            qHeader.setTextColor(statusColor);
-            qHeader.setText("Q" + ans.number + " • " + statusText + (ans.topic.isEmpty() ? "" : " • " + ans.topic));
-            card.addView(qHeader, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 6));
-
-            TextView qText = new TextView(activity);
-            qText.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
-            qText.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
-            qText.setText(ans.getLocalizedQuestion(preferHindi));
-            card.addView(qText, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 8));
-
-            TextView yourAns = new TextView(activity);
-            yourAns.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
-            yourAns.setTextColor(statusColor);
-            String yourText = ans.isUnattempted()
-                    ? "-"
-                    : (ans.selected + (!ans.getLocalizedSelectedText(preferHindi).isEmpty() ? " — " + ans.getLocalizedSelectedText(preferHindi) : ""));
-            yourAns.setText(LocaleController.getString(R.string.EveYourAnswer) + ": " + yourText);
-            card.addView(yourAns, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 4));
-
-            TextView correctAns = new TextView(activity);
-            correctAns.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
-            correctAns.setTextColor(0xFF2E9E5B);
-            correctAns.setText(LocaleController.getString(R.string.EveCorrectAnswer) + ": "
-                    + ans.correct
-                    + (!ans.getLocalizedCorrectText(preferHindi).isEmpty() ? " — " + ans.getLocalizedCorrectText(preferHindi) : ""));
-            card.addView(correctAns, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 8));
-
-            String explanation = ans.getLocalizedExplanation(preferHindi);
-            if (!explanation.trim().isEmpty()) {
-                TextView expView = new TextView(activity);
-                expView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
-                expView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText));
-                expView.setText(LocaleController.getString(R.string.EveExplanation) + ":\n" + explanation);
-                card.addView(expView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 10));
-            }
-
-            LinearLayout qActions = new LinearLayout(activity);
-            qActions.setOrientation(LinearLayout.HORIZONTAL);
-            card.addView(qActions, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
-
-            TextView bookmarkBtn = makePillButton(
-                    activity,
-                    LocaleController.getString(ans.isBookmarked ? R.string.EveBookmarked : R.string.EveBookmark),
-                    ans.isBookmarked
-            );
-            bookmarkBtn.setOnClickListener(v -> toggleBookmark(ans, bookmarkBtn));
-            qActions.addView(bookmarkBtn, LayoutHelper.createLinear(0, 34, 1f, 0, 0, 8, 0));
-
-            TextView reportBtn = makePillButton(activity, LocaleController.getString(R.string.EveReportQuestion), false);
-            reportBtn.setOnClickListener(v -> showReportDialog(ans));
-            qActions.addView(reportBtn, LayoutHelper.createLinear(0, 34, 1f));
+    private void onClick(UItem item, View view, int position, float x, float y) {
+        if (item.id == ID_ACTION_LEADERBOARD) {
+            openLeaderboard();
+        } else if (item.id == ID_ACTION_RETAKE) {
+            promptReattempt();
+        } else if (item.id == ID_ACTION_BACK) {
+            finishFragment();
         }
     }
 
-    private void toggleBookmark(EveExamModels.AttemptAnswerReview ans, TextView btn) {
+    private void toggleBookmark(EveExamModels.AttemptAnswerReview ans) {
         if (ans.questionId.isEmpty()) return;
         EveExamRepository.getInstance().toggleBookmark(attemptKey, result.examName, ans, (bookmarked, err) -> {
-            if (getParentActivity() == null) return;
+            if (destroyed || getParentActivity() == null) return;
             if (!err.isEmpty() || bookmarked == null) {
                 BulletinFactory.of(this).createErrorBulletin(!err.isEmpty() ? err : "Could not update bookmark.").show();
                 return;
             }
             ans.isBookmarked = bookmarked;
-            btn.setText(LocaleController.getString(bookmarked ? R.string.EveBookmarked : R.string.EveBookmark));
-            stylePillButton(btn, bookmarked);
+            BulletinFactory.of(this).createSimpleBulletin(
+                    R.raw.info, bookmarked ? "Question bookmarked" : "Bookmark removed").show();
+            updateList();
         });
     }
 
@@ -369,107 +335,81 @@ public class EveTestResultFragment extends BaseFragment {
     private void showReportDialog(EveExamModels.AttemptAnswerReview ans) {
         Activity activity = getParentActivity();
         if (activity == null || ans.questionId.isEmpty()) return;
+        Theme.ResourcesProvider rp = getResourceProvider();
         final String[] reasons = REPORT_REASONS;
         final int[] pickedIdx = { 0 };
         LinearLayout box = new LinearLayout(activity);
         box.setOrientation(LinearLayout.VERTICAL);
-        int pad = AndroidUtilities.dp(16);
-        box.setPadding(pad, AndroidUtilities.dp(8), pad, 0);
+        int pad = dp(16);
+        box.setPadding(pad, dp(8), pad, 0);
 
         RadioGroup reasonGroup = buildReportReasonGroup(
                 activity,
                 reasons,
                 pickedIdx,
-                Theme.getColor(Theme.key_windowBackgroundWhiteBlackText)
+                Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, rp)
         );
         box.addView(reasonGroup);
 
         EditText commentInput = new EditText(activity);
         commentInput.setHint("Optional details (up to 500 chars)");
-        commentInput.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
+        commentInput.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, rp));
+        commentInput.setHintTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteHintText, rp));
         box.addView(commentInput, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 8, 0, 0));
 
         ScrollView scroll = new ScrollView(activity);
         scroll.addView(box);
 
-        new AlertDialog.Builder(activity)
-                .setTitle(LocaleController.getString(R.string.EveReportQuestion))
-                .setView(scroll)
-                .setPositiveButton("Submit Report", (d, w) -> {
-                    String reason = reasons[pickedIdx[0]];
-                    String comment = commentInput.getText() != null ? commentInput.getText().toString().trim() : "";
-                    EveExamRepository.getInstance().submitQuestionReport(
-                            ans.questionId,
-                            attemptKey,
-                            result.examName,
-                            ans.questionText,
-                            reason,
-                            comment,
-                            (msg, err) -> {
-                                if (getParentActivity() == null) return;
-                                if (!err.isEmpty()) {
-                                    BulletinFactory.of(this).createErrorBulletin(err).show();
-                                } else {
-                                    BulletinFactory.of(this).createSuccessBulletin(msg).show();
-                                }
-                            }
-                    );
-                })
-                .setNegativeButton(LocaleController.getString(R.string.Cancel), null)
-                .show();
+        AlertDialog.Builder builder = new AlertDialog.Builder(activity, rp);
+        builder.setTitle(LocaleController.getString(R.string.EveReportQuestion));
+        builder.setView(scroll);
+        builder.setPositiveButton("Submit Report", (d, w) -> {
+            String reason = reasons[pickedIdx[0]];
+            String comment = commentInput.getText() != null ? commentInput.getText().toString().trim() : "";
+            EveExamRepository.getInstance().submitQuestionReport(
+                    ans.questionId,
+                    attemptKey,
+                    result.examName,
+                    ans.questionText,
+                    reason,
+                    comment,
+                    (msg, err) -> {
+                        if (destroyed || getParentActivity() == null) return;
+                        if (!err.isEmpty()) {
+                            BulletinFactory.of(this).createErrorBulletin(err).show();
+                        } else {
+                            BulletinFactory.of(this).createSuccessBulletin(msg).show();
+                        }
+                    }
+            );
+        });
+        builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
+        showDialog(builder.create());
     }
 
     private void promptReattempt() {
         Activity activity = getParentActivity();
         if (activity == null || attemptKey.isEmpty()) return;
-        new AlertDialog.Builder(activity)
-                .setTitle(LocaleController.getString(R.string.EveReattemptConfirmTitle))
-                .setMessage(LocaleController.getString(R.string.EveReattemptConfirmBody))
-                .setPositiveButton(LocaleController.getString(R.string.EveReattempt), (d, w) ->
-                        EveExamRepository.getInstance().resetForReattempt(attemptKey, (ok, err) -> {
-                            if (getParentActivity() == null) return;
-                            if (!err.isEmpty()) {
-                                BulletinFactory.of(this).createErrorBulletin(err).show();
-                                return;
-                            }
-                            presentFragment(new EveTestPlayerFragment(exam, test), true);
-                        }))
-                .setNegativeButton(LocaleController.getString(R.string.Cancel), null)
-                .show();
+        AlertDialog.Builder builder = new AlertDialog.Builder(activity, getResourceProvider());
+        builder.setTitle(LocaleController.getString(R.string.EveReattemptConfirmTitle));
+        builder.setMessage(LocaleController.getString(R.string.EveReattemptConfirmBody));
+        builder.setPositiveButton(LocaleController.getString(R.string.EveReattempt), (d, w) ->
+                EveExamRepository.getInstance().resetForReattempt(attemptKey, (ok, err) -> {
+                    if (destroyed || getParentActivity() == null) return;
+                    if (!err.isEmpty()) {
+                        BulletinFactory.of(this).createErrorBulletin(err).show();
+                        return;
+                    }
+                    presentFragment(new EveTestPlayerFragment(exam, test), true);
+                }));
+        builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
+        showDialog(builder.create());
     }
 
     private void openLeaderboard() {
         String key = attemptKey.isEmpty() ? "overall" : attemptKey;
         String title = result != null && !result.examName.isEmpty() ? result.examName : LocaleController.getString(R.string.EveLeaderboard);
         presentFragment(new EveLeaderboardFragment(key, title));
-    }
-
-    private LinearLayout createCard(Context context) {
-        LinearLayout card = new LinearLayout(context);
-        GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(AndroidUtilities.dp(12));
-        bg.setColor(Theme.getColor(Theme.key_windowBackgroundWhite));
-        card.setBackground(bg);
-        card.setPadding(AndroidUtilities.dp(14), AndroidUtilities.dp(14), AndroidUtilities.dp(14), AndroidUtilities.dp(14));
-        return card;
-    }
-
-    private TextView makePillButton(Context context, String label, boolean primary) {
-        TextView tv = new TextView(context);
-        tv.setText(label);
-        tv.setGravity(Gravity.CENTER);
-        tv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
-        tv.setTypeface(AndroidUtilities.bold());
-        stylePillButton(tv, primary);
-        return tv;
-    }
-
-    private void stylePillButton(TextView tv, boolean primary) {
-        GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(AndroidUtilities.dp(8));
-        bg.setColor(primary ? Theme.getColor(Theme.key_featuredStickers_addButton) : Theme.getColor(Theme.key_windowBackgroundGray));
-        tv.setBackground(bg);
-        tv.setTextColor(primary ? Theme.getColor(Theme.key_featuredStickers_buttonText) : Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
     }
 
     private static String formatScore(double score) {
@@ -483,5 +423,463 @@ public class EveTestResultFragment extends BaseFragment {
         int mins = seconds / 60;
         int secs = seconds % 60;
         return String.format(Locale.US, "%dm %02ds", mins, secs);
+    }
+
+    private static final class HeroSummaryView extends LinearLayout implements Theme.Colorable {
+        private final Theme.ResourcesProvider resourcesProvider;
+        private final TextView scoreText;
+        private final TextView accuracyBadge;
+        private final TextView correctVal;
+        private final TextView wrongVal;
+        private final TextView skippedVal;
+        private final TextView metaLine;
+        private final TextView rankLine;
+
+        HeroSummaryView(Context context, Theme.ResourcesProvider rp) {
+            super(context);
+            this.resourcesProvider = rp;
+            setOrientation(VERTICAL);
+            setPadding(dp(18), dp(18), dp(18), dp(16));
+
+            LinearLayout topRow = new LinearLayout(context);
+            topRow.setOrientation(HORIZONTAL);
+            topRow.setGravity(Gravity.CENTER_VERTICAL);
+            addView(topRow, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 14));
+
+            scoreText = new TextView(context);
+            scoreText.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 26);
+            scoreText.setTypeface(AndroidUtilities.bold());
+            topRow.addView(scoreText, LayoutHelper.createLinear(0, LayoutHelper.WRAP_CONTENT, 1f));
+
+            accuracyBadge = new TextView(context);
+            accuracyBadge.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13.5f);
+            accuracyBadge.setTypeface(AndroidUtilities.bold());
+            accuracyBadge.setPadding(dp(10), dp(5), dp(10), dp(5));
+            topRow.addView(accuracyBadge, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT));
+
+            LinearLayout metricsRow = new LinearLayout(context);
+            metricsRow.setOrientation(HORIZONTAL);
+            addView(metricsRow, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 12));
+
+            correctVal = addMetricColumn(context, metricsRow, LocaleController.getString(R.string.EveCorrect), 0xFF2E9E5B);
+            wrongVal = addMetricColumn(context, metricsRow, LocaleController.getString(R.string.EveWrong), 0xFFD93025);
+            skippedVal = addMetricColumn(context, metricsRow, "Skipped", 0xFF788896);
+
+            metaLine = new TextView(context);
+            metaLine.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
+            addView(metaLine, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 4));
+
+            rankLine = new TextView(context);
+            rankLine.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
+            rankLine.setTypeface(AndroidUtilities.bold());
+            addView(rankLine, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+
+            updateColors();
+        }
+
+        private TextView addMetricColumn(Context ctx, LinearLayout row, String label, int color) {
+            LinearLayout col = new LinearLayout(ctx);
+            col.setOrientation(VERTICAL);
+            col.setGravity(Gravity.CENTER_HORIZONTAL);
+            col.setPadding(dp(6), dp(8), dp(6), dp(8));
+            col.setBackground(Theme.createRoundRectDrawable(dp(10), Theme.multAlpha(color, 0.10f)));
+
+            TextView val = new TextView(ctx);
+            val.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 18);
+            val.setTypeface(AndroidUtilities.bold());
+            val.setTextColor(color);
+            val.setGravity(Gravity.CENTER);
+            col.addView(val);
+
+            TextView lbl = new TextView(ctx);
+            lbl.setText(label);
+            lbl.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 11.5f);
+            lbl.setTextColor(color);
+            lbl.setGravity(Gravity.CENTER);
+            col.addView(lbl);
+
+            row.addView(col, LayoutHelper.createLinear(0, LayoutHelper.WRAP_CONTENT, 1f, 3, 0, 3, 0));
+            return val;
+        }
+
+        void bind(EveExamModels.AttemptResult r, String rank) {
+            scoreText.setText(formatScore(r.score) + " / " + r.total);
+            accuracyBadge.setText(r.getAccuracyPercent() + "% Accuracy");
+            correctVal.setText(String.valueOf(r.correct));
+            wrongVal.setText(String.valueOf(r.wrong));
+            skippedVal.setText(String.valueOf(r.unattempted));
+            metaLine.setText(LocaleController.getString(R.string.EveTimeTaken) + ": " + formatDuration(r.timeTakenSeconds)
+                    + (r.counted == 0 ? "  •  Extra Attempt" : ""));
+            if (TextUtils.isEmpty(rank)) {
+                rankLine.setVisibility(GONE);
+            } else {
+                rankLine.setVisibility(VISIBLE);
+                rankLine.setText(rank);
+            }
+            updateColors();
+        }
+
+        @Override
+        public void updateColors() {
+            int accent = Theme.getColor(Theme.key_featuredStickers_addButton, resourcesProvider);
+            scoreText.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
+            accuracyBadge.setTextColor(accent);
+            accuracyBadge.setBackground(Theme.createRoundRectDrawable(dp(12), Theme.multAlpha(accent, 0.14f)));
+            metaLine.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, resourcesProvider));
+            rankLine.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText, resourcesProvider));
+        }
+
+        @Override
+        public void addColorKeys(HashSet<Integer> colors) {
+            colors.add(Theme.key_windowBackgroundWhiteBlackText);
+            colors.add(Theme.key_windowBackgroundWhiteGrayText);
+            colors.add(Theme.key_windowBackgroundWhiteBlueText);
+            colors.add(Theme.key_featuredStickers_addButton);
+        }
+
+        static final class Payload {
+            final EveExamModels.AttemptResult result;
+            final String rankText;
+
+            Payload(EveExamModels.AttemptResult result, String rankText) {
+                this.result = result;
+                this.rankText = rankText != null ? rankText : "";
+            }
+        }
+
+        static final class Factory extends UItem.UItemFactory<HeroSummaryView> {
+            static { setup(new Factory()); }
+
+            @Override
+            public HeroSummaryView createView(Context context, RecyclerListView listView, int currentAccount, int classGuid, Theme.ResourcesProvider rp) {
+                return new HeroSummaryView(context, rp);
+            }
+
+            @Override
+            public void bindView(View view, UItem item, boolean divider, UniversalAdapter adapter, UniversalRecyclerView listView) {
+                if (item.object instanceof Payload) {
+                    Payload p = (Payload) item.object;
+                    ((HeroSummaryView) view).bind(p.result, p.rankText);
+                }
+            }
+
+            @Override
+            public boolean equals(UItem a, UItem b) {
+                return a.id == b.id;
+            }
+
+            static UItem of(int id, EveExamModels.AttemptResult result, String rankText) {
+                UItem item = UItem.ofFactory(Factory.class);
+                item.id = id;
+                item.object = new Payload(result, rankText);
+                return item;
+            }
+        }
+    }
+
+    private interface IntConsumer {
+        void accept(int value);
+    }
+
+    private static final class FilterRowView extends LinearLayout implements Theme.Colorable {
+        private final Theme.ResourcesProvider resourcesProvider;
+        private final TextView[] chips = new TextView[4];
+        private int activeFilter = FILTER_ALL;
+
+        FilterRowView(Context context, Theme.ResourcesProvider rp) {
+            super(context);
+            this.resourcesProvider = rp;
+            setOrientation(HORIZONTAL);
+            setPadding(dp(12), dp(8), dp(12), dp(8));
+            for (int i = 0; i < 4; i++) {
+                TextView tv = new TextView(context);
+                tv.setGravity(Gravity.CENTER);
+                tv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 11.5f);
+                tv.setTypeface(AndroidUtilities.bold());
+                tv.setPadding(dp(8), dp(7), dp(8), dp(7));
+                chips[i] = tv;
+                addView(tv, LayoutHelper.createLinear(0, LayoutHelper.WRAP_CONTENT, 1f, 3, 0, 3, 0));
+            }
+        }
+
+        void bind(EveExamModels.AttemptResult r, int selectedFilter, IntConsumer onSelect) {
+            this.activeFilter = selectedFilter;
+            String[] labels = new String[] {
+                    "All (" + r.answers.size() + ")",
+                    LocaleController.getString(R.string.EveCorrect) + " (" + r.correct + ")",
+                    LocaleController.getString(R.string.EveWrong) + " (" + r.wrong + ")",
+                    "Skipped (" + r.unattempted + ")"
+            };
+            for (int i = 0; i < 4; i++) {
+                final int filterId = i;
+                chips[i].setText(labels[i]);
+                chips[i].setOnClickListener(v -> onSelect.accept(filterId));
+            }
+            updateColors();
+        }
+
+        @Override
+        public void updateColors() {
+            int accent = Theme.getColor(Theme.key_featuredStickers_addButton, resourcesProvider);
+            int btnText = Theme.getColor(Theme.key_featuredStickers_buttonText, resourcesProvider);
+            int normalBg = Theme.getColor(Theme.key_windowBackgroundGray, resourcesProvider);
+            int normalText = Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider);
+
+            for (int i = 0; i < 4; i++) {
+                boolean active = activeFilter == i;
+                chips[i].setBackground(Theme.createRoundRectDrawable(dp(8), active ? accent : normalBg));
+                chips[i].setTextColor(active ? btnText : normalText);
+            }
+        }
+
+        @Override
+        public void addColorKeys(HashSet<Integer> colors) {
+            colors.add(Theme.key_featuredStickers_addButton);
+            colors.add(Theme.key_featuredStickers_buttonText);
+            colors.add(Theme.key_windowBackgroundGray);
+            colors.add(Theme.key_windowBackgroundWhiteBlackText);
+        }
+
+        static final class Payload {
+            final EveExamModels.AttemptResult result;
+            final int filter;
+            final IntConsumer onSelect;
+
+            Payload(EveExamModels.AttemptResult result, int filter, IntConsumer onSelect) {
+                this.result = result;
+                this.filter = filter;
+                this.onSelect = onSelect;
+            }
+        }
+
+        static final class Factory extends UItem.UItemFactory<FilterRowView> {
+            static { setup(new Factory()); }
+
+            @Override
+            public FilterRowView createView(Context context, RecyclerListView listView, int currentAccount, int classGuid, Theme.ResourcesProvider rp) {
+                return new FilterRowView(context, rp);
+            }
+
+            @Override
+            public void bindView(View view, UItem item, boolean divider, UniversalAdapter adapter, UniversalRecyclerView listView) {
+                if (item.object instanceof Payload) {
+                    Payload p = (Payload) item.object;
+                    ((FilterRowView) view).bind(p.result, p.filter, p.onSelect);
+                }
+            }
+
+            @Override
+            public boolean equals(UItem a, UItem b) {
+                return a.id == b.id;
+            }
+
+            static UItem of(int id, EveExamModels.AttemptResult r, int filter, IntConsumer onSelect) {
+                UItem item = UItem.ofFactory(Factory.class);
+                item.id = id;
+                item.object = new Payload(r, filter, onSelect);
+                return item;
+            }
+        }
+    }
+
+    private interface ReviewCallback {
+        void accept(EveExamModels.AttemptAnswerReview ans);
+    }
+
+    private static final class AnswerReviewView extends LinearLayout implements Theme.Colorable {
+        private final Theme.ResourcesProvider resourcesProvider;
+        private final TextView qHeader;
+        private final TextView statusPill;
+        private final TextView qText;
+        private final TextView yourAns;
+        private final TextView correctAns;
+        private final TextView expView;
+        private final TextView bookmarkBtn;
+        private final TextView reportBtn;
+        private int statusColor;
+        private boolean bookmarked;
+
+        AnswerReviewView(Context context, Theme.ResourcesProvider rp) {
+            super(context);
+            this.resourcesProvider = rp;
+            setOrientation(VERTICAL);
+            setPadding(dp(16), dp(14), dp(16), dp(14));
+
+            LinearLayout headerRow = new LinearLayout(context);
+            headerRow.setOrientation(HORIZONTAL);
+            headerRow.setGravity(Gravity.CENTER_VERTICAL);
+            addView(headerRow, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 6));
+
+            qHeader = new TextView(context);
+            qHeader.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
+            qHeader.setTypeface(AndroidUtilities.bold());
+            headerRow.addView(qHeader, LayoutHelper.createLinear(0, LayoutHelper.WRAP_CONTENT, 1f));
+
+            statusPill = new TextView(context);
+            statusPill.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 11.5f);
+            statusPill.setTypeface(AndroidUtilities.bold());
+            statusPill.setPadding(dp(8), dp(3), dp(8), dp(3));
+            headerRow.addView(statusPill, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT));
+
+            qText = new TextView(context);
+            qText.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
+            qText.setLineSpacing(dp(3), 1f);
+            addView(qText, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 8));
+
+            yourAns = new TextView(context);
+            yourAns.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
+            addView(yourAns, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 4));
+
+            correctAns = new TextView(context);
+            correctAns.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
+            correctAns.setTextColor(0xFF2E9E5B);
+            addView(correctAns, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 8));
+
+            expView = new TextView(context);
+            expView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
+            expView.setLineSpacing(dp(2), 1f);
+            addView(expView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 10));
+
+            LinearLayout qActions = new LinearLayout(context);
+            qActions.setOrientation(HORIZONTAL);
+            addView(qActions, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+
+            bookmarkBtn = new TextView(context);
+            bookmarkBtn.setGravity(Gravity.CENTER);
+            bookmarkBtn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
+            bookmarkBtn.setTypeface(AndroidUtilities.bold());
+            qActions.addView(bookmarkBtn, LayoutHelper.createLinear(0, 36, 1f, 0, 0, 8, 0));
+
+            reportBtn = new TextView(context);
+            reportBtn.setGravity(Gravity.CENTER);
+            reportBtn.setText(LocaleController.getString(R.string.EveReportQuestion));
+            reportBtn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
+            reportBtn.setTypeface(AndroidUtilities.bold());
+            qActions.addView(reportBtn, LayoutHelper.createLinear(0, 36, 1f));
+        }
+
+        void bind(EveExamModels.AttemptAnswerReview ans, boolean hi, ReviewCallback onBookmark, ReviewCallback onReport) {
+            this.bookmarked = ans.isBookmarked;
+            String statusText;
+            if (ans.isUnattempted()) {
+                statusText = LocaleController.getString(R.string.EveUnattempted);
+                statusColor = Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, resourcesProvider);
+            } else if (ans.isCorrect()) {
+                statusText = LocaleController.getString(R.string.EveCorrect);
+                statusColor = 0xFF2E9E5B;
+            } else {
+                statusText = LocaleController.getString(R.string.EveWrong);
+                statusColor = 0xFFD93025;
+            }
+            qHeader.setText("Question " + ans.number + (ans.topic.isEmpty() ? "" : " • " + ans.topic));
+            statusPill.setText(statusText);
+            qText.setText(ans.getLocalizedQuestion(hi));
+
+            String yourText = ans.isUnattempted()
+                    ? "-"
+                    : (ans.selected + (!ans.getLocalizedSelectedText(hi).isEmpty() ? " — " + ans.getLocalizedSelectedText(hi) : ""));
+            yourAns.setText(LocaleController.getString(R.string.EveYourAnswer) + ": " + yourText);
+            yourAns.setTextColor(statusColor);
+
+            correctAns.setText(LocaleController.getString(R.string.EveCorrectAnswer) + ": "
+                    + ans.correct
+                    + (!ans.getLocalizedCorrectText(hi).isEmpty() ? " — " + ans.getLocalizedCorrectText(hi) : ""));
+
+            String explanation = ans.getLocalizedExplanation(hi);
+            if (!explanation.trim().isEmpty()) {
+                expView.setVisibility(VISIBLE);
+                expView.setText(LocaleController.getString(R.string.EveExplanation) + ":\n" + explanation);
+            } else {
+                expView.setVisibility(GONE);
+            }
+
+            bookmarkBtn.setText(LocaleController.getString(ans.isBookmarked ? R.string.EveBookmarked : R.string.EveBookmark));
+            bookmarkBtn.setOnClickListener(v -> onBookmark.accept(ans));
+            reportBtn.setOnClickListener(v -> onReport.accept(ans));
+            updateColors();
+        }
+
+        @Override
+        public void updateColors() {
+            int accent = Theme.getColor(Theme.key_featuredStickers_addButton, resourcesProvider);
+            int grayBg = Theme.getColor(Theme.key_windowBackgroundGray, resourcesProvider);
+            int black = Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider);
+            int grayText = Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, resourcesProvider);
+
+            qHeader.setTextColor(grayText);
+            statusPill.setTextColor(statusColor);
+            statusPill.setBackground(Theme.createRoundRectDrawable(dp(8), Theme.multAlpha(statusColor, 0.14f)));
+            qText.setTextColor(black);
+            expView.setTextColor(grayText);
+
+            bookmarkBtn.setBackground(Theme.createRoundRectDrawable(dp(8), bookmarked ? accent : grayBg));
+            bookmarkBtn.setTextColor(bookmarked ? Theme.getColor(Theme.key_featuredStickers_buttonText, resourcesProvider) : black);
+            reportBtn.setBackground(Theme.createRoundRectDrawable(dp(8), grayBg));
+            reportBtn.setTextColor(black);
+        }
+
+        @Override
+        public void addColorKeys(HashSet<Integer> colors) {
+            colors.add(Theme.key_featuredStickers_addButton);
+            colors.add(Theme.key_featuredStickers_buttonText);
+            colors.add(Theme.key_windowBackgroundGray);
+            colors.add(Theme.key_windowBackgroundWhiteBlackText);
+            colors.add(Theme.key_windowBackgroundWhiteGrayText);
+        }
+
+        static final class Payload {
+            final EveExamModels.AttemptAnswerReview ans;
+            final boolean hi;
+            final ReviewCallback onBookmark;
+            final ReviewCallback onReport;
+
+            Payload(EveExamModels.AttemptAnswerReview ans, boolean hi, ReviewCallback onBookmark, ReviewCallback onReport) {
+                this.ans = ans;
+                this.hi = hi;
+                this.onBookmark = onBookmark;
+                this.onReport = onReport;
+            }
+        }
+
+        static final class Factory extends UItem.UItemFactory<AnswerReviewView> {
+            static { setup(new Factory()); }
+
+            @Override
+            public AnswerReviewView createView(Context context, RecyclerListView listView, int currentAccount, int classGuid, Theme.ResourcesProvider rp) {
+                return new AnswerReviewView(context, rp);
+            }
+
+            @Override
+            public void bindView(View view, UItem item, boolean divider, UniversalAdapter adapter, UniversalRecyclerView listView) {
+                if (item.object instanceof Payload) {
+                    Payload p = (Payload) item.object;
+                    ((AnswerReviewView) view).bind(p.ans, p.hi, p.onBookmark, p.onReport);
+                }
+            }
+
+            @Override
+            public boolean equals(UItem a, UItem b) {
+                return a.id == b.id;
+            }
+
+            @Override
+            public boolean contentsEquals(UItem a, UItem b) {
+                if (!(a.object instanceof Payload) || !(b.object instanceof Payload)) {
+                    return Objects.equals(a.object, b.object);
+                }
+                Payload pa = (Payload) a.object;
+                Payload pb = (Payload) b.object;
+                return pa.hi == pb.hi
+                        && pa.ans.isBookmarked == pb.ans.isBookmarked
+                        && TextUtils.equals(pa.ans.questionId, pb.ans.questionId);
+            }
+
+            static UItem of(int id, EveExamModels.AttemptAnswerReview ans, boolean hi, ReviewCallback onBookmark, ReviewCallback onReport) {
+                UItem item = UItem.ofFactory(Factory.class);
+                item.id = id;
+                item.object = new Payload(ans, hi, onBookmark, onReport);
+                return item;
+            }
+        }
     }
 }

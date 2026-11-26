@@ -8,13 +8,11 @@ Read `EVE_PROJECT_STATE.md` for the permanent record and NEXT ACTION. Developmen
 - Existing systems intact: Cloudflare Worker + D1 (+ R2/Supabase storage), Firebase Auth, Firestore, Firebase Functions, and security rules.
 
 ## Done
-- Prior green CI baseline (`088785df`, run `45852968861`): Google Sign-In, Settings cleanup, `SimpleActionBar` + `EveAdminUiChrome` cards, Student Directory & Detail, Generated Mock Tests, Admin Overhaul.
-- Current UI Polish, Exam Pinning & Admin Restructure Batch:
-  - Dual-mode `EveAdminUiChrome` (`useSectionCards = true` cards for hubs/settings only; `useSectionCards = false` white edge-to-edge lists with hairline dividers for directories).
-  - Exam-scoped Admin hierarchy: `EveAdminExamsFragment` -> `EveAdminExamDetailFragment` -> `EveAdminGeneratedTestsFragment` / `EveAdminQuestionsFragment`; removed redundant `Mock Tests` / `Question Bank` top-level rows from `EveAdminControlCenterActivity`.
-  - Replaced all AlertDialog admin viewers with native screens: `EveAdminPremiumUsersFragment`, `EveAdminPaymentsFragment`, `EveAdminPremiumConfigFragment`, `EveAdminRolesFragment`, `EveAdminAuditLogFragment`.
-  - Removed `EveEmojiStickerPacks` / `EvePackLibraryFragment` from `DialogsActivity` Exams overflow menu while leaving Telegram emoji/sticker engine untouched.
-  - Fixed Exams home swipe: disabled Archive on EVE exam rows, enabled Swipe-to-Pin/Unpin (`GET /api/pins`, `POST /api/pins/:examId/toggle`, `SharedPreferences` cache, pinned-first sorting, smooth snap-back with zero stuck-swipe glitch).
+- Prior green CI baseline (`263b0e2a`, run `45863242906`): dual-mode `EveAdminUiChrome`, exam-scoped Admin hierarchy, native Admin screens, Exams home Swipe-to-Pin/Unpin.
+- Student Exam Flow + Chat-Style Polls + Admin Content & Moderation Overhaul:
+  - Polished all 6 student screens (`EveExamTestsFragment` live mock tests at top + overflow menu + flicker shimmer; `EveTestPlayerFragment` timer pill + progress bar + Question Palette `BottomSheet` + Report button; `EveTestResultFragment` Card Mode hero score card + review cards; `EveLeaderboardFragment` rank medals + `AvatarDrawable` + self highlight; `EveResultHistoryFragment` accuracy-colored edge-to-edge search list; `EveAnnouncementsFragment` live polls + broadcasts feed).
+  - Fixed `EveAdminRepository.setPollActive` payload (`"active"` instead of `"isActive"`) & `PollItem` `voteCounts` parsing; added student poll APIs in `EveExamRepository` and shared Telegram chat-style `EveTelegramPollCardView`.
+  - Replaced all remaining Content & Moderation popups with native screens: `EveAdminPollCreateFragment` (`PollEditTextCell` + `PollCreateCheckCell`), `EveAdminPollsFragment`, `EveAdminBroadcastsFragment`, `EveAdminBannersFragment`, `EveAdminFlaggedReportsFragment`, `EveAdminFeedbackFragment`, and `EveAdminContentEditorFragment`.
 
 ## Next
 - Verify all 4 GitHub Actions jobs pass on the latest `main` push, fix any CI issues if found, and validate `Eve-debug-apk` on device.

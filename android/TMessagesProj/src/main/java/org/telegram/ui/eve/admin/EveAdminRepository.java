@@ -894,6 +894,10 @@ public final class EveAdminRepository {
     }
 
     public void createPoll(String token, String question, List<String> options) throws EveBackendClient.BackendException {
+        createPoll(token, question, options, true);
+    }
+
+    public void createPoll(String token, String question, List<String> options, boolean active) throws EveBackendClient.BackendException {
         JSONObject payload = new JSONObject();
         try {
             payload.put("question", question);
@@ -906,6 +910,7 @@ public final class EveAdminRepository {
                 }
             }
             payload.put("options", arr);
+            payload.put("active", active);
         } catch (JSONException ignored) {
         }
         client.postJsonRoot("/api/polls", token, payload);
@@ -914,7 +919,7 @@ public final class EveAdminRepository {
     public void setPollActive(String token, String pollId, boolean active) throws EveBackendClient.BackendException {
         JSONObject payload = new JSONObject();
         try {
-            payload.put("isActive", active);
+            payload.put("active", active);
         } catch (JSONException ignored) {
         }
         client.putJsonRoot("/api/polls/" + encode(pollId) + "/status", token, payload);

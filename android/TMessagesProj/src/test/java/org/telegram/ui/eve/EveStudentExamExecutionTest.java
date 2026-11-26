@@ -159,4 +159,39 @@ public class EveStudentExamExecutionTest {
         assertFalse(((RadioButton) group.getChildAt(0)).isChecked());
         assertTrue(((RadioButton) group.getChildAt(2)).isChecked());
     }
+
+    @Test
+    public void studentPollModel_tracksVotesCountsAndUiScreensExist() throws Exception {
+        Map<Integer, Integer> counts = new HashMap<>();
+        counts.put(0, 3);
+        counts.put(1, 7);
+        org.telegram.ui.eve.polls.EvePollModel model = new org.telegram.ui.eve.polls.EvePollModel(
+                "poll-1",
+                "Preferred Mock Timing?",
+                java.util.Arrays.asList("Morning", "Evening"),
+                counts,
+                10,
+                true,
+                1700000000000L,
+                0L,
+                "owner@example.com",
+                null
+        );
+        assertEquals(10, model.totalVotes);
+        assertEquals(7, model.getWinningVotes());
+        assertEquals(3, model.getOptionVotes(0));
+
+        org.telegram.ui.eve.polls.EvePollModel voted = model.withRecordedVote(0);
+        assertEquals(Integer.valueOf(0), voted.myVoteIndex);
+        assertEquals(11, voted.totalVotes);
+        assertEquals(4, voted.getOptionVotes(0));
+
+        // Double vote on same immutable model snapshot is a no-op
+        org.telegram.ui.eve.polls.EvePollModel secondVote = voted.withRecordedVote(1);
+        assertEquals(Integer.valueOf(0), secondVote.myVoteIndex);
+        assertEquals(11, secondVote.totalVotes);
+
+        assertNotNull(Class.forName("org.telegram.ui.eve.polls.EveTelegramPollCardView"));
+        assertNotNull(Class.forName("org.telegram.ui.eve.exams.EveExamTestsFragment"));
+    }
 }
