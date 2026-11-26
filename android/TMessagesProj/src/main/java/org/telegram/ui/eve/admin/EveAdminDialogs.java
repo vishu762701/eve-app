@@ -18,7 +18,9 @@ import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.R;
 import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.BaseFragment;
+import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.BulletinFactory;
+import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.eve.premium.EvePremiumRepository;
 
 import java.text.SimpleDateFormat;
@@ -46,19 +48,107 @@ public final class EveAdminDialogs {
             Runnable onSaved) {
         Activity activity = fragment.getParentActivity();
         if (activity == null) return;
+        Theme.ResourcesProvider rp = fragment.getResourceProvider();
 
         LinearLayout container = makeFormContainer(activity);
-        EditText nameInput = addField(activity, container, "Exam Name (e.g. SSC CGL Tier 1)", existing != null ? existing.examName : "", InputType.TYPE_CLASS_TEXT);
-        EditText categoryInput = addField(activity, container, "Category (SSC, UPSC, Banking, Railways)", existing != null ? existing.category : "SSC", InputType.TYPE_CLASS_TEXT);
-        EditText minutesInput = addField(activity, container, "Time Limit (minutes 1-600)", String.valueOf(existing != null ? existing.timeLimitMinutes : 60), InputType.TYPE_CLASS_NUMBER);
-        EditText countInput = addField(activity, container, "Questions Per Test (1-200)", String.valueOf(existing != null ? existing.questionCount : 25), InputType.TYPE_CLASS_NUMBER);
-        EditText negInput = addField(activity, container, "Negative Marking (0, 1/3, 1/4, 0.25)", existing != null ? existing.negativeMarkingText : "0.25", InputType.TYPE_CLASS_TEXT);
-        EditText publishInput = addField(activity, container, "Publish Mode (inherit | live | paused | archived)", existing != null ? existing.publishMode : "live", InputType.TYPE_CLASS_TEXT);
+        EditText nameInput = addField(activity, container, "Exam Name (e.g. SSC CGL Tier 1)", existing != null ? existing.examName : "", InputType.TYPE_CLASS_TEXT, rp);
+        EditText categoryInput = addField(activity, container, "Category (SSC, UPSC, Banking, Railways)", existing != null ? existing.category : "SSC", InputType.TYPE_CLASS_TEXT, rp);
+        EditText minutesInput = addField(activity, container, "Time Limit (minutes 1-600)", String.valueOf(existing != null ? existing.timeLimitMinutes : 60), InputType.TYPE_CLASS_NUMBER, rp);
+        EditText countInput = addField(activity, container, "Questions Per Test (1-200)", String.valueOf(existing != null ? existing.questionCount : 25), InputType.TYPE_CLASS_NUMBER, rp);
+
+        // Negative Marking selector (preset chips + optional custom input)
+        final String[] negPresets = new String[] { "0", "0.25", "1/3", "0.5", "Custom" };
+        final String initialNeg = existing != null && !existing.negativeMarkingText.isEmpty() ? existing.negativeMarkingText : "0.25";
+        final String[] selectedNeg = new String[] { initialNeg };
+        addFieldLabel(activity, container, "Negative Marking", rp);
+        LinearLayout chipsRow = new LinearLayout(activity);
+        chipsRow.setOrientation(LinearLayout.HORIZONTAL);
+        chipsRow.setPadding(0, AndroidUtilities.dp(4), 0, AndroidUtilities.dp(6));
+        EditText customNegInput = new EditText(activity);
+        customNegInput.setInputType(InputType.TYPE_CLASS_TEXT);
+        customNegInput.setHint("Enter custom negative mark (e.g. 1/4)");
+        customNegInput.setTextColor(Theme.getColor(Theme.key_dialogTextBlack, rp));
+        customNegInput.setHintTextColor(Theme.getColor(Theme.key_dialogTextHint, rp));
+        boolean isPresetInitial = "0".equals(initialNeg) || "0.25".equals(initialNeg) || "1/3".equals(initialNeg) || "0.5".equals(initialNeg);
+        customNegInput.setText(isPresetInitial ? "" : initialNeg);
+        customNegInput.setVisibility(isPresetInitial ? android.view.View.GONE : android.view.View.VISIBLE);
+
+        final TextView[] chipViews = new TextView[negPresets.length];
+        Runnable updateChipStyles = () -> {
+            int black = Theme.getColor(Theme.key_dialogTextBlack, rp);
+            int gray = Theme.getColor(Theme.key_dialogTextGray3, rp);
+            int accent = Theme.getColor(Theme.key_dialogTextBlue2, rp);
+            for (int i = 0; i < negPresets.length; i++) {
+                String p = negPresets[i];
+                boolean active = ("Custom".equals(p) && customNegInput.getVisibility() == android.view.View.VISIBLE)
+                        || (!"Custom".equals(p) && customNegInput.getVisibility() != android.view.View.VISIBLE && p.equals(selectedNeg[0]));
+                chipViews[i].setTextColor(active ? accent : black);
+                chipViews[i].setBackground(Theme.createRoundRectDrawable(
+                        AndroidUtilities.dp(8),
+                        Theme.multAlpha(active ? accent : gray, active ? 0.16f : 0.10f)));
+            }
+        };
+        for (int i = 0; i < negPresets.length; i++) {
+            final String preset = negPresets[i];
+            TextView chip = new TextView(activity);
+            chip.setText(preset);
+            chip.setTextSize(13);
+            chip.setPadding(AndroidUtilities.dp(10), AndroidUtilities.dp(6), AndroidUtilities.dp(10), AndroidUtilities.dp(6));
+            chipViews[i] = chip;
+            chip.setOnClickListener(v -> {
+                if ("Custom".equals(preset)) {
+                    customNegInput.setVisibility(android.view.View.VISIBLE);
+                    customNegInput.requestFocus();
+                } else {
+                    customNegInput.setVisibility(android.view.View.GONE);
+                    selectedNeg[0] = preset;
+                }
+                updateChipStyles.run();
+            });
+            chipsRow.addView(chip, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, 0, 0, 6, 0));
+        }
+        updateChipStyles.run();
+        container.addView(chipsRow);
+        container.addView(customNegInput);
+
+        // Publish Mode clickable picker row
+        final String[] modeLabels = new String[] { "Inherit", "Live", "Paused", "Archived" };
+        final String[] modeValues = new String[] { "inherit", "live", "paused", "archived" };
+        final String[] selectedMode = new String[] { normalizePublishMode(existing != null ? existing.publishMode : "live") };
+        addFieldLabel(activity, container, "Publish Mode", rp);
+        TextView publishPicker = new TextView(activity);
+        publishPicker.setTextSize(15);
+        publishPicker.setPadding(AndroidUtilities.dp(12), AndroidUtilities.dp(10), AndroidUtilities.dp(12), AndroidUtilities.dp(10));
+        publishPicker.setTextColor(Theme.getColor(Theme.key_dialogTextBlack, rp));
+        publishPicker.setBackground(Theme.createRoundRectDrawable(
+                AndroidUtilities.dp(8),
+                Theme.multAlpha(Theme.getColor(Theme.key_dialogTextGray3, rp), 0.10f)));
+        publishPicker.setText(formatPublishModeLabel(selectedMode[0]) + "  ▾");
+        publishPicker.setOnClickListener(v -> {
+            int checked = 0;
+            for (int i = 0; i < modeValues.length; i++) {
+                if (modeValues[i].equals(selectedMode[0])) {
+                    checked = i;
+                    break;
+                }
+            }
+            new AlertDialog.Builder(activity, rp)
+                    .setTitle("Select Publish Mode")
+                    .setSingleChoiceItems(modeLabels, checked, (dialog, which) -> {
+                        selectedMode[0] = modeValues[which];
+                        publishPicker.setText(modeLabels[which] + "  ▾");
+                        dialog.dismiss();
+                    })
+                    .setNegativeButton("Cancel", null)
+                    .show();
+        });
+        container.addView(publishPicker, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 4, 0, 8));
+
         EditText promptInput = existing == null
-                ? addField(activity, container, "AI Generation Prompt Notes (optional)", "", InputType.TYPE_CLASS_TEXT)
+                ? addField(activity, container, "AI Generation Prompt Notes (optional)", "", InputType.TYPE_CLASS_TEXT, rp)
                 : null;
 
-        AlertDialog.Builder builder = new AlertDialog.Builder(activity)
+        AlertDialog.Builder builder = new AlertDialog.Builder(activity, rp)
                 .setTitle(existing == null ? "Create Exam" : "Edit Exam: " + existing.examName)
                 .setView(wrapScroll(activity, container))
                 .setPositiveButton(existing == null ? "Create" : "Save", (d, w) -> {
@@ -66,8 +156,10 @@ public final class EveAdminDialogs {
                     String category = textOr(categoryInput, "General");
                     int minutes = parseIntBounded(minutesInput, 60, 1, 600);
                     int qCount = parseIntBounded(countInput, 25, 1, 200);
-                    String neg = textOr(negInput, "0");
-                    String mode = normalizePublishMode(text(publishInput));
+                    String neg = customNegInput.getVisibility() == android.view.View.VISIBLE
+                            ? textOr(customNegInput, "0")
+                            : selectedNeg[0];
+                    String mode = selectedMode[0];
                     String prompt = promptInput != null ? text(promptInput) : "";
                     if (name.isEmpty()) {
                         showError(fragment, "Exam name cannot be empty.");
@@ -89,7 +181,7 @@ public final class EveAdminDialogs {
                 })
                 .setNegativeButton("Cancel", null);
         if (existing != null) {
-            builder.setNeutralButton("Duplicate / Pause", (d, w) -> new AlertDialog.Builder(activity)
+            builder.setNeutralButton("Duplicate / Pause", (d, w) -> new AlertDialog.Builder(activity, rp)
                     .setTitle(existing.examName)
                     .setItems(new String[] {
                             "Duplicate Exam as Copy",
@@ -222,7 +314,7 @@ public final class EveAdminDialogs {
         Activity activity = fragment.getParentActivity();
         if (activity == null) return;
         if (tests == null || tests.isEmpty()) {
-            showInfo(fragment, "No generated mock tests found in D1.");
+            showInfo(fragment, "No mock tests found.");
             return;
         }
         String[] labels = new String[tests.size()];
@@ -683,7 +775,7 @@ public final class EveAdminDialogs {
                         });
                         repo.runWithAdminToken(saveCb, token -> {
                             repo.updatePremiumConfig(token, updated);
-                            repo.postSuccess(saveCb, "Pricing & UPI/QR configuration saved to D1.");
+                            repo.postSuccess(saveCb, "Pricing & UPI/QR configuration saved.");
                         });
                     })
                     .setNeutralButton("Preview QR", (d, w) -> {
@@ -866,26 +958,52 @@ public final class EveAdminDialogs {
             if (activity == null) return;
             StringBuilder sb = new StringBuilder();
             if (entries.isEmpty()) {
-                sb.append("No server audit records yet.");
+                sb.append("No audit records yet.");
             } else {
-                SimpleDateFormat fmt = new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US);
+                SimpleDateFormat fmt = new SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.US);
                 for (EveAdminModels.AuditLogEntry e : entries) {
-                    sb.append("• [").append(e.actionType).append("] ").append(e.description).append("\n  ")
-                            .append(e.adminEmail).append(" • ")
+                    String title = formatAuditActionTitle(e.actionType);
+                    sb.append("• ").append(title);
+                    if (!e.description.isEmpty()) {
+                        sb.append("\n  ").append(e.description);
+                    }
+                    sb.append("\n  ").append(e.adminEmail.isEmpty() ? "Admin" : e.adminEmail)
+                            .append(" • ")
                             .append(e.timestamp > 0 ? fmt.format(new Date(e.timestamp)) : "-")
                             .append("\n\n");
                 }
             }
-            showTextDialog(activity, "Server Audit Trail (" + entries.size() + ")", sb.toString().trim());
+            showTextDialog(activity, "Audit Log (" + entries.size() + ")", sb.toString().trim());
         });
         repo.runWithAdminToken(cb, token -> repo.postSuccess(cb, repo.fetchAuditLogs(token, 50)));
+    }
+
+    private static String formatAuditActionTitle(String rawType) {
+        if (rawType == null || rawType.trim().isEmpty()) {
+            return "Admin Action";
+        }
+        String[] parts = rawType.trim().toLowerCase(Locale.US).split("_+");
+        StringBuilder out = new StringBuilder();
+        for (String p : parts) {
+            if (p.isEmpty()) continue;
+            if (out.length() > 0) out.append(' ');
+            out.append(Character.toUpperCase(p.charAt(0))).append(p.substring(1));
+        }
+        return out.length() > 0 ? out.toString() : "Admin Action";
+    }
+
+    private static String formatPublishModeLabel(String mode) {
+        if ("live".equalsIgnoreCase(mode)) return "Live";
+        if ("paused".equalsIgnoreCase(mode)) return "Paused";
+        if ("archived".equalsIgnoreCase(mode)) return "Archived";
+        return "Inherit";
     }
 
     private static LinearLayout makeFormContainer(Context ctx) {
         LinearLayout ll = new LinearLayout(ctx);
         ll.setOrientation(LinearLayout.VERTICAL);
-        int pad = AndroidUtilities.dp(16);
-        ll.setPadding(pad, pad, pad, pad);
+        int pad = AndroidUtilities.dp(18);
+        ll.setPadding(pad, AndroidUtilities.dp(10), pad, AndroidUtilities.dp(10));
         return ll;
     }
 
@@ -895,16 +1013,27 @@ public final class EveAdminDialogs {
         return sv;
     }
 
-    private static EditText addField(Context ctx, LinearLayout parent, String label, String initial, int inputType) {
+    private static void addFieldLabel(Context ctx, LinearLayout parent, String label, Theme.ResourcesProvider rp) {
         TextView tv = new TextView(ctx);
         tv.setText(label);
         tv.setTextSize(12);
+        tv.setTextColor(Theme.getColor(Theme.key_dialogTextGray3, rp));
         tv.setPadding(0, AndroidUtilities.dp(8), 0, AndroidUtilities.dp(2));
         parent.addView(tv);
+    }
+
+    private static EditText addField(Context ctx, LinearLayout parent, String label, String initial, int inputType) {
+        return addField(ctx, parent, label, initial, inputType, null);
+    }
+
+    private static EditText addField(Context ctx, LinearLayout parent, String label, String initial, int inputType, Theme.ResourcesProvider rp) {
+        addFieldLabel(ctx, parent, label, rp);
 
         EditText et = new EditText(ctx);
         et.setInputType(inputType);
         et.setText(initial != null ? initial : "");
+        et.setTextColor(Theme.getColor(Theme.key_dialogTextBlack, rp));
+        et.setHintTextColor(Theme.getColor(Theme.key_dialogTextHint, rp));
         parent.addView(et);
         return et;
     }
@@ -943,7 +1072,7 @@ public final class EveAdminDialogs {
                     .setTitle("EVE Premium Subscribers (" + users.size() + ")")
                     .setItems(labels, (d, idx) -> {
                         if (idx == 0) {
-                            showStudentSearchDialog(fragment, repo, onMutated);
+                            fragment.presentFragment(new EveAdminStudentsFragment());
                         } else {
                             EveAdminModels.PremiumUserItem u = users.get(idx - 1);
                             new AlertDialog.Builder(activity)

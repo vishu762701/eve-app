@@ -790,7 +790,6 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
         if (org.telegram.ui.eve.admin.EveAdminConfig.isSectionVisible(org.telegram.ui.eve.admin.EveAdminConfig.SECTION_LANGUAGE)) {
             items.add(SettingCell.Factory.of(10, IconBackgroundColors.PURPLE.top, IconBackgroundColors.PURPLE.bottom, R.drawable.settings_language, getString(R.string.SettingsLanguage), LocaleController.getCurrentLanguageName()));
         }
-        items.add(SettingCell.Factory.of(30, IconBackgroundColors.ORANGE_DEEP.top, IconBackgroundColors.ORANGE_DEEP.bottom, R.drawable.msg_sticker, getString(R.string.EveEmojiStickerPacks), getString(R.string.EveEmojiStickerPacksSubtitle)));
 
         items.add(UItem.asShadow(null));
 
@@ -958,10 +957,6 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
             }
             case 29: {
                 handleEveCloudAccountClick();
-                break;
-            }
-            case 30: {
-                presentSettingFragment(new org.telegram.ui.eve.media.EvePackLibraryFragment());
                 break;
             }
             case 27: {

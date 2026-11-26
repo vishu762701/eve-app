@@ -5,8 +5,9 @@ import android.content.Context;
 import android.view.View;
 import android.widget.CheckBox;
 import android.widget.EditText;
-import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+
+import androidx.annotation.Nullable;
 
 import org.json.JSONObject;
 import org.telegram.messenger.AndroidUtilities;
@@ -15,26 +16,28 @@ import org.telegram.messenger.R;
 import org.telegram.ui.ActionBar.ActionBar;
 import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.BaseFragment;
+import org.telegram.ui.ActionBar.SimpleActionBarMenu;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.BulletinFactory;
-import org.telegram.ui.Components.LayoutHelper;
+import org.telegram.ui.Components.IconBackgroundColors;
+import org.telegram.ui.Components.RecyclerListView;
 import org.telegram.ui.Components.UItem;
 import org.telegram.ui.Components.UniversalAdapter;
 import org.telegram.ui.Components.UniversalRecyclerView;
-import org.telegram.ui.LanguageSelectActivity;
 import org.telegram.ui.SettingsActivity;
-import org.telegram.ui.ThemeActivity;
 import org.telegram.ui.eve.exams.EveLeaderboardFragment;
+import org.telegram.utils.glass.source.GlassSourceRenderNode;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
 /**
- * Telegram-native Java Results, Analytics, App Settings & System Health module for EVE Admin Control Center.
- * Parity with AdminAnalyticsActivity, ApiUsageActivity, SystemMonitorActivity, AppConfigActivity, and Export Data.
+ * Telegram-native Java Results, Analytics, App Configuration & System Health module.
  */
 public class EveAdminInsightsAndSystemFragment extends BaseFragment {
+
+    private static final int MENU_REFRESH = 1;
 
     private static final int ID_EXAM_ANALYTICS = 101;
     private static final int ID_LEADERBOARD = 102;
@@ -43,11 +46,7 @@ public class EveAdminInsightsAndSystemFragment extends BaseFragment {
     private static final int ID_EXPORT_EXAMS = 105;
 
     private static final int ID_APP_CONFIG = 201;
-    private static final int ID_EXAM_SETTINGS = 202;
-    private static final int ID_LANGUAGE_SETTINGS = 203;
-    private static final int ID_PREMIUM_CONFIG = 204;
 
-    private static final int ID_HEALTH_REFRESH = 301;
     private static final int ID_AI_HEALTH = 302;
     private static final int ID_FAILED_JOBS = 303;
     private static final int BASE_SERVICE_ID = 500;
@@ -55,6 +54,7 @@ public class EveAdminInsightsAndSystemFragment extends BaseFragment {
     private final EveAdminRepository repo = EveAdminRepository.getInstance();
     private final EveAdminModels.AdminProfile profile;
     private UniversalRecyclerView listView;
+    private boolean destroyed = false;
     private List<EveAdminModels.SystemServiceStatus> serviceStatuses = new ArrayList<>();
     private List<EveAdminModels.GenerationJobItem> generationJobs = new ArrayList<>();
     private EveAdminModels.AppConfigModel appConfig;
@@ -69,32 +69,93 @@ public class EveAdminInsightsAndSystemFragment extends BaseFragment {
     }
 
     @Override
-    public View createView(Context context) {
-        actionBar.setBackButtonImage(R.drawable.ic_ab_back);
-        actionBar.setAllowOverlayTitle(true);
-        actionBar.setTitle("Analytics, Config & Health");
-        actionBar.setActionBarMenuOnItemClick(new ActionBar.ActionBarMenuOnItemClick() {
-            @Override
-            public void onItemClick(int id) {
-                if (id == -1) {
-                    finishFragment();
-                }
-            }
-        });
+    protected boolean useSimpleActionBar() {
+        return true;
+    }
 
-        FrameLayout root = new FrameLayout(context);
-        root.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundGray));
-        listView = new UniversalRecyclerView(this, this::fillItems, this::onClick, null);
-        root.addView(listView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
-        fragmentView = root;
+    @Override
+    protected boolean useFadeDrawableForActionBar() {
+        return false;
+    }
+
+    @Nullable
+    @Override
+    protected RecyclerListView getListViewForSimpleGlass() {
+        return listView;
+    }
+
+    @Override
+    public boolean isSupportEdgeToEdge() {
+        return true;
+    }
+
+    @Override
+    public boolean drawEdgeNavigationBar() {
+        return false;
+    }
+
+    @Override
+    public GlassSourceRenderNode getGlassSource() {
+        return getBaseSimpleGlass().getGlassSource();
+    }
+
+    @Override
+    public GlassSourceRenderNode getFrostedGlassSource() {
+        return getBaseSimpleGlass().getFrostedGlassSource();
+    }
+
+    @Override
+    public View createView(Context context) {
+        destroyed = false;
+        setHasOwnBackground(true);
+
+        EveAdminUiChrome.Chrome chrome = EveAdminUiChrome.setup(
+                this,
+                context,
+                simpleActionBar,
+                getBaseSimpleGlass(),
+                glassEngine,
+                getResourceProvider(),
+                "Analytics & Health",
+                null,
+                this::fillItems,
+                this::onClick,
+                new ActionBar.ActionBarMenuOnItemClick() {
+                    @Override
+                    public void onItemClick(int id) {
+                        if (id == -1) {
+                            finishFragment();
+                        } else if (id == MENU_REFRESH) {
+                            loadLiveHealth();
+                        }
+                    }
+                },
+                null
+        );
+        listView = chrome.listView;
+
+        if (simpleActionBar != null) {
+            SimpleActionBarMenu menu = simpleActionBar.createMenu();
+            menu.addItem(MENU_REFRESH, R.drawable.msg_retry, getResourceProvider());
+        }
+
+        fragmentView = chrome.rootView;
         loadLiveHealth();
-        return root;
+        return chrome.rootView;
+    }
+
+    @Override
+    public void onFragmentDestroy() {
+        destroyed = true;
+        super.onFragmentDestroy();
     }
 
     private void loadLiveHealth() {
+        if (destroyed) return;
         repo.loadInsightsOverviewAsync(profile, new EveAdminRepository.ResultCallback<EveAdminRepository.InsightsBundle>() {
             @Override
             public void onSuccess(EveAdminRepository.InsightsBundle data) {
+                if (destroyed) return;
                 if (data != null) {
                     appConfig = data.appConfig;
                     serviceStatuses = data.serviceStatuses;
@@ -107,46 +168,113 @@ public class EveAdminInsightsAndSystemFragment extends BaseFragment {
 
             @Override
             public void onError(String message, int httpStatus) {
+                if (destroyed) return;
                 BulletinFactory.of(EveAdminInsightsAndSystemFragment.this).createErrorBulletin(message).show();
             }
         });
     }
 
     private void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
-        items.add(UItem.asHeader("E. Results, Analytics & Exports"));
+        EveAdminUiChrome.addTopSpace(items);
+
+        items.add(UItem.asHeader("Analytics & Exports"));
         if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_VIEW_ANALYTICS_LOGS)) {
-            items.add(SettingsActivity.SettingCell.Factory.of(ID_EXAM_ANALYTICS, 0, 0, 0, "Exam & Score Analytics", "Attempts, average and highest scores per exam", null));
-            items.add(SettingsActivity.SettingCell.Factory.of(ID_CRASH_REPORTS, 0, 0, 0, "Production Crash Reports (D1)", "Aggregated crash signatures & top stack frames", null));
-            items.add(SettingsActivity.SettingCell.Factory.of(ID_API_USAGE, 0, 0, 0, "API Usage & AI Cost Monitor", "Monthly Gemini calls, creations & submissions", null));
+            items.add(SettingsActivity.SettingCell.Factory.of(
+                    ID_EXAM_ANALYTICS,
+                    IconBackgroundColors.CYAN.top, IconBackgroundColors.CYAN.bottom,
+                    R.drawable.msg_stats,
+                    "Exam & Score Analytics",
+                    "Attempts, average and highest scores per exam",
+                    null));
+            items.add(SettingsActivity.SettingCell.Factory.of(
+                    ID_CRASH_REPORTS,
+                    IconBackgroundColors.RED.top, IconBackgroundColors.RED.bottom,
+                    R.drawable.msg_report,
+                    "Crash Reports",
+                    "Aggregated crash signatures & top stack frames",
+                    null));
+            items.add(SettingsActivity.SettingCell.Factory.of(
+                    ID_API_USAGE,
+                    IconBackgroundColors.PURPLE.top, IconBackgroundColors.PURPLE.bottom,
+                    R.drawable.msg_recent,
+                    "API Usage & AI Cost Monitor",
+                    "Monthly AI calls, creations & submissions",
+                    null));
         }
-        items.add(SettingsActivity.SettingCell.Factory.of(ID_LEADERBOARD, 0, 0, 0, "Student Leaderboard", "Overall student rankings across EVE exams", null));
+        items.add(SettingsActivity.SettingCell.Factory.of(
+                ID_LEADERBOARD,
+                IconBackgroundColors.ORANGE.top, IconBackgroundColors.ORANGE.bottom,
+                R.drawable.msg_groups,
+                "Student Leaderboard",
+                "Overall student rankings across EVE exams",
+                null));
         if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_EXPORT_DATA)) {
-            items.add(SettingsActivity.SettingCell.Factory.of(ID_EXPORT_EXAMS, 0, 0, 0, "Export All Exam Data (JSON)", "Copy full exam export JSON to clipboard", null));
+            items.add(SettingsActivity.SettingCell.Factory.of(
+                    ID_EXPORT_EXAMS,
+                    IconBackgroundColors.BLUE.top, IconBackgroundColors.BLUE.bottom,
+                    R.drawable.msg_download,
+                    "Export All Exam Data",
+                    "Copy full exam export JSON to clipboard",
+                    null));
         }
         items.add(UItem.asShadow(null));
 
-        items.add(UItem.asHeader("L. App Settings & Configuration"));
         if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_CONFIG)) {
+            items.add(UItem.asHeader("App Configuration"));
             String cfgSummary = appConfig != null
                     ? (appConfig.maintenanceMode ? "MAINTENANCE ON" : "Online") + " • Min v" + appConfig.minSupportedVersionCode + " • Default: " + appConfig.defaultPublishMode
                     : "Configure Maintenance Mode & Min Version";
-            items.add(SettingsActivity.SettingCell.Factory.of(ID_APP_CONFIG, 0, 0, 0, "Maintenance Mode & App Config", cfgSummary, null));
+            items.add(SettingsActivity.SettingCell.Factory.of(
+                    ID_APP_CONFIG,
+                    IconBackgroundColors.BLUE_DEEP.top, IconBackgroundColors.BLUE_DEEP.bottom,
+                    R.drawable.msg_settings,
+                    "Maintenance Mode & App Config",
+                    cfgSummary,
+                    null));
+            items.add(UItem.asShadow(null));
         }
-        items.add(SettingsActivity.SettingCell.Factory.of(ID_EXAM_SETTINGS, 0, 0, 0, LocaleController.getString(R.string.SettingsChat), "Appearance, theme & exam display defaults", null));
-        items.add(SettingsActivity.SettingCell.Factory.of(ID_LANGUAGE_SETTINGS, 0, 0, 0, LocaleController.getString(R.string.SettingsLanguage), "English / Hindi app locale", LocaleController.getCurrentLanguageName()));
-        if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_PREMIUM)) {
-            items.add(SettingsActivity.SettingCell.Factory.of(ID_PREMIUM_CONFIG, 0, 0, 0, "Premium Plan & UPI/QR Config", "Manage plan price, duration, UPI VPA & QR", null));
-        }
-        items.add(UItem.asShadow(null));
 
         if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_VIEW_ANALYTICS_LOGS)) {
-            items.add(UItem.asHeader("M. System Health (Worker, D1, R2, Firebase)"));
-            items.add(SettingsActivity.SettingCell.Factory.of(ID_HEALTH_REFRESH, 0xFF3D8BEB, 0xFF2A6FD9, R.drawable.msg_retry, "Refresh Live Health Checks", "Probe Worker, D1, R2, Firebase & jobs", null));
-            items.add(SettingsActivity.SettingCell.Factory.of(ID_AI_HEALTH, 0xFF9C27B0, 0xFF6A1B9A, R.drawable.msg_stats, "Run AI Provider Health Probe", "Check live Gemini generation connectivity", null));
-            items.add(SettingsActivity.SettingCell.Factory.of(ID_FAILED_JOBS, 0xFFFF9800, 0xFFEF6C00, R.drawable.msg_list, "Generation Jobs & Retry", "Inspect failed or queued AI generation jobs", generationJobs.size() + " jobs"));
+            items.add(UItem.asHeader("System Health"));
+            items.add(SettingsActivity.SettingCell.Factory.of(
+                    ID_AI_HEALTH,
+                    IconBackgroundColors.PURPLE.top, IconBackgroundColors.PURPLE.bottom,
+                    R.drawable.msg_stats,
+                    "AI Provider Health Probe",
+                    "Check live AI generation connectivity",
+                    null));
+            items.add(SettingsActivity.SettingCell.Factory.of(
+                    ID_FAILED_JOBS,
+                    IconBackgroundColors.ORANGE.top, IconBackgroundColors.ORANGE.bottom,
+                    R.drawable.msg_list,
+                    "Generation Jobs & Retry",
+                    "Inspect failed or queued AI generation jobs",
+                    generationJobs.size() + " jobs"));
             for (int i = 0; i < serviceStatuses.size(); i++) {
                 EveAdminModels.SystemServiceStatus s = serviceStatuses.get(i);
-                items.add(SettingsActivity.SettingCell.Factory.of(BASE_SERVICE_ID + i, 0, 0, 0, s.name.toUpperCase(Locale.US), s.detail, s.status));
+                String statusLower = s.status != null ? s.status.toLowerCase(Locale.US) : "";
+                IconBackgroundColors bg;
+                int iconRes;
+                if (statusLower.contains("ok") || statusLower.contains("healthy") || statusLower.contains("online") || statusLower.contains("up")) {
+                    bg = IconBackgroundColors.GREEN;
+                    iconRes = R.drawable.msg_select;
+                } else if (statusLower.contains("warn") || statusLower.contains("degrad")) {
+                    bg = IconBackgroundColors.ORANGE;
+                    iconRes = R.drawable.msg_warning;
+                } else if (statusLower.contains("down") || statusLower.contains("err") || statusLower.contains("fail")) {
+                    bg = IconBackgroundColors.RED;
+                    iconRes = R.drawable.msg_close;
+                } else {
+                    bg = IconBackgroundColors.GRAY;
+                    iconRes = R.drawable.msg_info;
+                }
+                items.add(SettingsActivity.SettingCell.Factory.of(
+                        BASE_SERVICE_ID + i,
+                        bg.top, bg.bottom,
+                        iconRes,
+                        s.name.toUpperCase(Locale.US),
+                        s.detail,
+                        s.status));
             }
             items.add(UItem.asShadow(null));
         }
@@ -171,18 +299,6 @@ public class EveAdminInsightsAndSystemFragment extends BaseFragment {
                 break;
             case ID_APP_CONFIG:
                 openAppConfigDialog();
-                break;
-            case ID_EXAM_SETTINGS:
-                presentFragment(new ThemeActivity(ThemeActivity.THEME_TYPE_BASIC));
-                break;
-            case ID_LANGUAGE_SETTINGS:
-                presentFragment(new LanguageSelectActivity());
-                break;
-            case ID_PREMIUM_CONFIG:
-                EveAdminDialogs.showPricingAndUpiDialog(this, repo, this::loadLiveHealth);
-                break;
-            case ID_HEALTH_REFRESH:
-                loadLiveHealth();
                 break;
             case ID_AI_HEALTH:
                 runAiProbe();
@@ -236,7 +352,7 @@ public class EveAdminInsightsAndSystemFragment extends BaseFragment {
                                 .append("\n  ").append(c.sanitizedMessage)
                                 .append("\n\n");
                     }
-                    showAlert("D1 Crash Signatures", sb.length() > 0 ? sb.toString() : "Zero production crash signatures recorded.");
+                    showAlert("Crash Signatures", sb.length() > 0 ? sb.toString() : "Zero production crash signatures recorded.");
                 }
                 @Override public void onError(String message, int httpStatus) {}
             }, list);
@@ -254,12 +370,12 @@ public class EveAdminInsightsAndSystemFragment extends BaseFragment {
                         return;
                     }
                     String text = "Month: " + obj.optString("monthDisplayName", obj.optString("yearMonth", "-"))
-                            + "\nGemini Calls: " + obj.optLong("geminiCalls", 0)
+                            + "\nAI Calls: " + obj.optLong("geminiCalls", 0)
                             + "\nSuccessful: " + obj.optLong("geminiSuccessfulCalls", 0)
                             + "\nFailed: " + obj.optLong("geminiFailedCalls", 0)
                             + "\nDocuments Created: " + obj.optLong("documentsCreated", 0)
                             + "\nTest Submissions: " + obj.optLong("testSubmissions", 0);
-                    showAlert("API Usage & Cost Monitor", text);
+                    showAlert("API Usage & AI Cost Monitor", text);
                 }
                 @Override public void onError(String message, int httpStatus) {}
             }, data);
@@ -291,22 +407,25 @@ public class EveAdminInsightsAndSystemFragment extends BaseFragment {
         CheckBox maintCheck = new CheckBox(act);
         maintCheck.setText("Enable Maintenance Mode");
         maintCheck.setChecked(cfg.maintenanceMode);
-        maintCheck.setTextColor(Theme.getColor(Theme.key_dialogTextBlack));
+        maintCheck.setTextColor(Theme.getColor(Theme.key_dialogTextBlack, getResourceProvider()));
 
         EditText minVer = new EditText(act);
         minVer.setHint("Minimum supported versionCode");
         minVer.setText(String.valueOf(cfg.minSupportedVersionCode));
-        minVer.setTextColor(Theme.getColor(Theme.key_dialogTextBlack));
+        minVer.setTextColor(Theme.getColor(Theme.key_dialogTextBlack, getResourceProvider()));
+        minVer.setHintTextColor(Theme.getColor(Theme.key_dialogTextHint, getResourceProvider()));
 
         EditText maintMsg = new EditText(act);
         maintMsg.setHint("Maintenance message");
         maintMsg.setText(cfg.maintenanceMessage);
-        maintMsg.setTextColor(Theme.getColor(Theme.key_dialogTextBlack));
+        maintMsg.setTextColor(Theme.getColor(Theme.key_dialogTextBlack, getResourceProvider()));
+        maintMsg.setHintTextColor(Theme.getColor(Theme.key_dialogTextHint, getResourceProvider()));
 
         EditText defPub = new EditText(act);
         defPub.setHint("Default publish mode (live / paused)");
         defPub.setText(cfg.defaultPublishMode);
-        defPub.setTextColor(Theme.getColor(Theme.key_dialogTextBlack));
+        defPub.setTextColor(Theme.getColor(Theme.key_dialogTextBlack, getResourceProvider()));
+        defPub.setHintTextColor(Theme.getColor(Theme.key_dialogTextHint, getResourceProvider()));
 
         LinearLayout box = new LinearLayout(act);
         box.setOrientation(LinearLayout.VERTICAL);

@@ -5,8 +5,9 @@ import android.content.Context;
 import android.text.InputType;
 import android.view.View;
 import android.widget.EditText;
-import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+
+import androidx.annotation.Nullable;
 
 import org.json.JSONObject;
 import org.telegram.messenger.AndroidUtilities;
@@ -17,20 +18,20 @@ import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.BulletinFactory;
+import org.telegram.ui.Components.IconBackgroundColors;
 import org.telegram.ui.Components.LayoutHelper;
+import org.telegram.ui.Components.RecyclerListView;
 import org.telegram.ui.Components.UItem;
 import org.telegram.ui.Components.UniversalAdapter;
 import org.telegram.ui.Components.UniversalRecyclerView;
 import org.telegram.ui.SettingsActivity;
+import org.telegram.utils.glass.source.GlassSourceRenderNode;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 /**
  * Telegram-native Java Content, Home, Notifications & Moderation Hub for EVE Admin Control Center.
- * Parity with legacy AdminActivity: Banners, Floating Link, Polls, About/Privacy/Terms,
- * Broadcasts, Flagged Questions Inbox, Student Feedback Messages & Feedback Posts.
  */
 public class EveAdminContentAndCommsFragment extends BaseFragment {
 
@@ -61,50 +62,162 @@ public class EveAdminContentAndCommsFragment extends BaseFragment {
     }
 
     @Override
-    public View createView(Context context) {
-        actionBar.setBackButtonImage(R.drawable.ic_ab_back);
-        actionBar.setAllowOverlayTitle(true);
-        actionBar.setTitle("Content & Communication");
-        actionBar.setActionBarMenuOnItemClick(new ActionBar.ActionBarMenuOnItemClick() {
-            @Override
-            public void onItemClick(int id) {
-                if (id == -1) {
-                    finishFragment();
-                }
-            }
-        });
+    protected boolean useSimpleActionBar() {
+        return true;
+    }
 
-        FrameLayout root = new FrameLayout(context);
-        root.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundGray));
-        listView = new UniversalRecyclerView(this, this::fillItems, this::onClick, null);
-        root.addView(listView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
-        fragmentView = root;
-        return root;
+    @Override
+    protected boolean useFadeDrawableForActionBar() {
+        return false;
+    }
+
+    @Nullable
+    @Override
+    protected RecyclerListView getListViewForSimpleGlass() {
+        return listView;
+    }
+
+    @Override
+    public boolean isSupportEdgeToEdge() {
+        return true;
+    }
+
+    @Override
+    public boolean drawEdgeNavigationBar() {
+        return false;
+    }
+
+    @Override
+    public GlassSourceRenderNode getGlassSource() {
+        return getBaseSimpleGlass().getGlassSource();
+    }
+
+    @Override
+    public GlassSourceRenderNode getFrostedGlassSource() {
+        return getBaseSimpleGlass().getFrostedGlassSource();
+    }
+
+    @Override
+    public View createView(Context context) {
+        setHasOwnBackground(true);
+
+        EveAdminUiChrome.Chrome chrome = EveAdminUiChrome.setup(
+                this,
+                context,
+                simpleActionBar,
+                getBaseSimpleGlass(),
+                glassEngine,
+                getResourceProvider(),
+                "Content & Moderation",
+                null,
+                this::fillItems,
+                this::onClick,
+                new ActionBar.ActionBarMenuOnItemClick() {
+                    @Override
+                    public void onItemClick(int id) {
+                        if (id == -1) {
+                            finishFragment();
+                        }
+                    }
+                },
+                null
+        );
+        listView = chrome.listView;
+        fragmentView = chrome.rootView;
+        return chrome.rootView;
     }
 
     private void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
+        EveAdminUiChrome.addTopSpace(items);
+
         if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_CONTENT)) {
-            items.add(UItem.asHeader("H. Content & Home Management"));
-            items.add(SettingsActivity.SettingCell.Factory.of(ID_BANNERS, 0, 0, 0, "Home Screen Banners", "View, edit links, reorder or remove banners", null));
-            items.add(SettingsActivity.SettingCell.Factory.of(ID_FLOATING_LINK, 0, 0, 0, "Floating Community Link", "Configure quick home community URL", null));
-            items.add(SettingsActivity.SettingCell.Factory.of(ID_APP_CONTENT_ABOUT, 0, 0, 0, "Edit About Page", "Update app About page copy", null));
-            items.add(SettingsActivity.SettingCell.Factory.of(ID_APP_CONTENT_PRIVACY, 0, 0, 0, "Edit Privacy Policy Content", "Update privacy policy served from backend", null));
-            items.add(SettingsActivity.SettingCell.Factory.of(ID_APP_CONTENT_TERMS, 0, 0, 0, "Edit Terms of Service", "Update student terms of service copy", null));
+            items.add(UItem.asHeader("Home & Pages"));
+            items.add(SettingsActivity.SettingCell.Factory.of(
+                    ID_BANNERS,
+                    IconBackgroundColors.ORANGE.top, IconBackgroundColors.ORANGE.bottom,
+                    R.drawable.msg_photos,
+                    "Home Screen Banners",
+                    "View, edit links, reorder or remove banners",
+                    null));
+            items.add(SettingsActivity.SettingCell.Factory.of(
+                    ID_FLOATING_LINK,
+                    IconBackgroundColors.BLUE.top, IconBackgroundColors.BLUE.bottom,
+                    R.drawable.msg_link,
+                    "Floating Community Link",
+                    "Configure quick home community URL",
+                    null));
+            items.add(SettingsActivity.SettingCell.Factory.of(
+                    ID_APP_CONTENT_ABOUT,
+                    IconBackgroundColors.CYAN.top, IconBackgroundColors.CYAN.bottom,
+                    R.drawable.msg_info,
+                    "Edit About Page",
+                    "Update app About page copy",
+                    null));
+            items.add(SettingsActivity.SettingCell.Factory.of(
+                    ID_APP_CONTENT_PRIVACY,
+                    IconBackgroundColors.GREEN.top, IconBackgroundColors.GREEN.bottom,
+                    R.drawable.settings_privacy,
+                    "Edit Privacy Policy Content",
+                    "Update privacy policy served from backend",
+                    null));
+            items.add(SettingsActivity.SettingCell.Factory.of(
+                    ID_APP_CONTENT_TERMS,
+                    IconBackgroundColors.BLUE_DEEP.top, IconBackgroundColors.BLUE_DEEP.bottom,
+                    R.drawable.settings_policy,
+                    "Edit Terms of Service",
+                    "Update student terms of service copy",
+                    null));
             items.add(UItem.asShadow(null));
         }
 
         if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MODERATE_FEEDBACK)
                 || EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_SEND_BROADCASTS)) {
-            items.add(UItem.asHeader("I. Notifications, Polls & Moderation"));
+            items.add(UItem.asHeader("Broadcasts, Polls & Moderation"));
             if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_SEND_BROADCASTS)) {
-                items.add(SettingsActivity.SettingCell.Factory.of(ID_SEND_BROADCAST, 0, 0, 0, "Send Broadcast Notification", "Delivers via EVE FCM & Announcements", null));
-                items.add(SettingsActivity.SettingCell.Factory.of(ID_BROADCAST_HISTORY, 0, 0, 0, "Broadcast History", "Inspect or delete sent notifications", null));
+                items.add(SettingsActivity.SettingCell.Factory.of(
+                        ID_SEND_BROADCAST,
+                        IconBackgroundColors.RED.top, IconBackgroundColors.RED.bottom,
+                        R.drawable.msg_send,
+                        "Send Broadcast Notification",
+                        "Delivers via EVE FCM & Announcements",
+                        null));
+                items.add(SettingsActivity.SettingCell.Factory.of(
+                        ID_BROADCAST_HISTORY,
+                        IconBackgroundColors.BLUE_ALT.top, IconBackgroundColors.BLUE_ALT.bottom,
+                        R.drawable.msg_log,
+                        "Broadcast History",
+                        "Inspect or delete sent notifications",
+                        null));
             }
             if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MODERATE_FEEDBACK)) {
-                items.add(SettingsActivity.SettingCell.Factory.of(ID_POLLS, 0, 0, 0, "Manage Student Polls", "Create, activate/close, or delete polls", null));
-                items.add(SettingsActivity.SettingCell.Factory.of(ID_FLAGGED_REPORTS, 0, 0, 0, "Flagged Questions Inbox", "Review, dismiss, or delete student reports", null));
-                items.add(SettingsActivity.SettingCell.Factory.of(ID_FEEDBACK_MESSAGES, 0, 0, 0, "Student Feedback Messages", "Read, reply, mark read, or delete", null));
-                items.add(SettingsActivity.SettingCell.Factory.of(ID_FEEDBACK_POSTS, 0, 0, 0, "Feedback Posts", "Create or remove feedback topics", null));
+                items.add(SettingsActivity.SettingCell.Factory.of(
+                        ID_POLLS,
+                        IconBackgroundColors.PURPLE.top, IconBackgroundColors.PURPLE.bottom,
+                        R.drawable.msg_list,
+                        "Manage Student Polls",
+                        "Create, activate/close, or delete polls",
+                        null));
+                items.add(SettingsActivity.SettingCell.Factory.of(
+                        ID_FLAGGED_REPORTS,
+                        IconBackgroundColors.ORANGE_DEEP.top, IconBackgroundColors.ORANGE_DEEP.bottom,
+                        R.drawable.msg_report,
+                        "Flagged Questions Inbox",
+                        "Review, dismiss, or delete student reports",
+                        null));
+                items.add(SettingsActivity.SettingCell.Factory.of(
+                        ID_FEEDBACK_MESSAGES,
+                        IconBackgroundColors.BLUE_LIGHT.top, IconBackgroundColors.BLUE_LIGHT.bottom,
+                        R.drawable.settings_ask,
+                        "Student Feedback Messages",
+                        "Read, reply, mark read, or delete",
+                        null));
+                items.add(SettingsActivity.SettingCell.Factory.of(
+                        ID_FEEDBACK_POSTS,
+                        IconBackgroundColors.GREEN.top, IconBackgroundColors.GREEN.bottom,
+                        R.drawable.settings_faq,
+                        "Feedback Posts",
+                        "Create or remove feedback topics",
+                        null));
             }
             items.add(UItem.asShadow(null));
         }
@@ -541,13 +654,13 @@ public class EveAdminContentAndCommsFragment extends BaseFragment {
         };
     }
 
-    private static EditText makeField(Context ctx, String initial, String hint) {
+    private EditText makeField(Context ctx, String initial, String hint) {
         EditText et = new EditText(ctx);
         et.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
         et.setText(initial != null ? initial : "");
         et.setHint(hint);
-        et.setTextColor(Theme.getColor(Theme.key_dialogTextBlack));
-        et.setHintTextColor(Theme.getColor(Theme.key_dialogTextHint));
+        et.setTextColor(Theme.getColor(Theme.key_dialogTextBlack, getResourceProvider()));
+        et.setHintTextColor(Theme.getColor(Theme.key_dialogTextHint, getResourceProvider()));
         return et;
     }
 

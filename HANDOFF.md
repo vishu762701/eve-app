@@ -9,10 +9,12 @@ Read `EVE_PROJECT_STATE.md` for the permanent record and NEXT ACTION. Developmen
 
 ## Done
 - Prior green CI baseline (`fec8e0f`, run `45745958364`, artifact `15084086589`): bilingual `en`/`hi` Exams UI, Exam Player/Results/History/Leaderboard/Announcements, EVE Premium UPI/QR checkout, Admin Control Center, FCM/Telegram notification isolation.
-- Final Completion & Closure Batch:
-  - Removed Telegram phone/OTP login & session prompts; added `EveSignInFragment` (Google Sign-In) + `EveAuthManager` local UI mirror + `PUT /api/users/profile` editing (`UserInfoActivity`, `ProfileActivity`, `LogoutActivity`, `SettingsActivity`).
-  - Implemented full cloud Emoji & Sticker Pack Library: Worker/D1 migration `0032`, `AssetStorage` (R2 + Supabase fallback), chunked Telegram/Noto import with redistribution rights gating, `/api/emoji/packs*` + `/assets/:id`.
-  - Implemented Android Pack Library (`EvePackLibraryFragment`, `EvePackDetailBottomSheet`, `EvePackCacheManager` SHA-256 offline cache, `EvePackAssetView` native Lottie/WebM/WebP renderer, `EveAdminPackManagerFragment`) + regression tests.
+- Final Completion & Closure Batch: Google Sign-In (`EveSignInFragment`), profile editing (`PUT /api/users/profile`), cloud Emoji & Sticker Pack Library (`0032`, R2/Supabase, `EvePackLibraryFragment`).
+- Admin UI Overhaul & Student Directory Batch:
+  - Removed custom Emoji & Sticker Packs entries from `SettingsActivity` and `EveAdminControlCenterActivity` (while keeping built-in Telegram emoji/sticker engine intact).
+  - Added shared `EveAdminUiChrome` (`SimpleActionBar` + `actionBarFadeView` + rounded `UniversalRecyclerView` sections) across all admin fragments.
+  - Redesigned `EveAdminControlCenterActivity` into 3 clean cards (`Exams & Content`, `Students & Revenue`, `System & Access`); added `EveAdminGeneratedTestsFragment`, `EveAdminStudentsFragment`, and `EveAdminStudentDetailFragment`.
+  - Extended `GET /api/admin/users` safely for `username`, `phone`, `bio`, `photoUrl`, and `@username` search; cleaned `EveAdminExamsFragment`, `EveAdminInsightsAndSystemFragment`, `EveAdminContentAndCommsFragment`, and `EveAdminDialogs`.
 
 ## Next
 - Verify all GitHub Actions jobs (`backend`, `firebase-functions`, `Telegram Port Integrity`, `Build New Android App`) are green on the latest `main` push, fix any CI issues if found, and test `Eve-debug-apk` on device.

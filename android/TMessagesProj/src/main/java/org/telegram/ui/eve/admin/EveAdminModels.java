@@ -300,6 +300,12 @@ public final class EveAdminModels {
         public final String category;
         public final long lastActive;
         public final boolean disabled;
+        public final String username;
+        public final String phone;
+        public final String bio;
+        public final String photoUrl;
+        public final String dob;
+        public final long createdAt;
 
         public AdminStudentItem(
                 String id,
@@ -309,13 +315,42 @@ public final class EveAdminModels {
                 String category,
                 long lastActive,
                 boolean disabled) {
+            this(id, eveId, email, displayName, category, lastActive, disabled, "", "", "", "", "", 0L);
+        }
+
+        public AdminStudentItem(
+                String id,
+                String eveId,
+                String email,
+                String displayName,
+                String category,
+                long lastActive,
+                boolean disabled,
+                String username,
+                String phone,
+                String bio,
+                String photoUrl,
+                String dob,
+                long createdAt) {
             this.id = id != null ? id : "";
             this.eveId = eveId != null ? eveId : "";
             this.email = email != null ? email : "";
             this.displayName = displayName != null && !displayName.isEmpty() ? displayName : "Student";
-            this.category = category != null ? category : "General";
+            this.category = category != null && !category.isEmpty() ? category : "General";
             this.lastActive = lastActive;
             this.disabled = disabled;
+            this.username = username != null ? username.trim() : "";
+            this.phone = phone != null ? phone.trim() : "";
+            this.bio = bio != null ? bio.trim() : "";
+            this.photoUrl = photoUrl != null ? photoUrl.trim() : "";
+            this.dob = dob != null ? dob.trim() : "";
+            this.createdAt = createdAt;
+        }
+
+        public AdminStudentItem withDisabled(boolean nextDisabled) {
+            return new AdminStudentItem(
+                    id, eveId, email, displayName, category, lastActive, nextDisabled,
+                    username, phone, bio, photoUrl, dob, createdAt);
         }
 
         public static List<AdminStudentItem> parseList(JSONArray arr) {
@@ -331,7 +366,13 @@ public final class EveAdminModels {
                         clean(o, "displayName", "Student"),
                         clean(o, "category", "General"),
                         o.optLong("lastActive", 0L),
-                        o.optBoolean("disabled", false)
+                        o.optBoolean("disabled", false),
+                        clean(o, "username", ""),
+                        clean(o, "phone", ""),
+                        clean(o, "bio", ""),
+                        clean(o, "photoUrl", clean(o, "avatarUrl", "")),
+                        clean(o, "dob", ""),
+                        o.optLong("createdAt", 0L)
                 ));
             }
             return out;

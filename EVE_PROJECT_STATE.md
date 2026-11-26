@@ -133,6 +133,13 @@ Statuses describe the new delivery effort, not the absence of existing code.
     - Android: added `org.telegram.ui.eve.media.*` (`EvePackModels`, `EvePackCacheManager` with SHA-256 verification & incremental reuse, `EvePackRepository`, `EvePackAssetView` rendering Lottie/`.tgs` via `RLottieDrawable` and `.webm` via `AnimatedFileDrawable`, `EvePackLibraryFragment`, `EvePackDetailBottomSheet`, `EveAdminPackManagerFragment`), wired into `SettingsActivity`, `DialogsActivity` Exams menu, and `EveAdminControlCenterActivity`, with English + Hindi strings.
   - Updated `OfficialTelegramLoginTest`, `EveAuthSuiteTest`, and added `EveEmojiStickerPackLibraryTest`.
 
+- **2026-11-26 — Admin UI Overhaul, Unified Telegram Chrome & Full-Screen Student Directory**
+  - Removed custom Emoji & Sticker Packs menu entries from `SettingsActivity` (item `30`) and `EveAdminControlCenterActivity` (`ID_MOD_PACK_MANAGER`) while keeping Telegram's built-in emoji/sticker engine intact.
+  - Added `EveAdminUiChrome.java` (`SimpleActionBar` + glass `actionBarFadeView` + `WindowInsetsCompat` + rounded `UniversalRecyclerView` sections + shared student avatar/date helpers) and applied it across all 7 admin fragments (`EveAdminControlCenterActivity`, `EveAdminExamsFragment`, `EveAdminContentAndCommsFragment`, `EveAdminInsightsAndSystemFragment`, `EveAdminStudentsFragment`, `EveAdminStudentDetailFragment`, `EveAdminGeneratedTestsFragment`).
+  - Redesigned `EveAdminControlCenterActivity` into 3 clean cards (`Exams & Content`, `Students & Revenue`, `System & Access`), removing duplicate KPI rows, inline Recent Activity, permanent session row, letter prefixes, and backend jargon.
+  - Extended `backend/src/routes/admin.ts` (`GET /api/admin/users`) with safe column inspection fallback to return `username`, `phone`, `bio`, `photoUrl` and search `@username`, adding `backend/test/admin_users_profile_fields.test.mjs` while keeping `backend/test/admin_users_pagination.test.mjs` intact.
+  - Added full-screen `EveAdminStudentsFragment`, `EveAdminStudentDetailFragment`, and `EveAdminGeneratedTestsFragment`, plus cleaned `EveAdminExamsFragment`, `EveAdminInsightsAndSystemFragment`, `EveAdminContentAndCommsFragment`, `EveAdminDialogs`, and `EveAdminControlCenterTest`.
+
 ## G. Current work position
 **NEXT ACTION:** Monitor GitHub Actions on `main` for this combined commit until all 4 CI jobs pass (`Telegram Port Integrity`, `backend`, `firebase-functions`, `Build New Android App (android/)`), fix any CI failure immediately per `BUILD_FAILURE_RULES.md`, then deliver fresh `Eve-debug-apk` for owner device verification.
 

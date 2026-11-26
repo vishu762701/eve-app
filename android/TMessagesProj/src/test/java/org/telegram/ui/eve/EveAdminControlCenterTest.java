@@ -124,10 +124,47 @@ public class EveAdminControlCenterTest {
                 Collections.singletonList(new org.telegram.ui.eve.exams.EveExamModels.ExamSummary(
                         "ex-arch", "Archived Exam", 60, "SSC", 50, "Mock 1", "0", "", "archived", 0L, 1, "Mock 1", 0)),
                 "").isEmpty());
+        assertNotNull(org.telegram.ui.eve.admin.EveAdminUiChrome.class);
         assertNotNull(org.telegram.ui.eve.admin.EveAdminExamsFragment.class);
+        assertNotNull(org.telegram.ui.eve.admin.EveAdminGeneratedTestsFragment.class);
+        assertNotNull(org.telegram.ui.eve.admin.EveAdminStudentsFragment.class);
+        assertNotNull(org.telegram.ui.eve.admin.EveAdminStudentDetailFragment.class);
         assertNotNull(org.telegram.ui.eve.admin.EveAdminContentAndCommsFragment.class);
         assertNotNull(org.telegram.ui.eve.admin.EveAdminInsightsAndSystemFragment.class);
         assertNotNull(org.telegram.ui.eve.admin.EveDebugDiagnosticsFragment.class);
+
+        org.json.JSONArray studentsArr = new org.json.JSONArray()
+                .put(new JSONObject()
+                        .put("id", "u1")
+                        .put("eveId", "EV-123456")
+                        .put("email", "rahul@example.com")
+                        .put("displayName", "Rahul Sharma")
+                        .put("category", "UPSC")
+                        .put("username", "rahul_upsc")
+                        .put("phone", "+919876543210")
+                        .put("bio", "Target CSE")
+                        .put("photoUrl", "https://cdn.example.com/rahul.png")
+                        .put("dob", "2001-05-12")
+                        .put("createdAt", 1700000000000L)
+                        .put("lastActive", 1700005000000L)
+                        .put("disabled", false))
+                .put(new JSONObject()
+                        .put("id", "u2")
+                        .put("email", "legacy@example.com")
+                        .put("displayName", "Legacy Student")
+                        .put("disabled", true));
+        java.util.List<EveAdminModels.AdminStudentItem> parsedStudents = EveAdminModels.AdminStudentItem.parseList(studentsArr);
+        assertEquals(2, parsedStudents.size());
+        assertEquals("rahul_upsc", parsedStudents.get(0).username);
+        assertEquals("+919876543210", parsedStudents.get(0).phone);
+        assertEquals("Target CSE", parsedStudents.get(0).bio);
+        assertEquals("https://cdn.example.com/rahul.png", parsedStudents.get(0).photoUrl);
+        assertEquals("2001-05-12", parsedStudents.get(0).dob);
+        assertEquals(1700000000000L, parsedStudents.get(0).createdAt);
+        assertTrue(parsedStudents.get(0).withDisabled(true).disabled);
+        assertEquals("", parsedStudents.get(1).username);
+        assertEquals("", parsedStudents.get(1).photoUrl);
+        assertEquals(0L, parsedStudents.get(1).createdAt);
 
         EveAdminModels.PremiumConfigModel cfg = new EveAdminModels.PremiumConfigModel(
                 true, "EVE Pro", 199, "INR", 90, false, "Full Access",

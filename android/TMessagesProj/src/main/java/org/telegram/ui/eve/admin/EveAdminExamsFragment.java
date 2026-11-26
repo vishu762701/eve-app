@@ -3,26 +3,27 @@ package org.telegram.ui.eve.admin;
 import android.app.Activity;
 import android.content.Context;
 import android.view.View;
-import android.widget.EditText;
-import android.widget.FrameLayout;
-import android.widget.LinearLayout;
+
+import androidx.annotation.Nullable;
 
 import org.json.JSONObject;
-import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.R;
 import org.telegram.ui.ActionBar.ActionBar;
-import org.telegram.ui.ActionBar.ActionBarMenu;
 import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.BaseFragment;
-import org.telegram.ui.ActionBar.Theme;
+import org.telegram.ui.ActionBar.SimpleActionBarMenu;
 import org.telegram.ui.Components.BulletinFactory;
-import org.telegram.ui.Components.LayoutHelper;
+import org.telegram.ui.Components.FlickerLoadingView;
+import org.telegram.ui.Components.IconBackgroundColors;
+import org.telegram.ui.Components.RecyclerListView;
 import org.telegram.ui.Components.UItem;
 import org.telegram.ui.Components.UniversalAdapter;
 import org.telegram.ui.Components.UniversalRecyclerView;
 import org.telegram.ui.SettingsActivity;
 import org.telegram.ui.eve.exams.EveExamModels;
 import org.telegram.ui.eve.exams.EveExamTestsFragment;
+import org.telegram.utils.glass.source.GlassSourceRenderNode;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -39,11 +40,13 @@ public class EveAdminExamsFragment extends BaseFragment {
     private static final int MENU_REFRESH = 2;
     private static final int ID_CREATE = 10;
     private static final int ID_MANAGE_TESTS = 11;
+    private static final int ID_RETRY = 12;
     private static final int BASE_EXAM_ID = 1000;
 
     private final EveAdminRepository repo = EveAdminRepository.getInstance();
     private UniversalRecyclerView listView;
     private boolean loading = true;
+    private boolean destroyed = false;
     private String errorText = "";
     private List<EveAdminModels.AdminExamItem> exams = Collections.emptyList();
     private List<EveAdminModels.AdminGeneratedTestItem> generatedTests = Collections.emptyList();
@@ -54,25 +57,45 @@ public class EveAdminExamsFragment extends BaseFragment {
     }
 
     @Override
+    protected boolean useSimpleActionBar() {
+        return true;
+    }
+
+    @Override
+    protected boolean useFadeDrawableForActionBar() {
+        return false;
+    }
+
+    @Nullable
+    @Override
+    protected RecyclerListView getListViewForSimpleGlass() {
+        return listView;
+    }
+
+    @Override
+    public boolean isSupportEdgeToEdge() {
+        return true;
+    }
+
+    @Override
+    public boolean drawEdgeNavigationBar() {
+        return false;
+    }
+
+    @Override
+    public GlassSourceRenderNode getGlassSource() {
+        return getBaseSimpleGlass().getGlassSource();
+    }
+
+    @Override
+    public GlassSourceRenderNode getFrostedGlassSource() {
+        return getBaseSimpleGlass().getFrostedGlassSource();
+    }
+
+    @Override
     public View createView(Context context) {
-        actionBar.setBackButtonImage(R.drawable.ic_ab_back);
-        actionBar.setAllowOverlayTitle(true);
-        actionBar.setTitle("Exam & Syllabus Manager");
-        ActionBarMenu menu = actionBar.createMenu();
-        menu.addItem(MENU_ADD, R.drawable.msg_add);
-        menu.addItem(MENU_REFRESH, R.drawable.msg_retry);
-        actionBar.setActionBarMenuOnItemClick(new ActionBar.ActionBarMenuOnItemClick() {
-            @Override
-            public void onItemClick(int id) {
-                if (id == -1) {
-                    finishFragment();
-                } else if (id == MENU_ADD) {
-                    EveAdminDialogs.showCreateOrEditExamDialog(EveAdminExamsFragment.this, repo, null, EveAdminExamsFragment.this::reload);
-                } else if (id == MENU_REFRESH) {
-                    reload();
-                }
-            }
-        });
+        destroyed = false;
+        setHasOwnBackground(true);
 
         EveAdminModels.DashboardSnapshot cached = repo.getCachedSnapshot();
         if (cached != null) {
@@ -80,32 +103,74 @@ public class EveAdminExamsFragment extends BaseFragment {
             generatedTests = cached.generatedTests;
         }
 
-        FrameLayout root = new FrameLayout(context);
-        root.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundGray));
-        listView = new UniversalRecyclerView(this, this::fillItems, this::onClick, null);
-        root.addView(listView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
-        fragmentView = root;
+        EveAdminUiChrome.Chrome chrome = EveAdminUiChrome.setup(
+                this,
+                context,
+                simpleActionBar,
+                getBaseSimpleGlass(),
+                glassEngine,
+                getResourceProvider(),
+                "Exams & Syllabus",
+                exams.isEmpty() ? null : exams.size() + " exams",
+                this::fillItems,
+                this::onClick,
+                new ActionBar.ActionBarMenuOnItemClick() {
+                    @Override
+                    public void onItemClick(int id) {
+                        if (id == -1) {
+                            finishFragment();
+                        } else if (id == MENU_ADD) {
+                            EveAdminDialogs.showCreateOrEditExamDialog(
+                                    EveAdminExamsFragment.this, repo, null, EveAdminExamsFragment.this::reload);
+                        } else if (id == MENU_REFRESH) {
+                            reload();
+                        }
+                    }
+                },
+                null
+        );
+        listView = chrome.listView;
+
+        if (simpleActionBar != null) {
+            SimpleActionBarMenu menu = simpleActionBar.createMenu();
+            menu.addItem(MENU_ADD, R.drawable.msg_add, getResourceProvider());
+            menu.addItem(MENU_REFRESH, R.drawable.msg_retry, getResourceProvider());
+        }
+
+        fragmentView = chrome.rootView;
         reload();
-        return root;
+        return chrome.rootView;
+    }
+
+    @Override
+    public void onFragmentDestroy() {
+        destroyed = true;
+        super.onFragmentDestroy();
     }
 
     private void reload() {
+        if (destroyed) return;
         loading = true;
         errorText = "";
         updateList();
         repo.loadExamsCatalogAsync(new EveAdminRepository.ResultCallback<EveAdminRepository.ExamsCatalogData>() {
             @Override
             public void onSuccess(EveAdminRepository.ExamsCatalogData data) {
+                if (destroyed) return;
                 loading = false;
                 if (data != null) {
                     exams = data.exams;
                     generatedTests = data.generatedTests;
+                }
+                if (simpleActionBar != null) {
+                    simpleActionBar.setSubtitle(exams.size() + " exams");
                 }
                 updateList();
             }
 
             @Override
             public void onError(String message, int httpStatus) {
+                if (destroyed) return;
                 loading = false;
                 errorText = message != null ? message : "Failed to load exams.";
                 updateList();
@@ -120,31 +185,73 @@ public class EveAdminExamsFragment extends BaseFragment {
     }
 
     private void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
-        items.add(UItem.asHeader("Exam Operations"));
+        EveAdminUiChrome.addTopSpace(items);
+
+        items.add(UItem.asHeader("Actions"));
         items.add(SettingsActivity.SettingCell.Factory.of(
-                ID_CREATE, 0xFF4CAF50, 0xFF2E7D32, R.drawable.msg_add,
-                "Create New Exam", "Add subject, timer, questions & publish status", null));
+                ID_CREATE,
+                IconBackgroundColors.GREEN.top, IconBackgroundColors.GREEN.bottom,
+                R.drawable.msg_add,
+                "Create New Exam",
+                "Add subject, timer, questions & publish status",
+                null));
         items.add(SettingsActivity.SettingCell.Factory.of(
-                ID_MANAGE_TESTS, 0xFF3D8BEB, 0xFF2A6FD9, R.drawable.msg_list,
-                "Manage Generated Tests & Schedule",
-                "Inspect, schedule, publish, pause or delete mock tests",
+                ID_MANAGE_TESTS,
+                IconBackgroundColors.BLUE.top, IconBackgroundColors.BLUE.bottom,
+                R.drawable.msg_list,
+                "Manage Mock Tests",
+                "Inspect, schedule, publish, pause or delete tests",
                 generatedTests.size() + " tests"));
         if (!errorText.isEmpty()) {
-            items.add(UItem.asShadow("Error: " + errorText));
-        } else if (loading && exams.isEmpty()) {
-            items.add(UItem.asShadow("Loading exams from D1..."));
-        } else {
-            items.add(UItem.asShadow("Tap any exam below to Edit, Duplicate, Preview, Publish/Pause/Archive, manage Syllabus, or Delete."));
+            items.add(SettingsActivity.SettingCell.Factory.of(
+                    ID_RETRY,
+                    IconBackgroundColors.RED.top, IconBackgroundColors.RED.bottom,
+                    R.drawable.msg_retry,
+                    "Retry Loading Exams",
+                    errorText,
+                    "Retry"));
         }
+        items.add(UItem.asShadow("Tap any exam below to edit, duplicate, preview, publish, manage syllabus, or delete."));
 
-        items.add(UItem.asHeader("Exam Catalog (" + exams.size() + ")"));
+        items.add(UItem.asHeader("Exams (" + exams.size() + ")"));
+        if (loading && exams.isEmpty()) {
+            items.add(UItem.asFlicker(FlickerLoadingView.DIALOG_CELL_TYPE));
+            items.add(UItem.asFlicker(FlickerLoadingView.DIALOG_CELL_TYPE));
+            items.add(UItem.asShadow("Loading exams..."));
+            return;
+        }
+        if (exams.isEmpty()) {
+            items.add(UItem.asShadow("No exams found."));
+            return;
+        }
         for (int i = 0; i < exams.size(); i++) {
             EveAdminModels.AdminExamItem exam = exams.get(i);
-            String statusLabel = exam.isArchived() ? "Archived" : (exam.isPaused() ? "Paused" : "Live");
+            String statusLabel;
+            IconBackgroundColors iconBg;
+            int iconRes;
+            if (exam.isArchived()) {
+                statusLabel = "Archived";
+                iconBg = IconBackgroundColors.GRAY;
+                iconRes = R.drawable.msg_archive;
+            } else if (exam.isPaused()) {
+                statusLabel = "Paused";
+                iconBg = IconBackgroundColors.ORANGE;
+                iconRes = R.drawable.msg_recent;
+            } else {
+                statusLabel = "Live";
+                iconBg = IconBackgroundColors.GREEN;
+                iconRes = R.drawable.msg_folders;
+            }
             String syllabusTag = !exam.syllabusFileName.isEmpty() ? " • PDF: " + exam.syllabusFileName : "";
             String sub = String.format(Locale.US, "%s • %d min • %d Qs%s",
                     exam.category, exam.timeLimitMinutes, exam.questionCount, syllabusTag);
-            items.add(SettingsActivity.SettingCell.Factory.of(BASE_EXAM_ID + i, 0, 0, 0, exam.examName, sub, statusLabel));
+            items.add(SettingsActivity.SettingCell.Factory.of(
+                    BASE_EXAM_ID + i,
+                    iconBg.top, iconBg.bottom,
+                    iconRes,
+                    exam.examName,
+                    sub,
+                    statusLabel));
         }
         items.add(UItem.asShadow(null));
     }
@@ -153,7 +260,9 @@ public class EveAdminExamsFragment extends BaseFragment {
         if (item.id == ID_CREATE) {
             EveAdminDialogs.showCreateOrEditExamDialog(this, repo, null, this::reload);
         } else if (item.id == ID_MANAGE_TESTS) {
-            EveAdminDialogs.showGeneratedTestsManager(this, repo, new ArrayList<>(generatedTests), this::reload);
+            presentFragment(new EveAdminGeneratedTestsFragment());
+        } else if (item.id == ID_RETRY) {
+            reload();
         } else if (item.id >= BASE_EXAM_ID) {
             int idx = item.id - BASE_EXAM_ID;
             if (idx >= 0 && idx < exams.size()) {
@@ -213,7 +322,7 @@ public class EveAdminExamsFragment extends BaseFragment {
                             break;
                     }
                 })
-                .setNegativeButton(org.telegram.messenger.LocaleController.getString(R.string.Cancel), null)
+                .setNegativeButton(LocaleController.getString(R.string.Cancel), null)
                 .create());
     }
 
@@ -261,7 +370,7 @@ public class EveAdminExamsFragment extends BaseFragment {
                         @Override public void onError(String message, int httpStatus) {}
                     }, null);
                 }))
-                .setNegativeButton(org.telegram.messenger.LocaleController.getString(R.string.Close), null)
+                .setNegativeButton(LocaleController.getString(R.string.Close), null)
                 .create());
     }
 
@@ -300,7 +409,7 @@ public class EveAdminExamsFragment extends BaseFragment {
                         }, null);
                     });
                 })
-                .setNegativeButton(org.telegram.messenger.LocaleController.getString(R.string.Cancel), null)
+                .setNegativeButton(LocaleController.getString(R.string.Cancel), null)
                 .create());
     }
 
@@ -324,7 +433,7 @@ public class EveAdminExamsFragment extends BaseFragment {
                             .setTitle("Delete " + exam.examName + "?")
                             .setMessage("Linked questions: " + questions + "\nGenerated tests: " + tests + "\nStudent attempts: " + attempts + "\n\nThis action is audited and permanent.")
                             .setPositiveButton("Delete", (d, w) -> executeDeleteExam(exam))
-                            .setNegativeButton(org.telegram.messenger.LocaleController.getString(R.string.Cancel), null)
+                            .setNegativeButton(LocaleController.getString(R.string.Cancel), null)
                             .makeRed(AlertDialog.BUTTON_POSITIVE)
                             .create());
                 }

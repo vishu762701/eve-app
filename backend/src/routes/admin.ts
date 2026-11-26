@@ -665,46 +665,97 @@ adminRoutes.get("/users", requirePermission("manage_users"), async (c) => {
   // ! is the SQL LIKE escape character. Literal %, _ and ! in search
   // must never become wildcards or change the predicate.
   const q = raw.toLowerCase().replace(/[!%_]/g, (ch) => "!" + ch);
-  const where = q
-    ? " WHERE LOWER(COALESCE(email, '')) LIKE ? ESCAPE '!' OR LOWER(COALESCE(display_name, '')) LIKE ? ESCAPE '!' OR LOWER(COALESCE(eve_id, '')) LIKE ? ESCAPE '!'"
-    : "";
-  const params = q ? Array(3).fill(`%${q}%`) : [];
+  const qNoAt = q.startsWith("@") ? q.slice(1) : q;
   const db = c.env.DB;
   const offset = (page - 1) * pageSize;
   const order = " ORDER BY last_active DESC, created_at DESC, id ASC LIMIT ? OFFSET ?";
 
   try {
+    let availableColumns = new Set<string>();
+    try {
+      const tableInfo = await db.prepare("PRAGMA table_info(users)").all<{ name: string }>();
+      availableColumns = new Set(
+        (tableInfo.results || []).map((col) => String(col?.name || "").trim().toLowerCase()).filter(Boolean)
+      );
+    } catch {
+      availableColumns = new Set<string>();
+    }
+
+    const hasTableInfo = availableColumns.size > 0;
+    const hasDisabled = !hasTableInfo || availableColumns.has("disabled");
+    const hasUsername = availableColumns.has("username");
+    const hasPhone = availableColumns.has("phone");
+    const hasBio = availableColumns.has("bio");
+    const photoColumn = availableColumns.has("photo_url")
+      ? "photo_url"
+      : (availableColumns.has("avatar_url") ? "avatar_url" : null);
+
+    const searchClauses = [
+      "LOWER(COALESCE(email, '')) LIKE ? ESCAPE '!'",
+      "LOWER(COALESCE(display_name, '')) LIKE ? ESCAPE '!'",
+      "LOWER(COALESCE(eve_id, '')) LIKE ? ESCAPE '!'",
+    ];
+    const params: any[] = q ? [`%${q}%`, `%${q}%`, `%${q}%`] : [];
+    if (q && hasUsername) {
+      searchClauses.push("LOWER(COALESCE(username, '')) LIKE ? ESCAPE '!'");
+      params.push(`%${qNoAt}%`);
+    }
+    const where = q ? ` WHERE ${searchClauses.join(" OR ")}` : "";
+
     const totalRow = await db.prepare("SELECT COUNT(*) AS total FROM users" + where)
       .bind(...params).first<{ total: number }>();
     const total = Number(totalRow?.total ?? 0);
     if (!Number.isSafeInteger(total) || total < 0) throw new Error("Invalid user count");
 
     const fetchPage = async (includeDisabled: boolean) => {
-      const columns = "id, eve_id, email, display_name, dob, category, created_at, last_active" +
-        (includeDisabled ? ", COALESCE(disabled, 0) AS disabled" : "");
-      return db.prepare("SELECT " + columns + " FROM users" + where + order)
+      const selectCols = [
+        "id",
+        "eve_id",
+        "email",
+        "display_name",
+        "dob",
+        "category",
+        "created_at",
+        "last_active",
+      ];
+      if (includeDisabled) selectCols.push("COALESCE(disabled, 0) AS disabled");
+      if (hasUsername) selectCols.push("COALESCE(username, '') AS username");
+      if (hasPhone) selectCols.push("COALESCE(phone, '') AS phone");
+      if (hasBio) selectCols.push("COALESCE(bio, '') AS bio");
+      if (photoColumn) selectCols.push(`COALESCE(${photoColumn}, '') AS photo_url`);
+      return db.prepare("SELECT " + selectCols.join(", ") + " FROM users" + where + order)
         .bind(...params, pageSize, offset).all<any>();
     };
     let rows: any[];
     try {
-      rows = (await fetchPage(true)).results || [];
+      rows = (await fetchPage(hasDisabled)).results || [];
     } catch (error: any) {
       // Compatibility for legacy DB deployments missing the disabled migration;
       // do not conceal arbitrary database failures with a second query.
       if (!/no such column:\s*disabled/i.test(String(error?.message || error))) throw error;
       rows = (await fetchPage(false)).results || [];
     }
-    const users = rows.map((u) => ({
-      id: u.id,
-      eveId: u.eve_id || null,
-      email: u.email,
-      displayName: u.display_name || "Student",
-      dob: u.dob || "",
-      category: u.category || "General",
-      createdAt: u.created_at || 0,
-      lastActive: u.last_active || 0,
-      disabled: Boolean(u.disabled),
-    }));
+    const includeProfileExtras = hasUsername || hasPhone || hasBio || photoColumn !== null;
+    const users = rows.map((u) => {
+      const item: Record<string, any> = {
+        id: u.id,
+        eveId: u.eve_id || null,
+        email: u.email,
+        displayName: u.display_name || "Student",
+        dob: u.dob || "",
+        category: u.category || "General",
+        createdAt: u.created_at || 0,
+        lastActive: u.last_active || 0,
+        disabled: Boolean(u.disabled),
+      };
+      if (includeProfileExtras) {
+        if (hasUsername) item.username = u.username || "";
+        if (hasPhone) item.phone = u.phone || "";
+        if (hasBio) item.bio = u.bio || "";
+        item.photoUrl = photoColumn ? (u.photo_url || "") : "";
+      }
+      return item;
+    });
     const totalPages = Math.ceil(total / pageSize);
     return c.json({
       success: true,
