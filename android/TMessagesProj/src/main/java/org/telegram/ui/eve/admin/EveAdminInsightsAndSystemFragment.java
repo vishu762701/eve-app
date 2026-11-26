@@ -22,6 +22,7 @@ import org.telegram.ui.Components.UItem;
 import org.telegram.ui.Components.UniversalAdapter;
 import org.telegram.ui.Components.UniversalRecyclerView;
 import org.telegram.ui.LanguageSelectActivity;
+import org.telegram.ui.SettingsActivity;
 import org.telegram.ui.ThemeActivity;
 import org.telegram.ui.eve.exams.EveLeaderboardFragment;
 
@@ -91,50 +92,36 @@ public class EveAdminInsightsAndSystemFragment extends BaseFragment {
     }
 
     private void loadLiveHealth() {
-        repo.runWithAdminToken(new EveAdminRepository.ResultCallback<Void>() {
-            @Override public void onSuccess(Void data) {}
-            @Override public void onError(String message, int httpStatus) {
+        repo.loadInsightsOverviewAsync(profile, new EveAdminRepository.ResultCallback<EveAdminRepository.InsightsBundle>() {
+            @Override
+            public void onSuccess(EveAdminRepository.InsightsBundle data) {
+                if (data != null) {
+                    appConfig = data.appConfig;
+                    serviceStatuses = data.serviceStatuses;
+                    generationJobs = data.generationJobs;
+                }
+                if (listView != null && listView.adapter != null) {
+                    listView.adapter.update(true);
+                }
+            }
+
+            @Override
+            public void onError(String message, int httpStatus) {
                 BulletinFactory.of(EveAdminInsightsAndSystemFragment.this).createErrorBulletin(message).show();
             }
-        }, token -> {
-            EveAdminModels.AppConfigModel cfg = null;
-            List<EveAdminModels.SystemServiceStatus> health = new ArrayList<>();
-            List<EveAdminModels.GenerationJobItem> jobs = new ArrayList<>();
-            try {
-                cfg = repo.fetchAppConfig(token);
-            } catch (Throwable ignored) {}
-            if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_VIEW_ANALYTICS_LOGS)) {
-                try { health = repo.fetchSystemHealth(token); } catch (Throwable ignored) {}
-                try { jobs = repo.fetchFailedJobs(token); } catch (Throwable ignored) {}
-            }
-            final EveAdminModels.AppConfigModel fCfg = cfg;
-            final List<EveAdminModels.SystemServiceStatus> fHealth = health;
-            final List<EveAdminModels.GenerationJobItem> fJobs = jobs;
-            repo.postSuccess(new EveAdminRepository.ResultCallback<Void>() {
-                @Override
-                public void onSuccess(Void data) {
-                    appConfig = fCfg;
-                    serviceStatuses = fHealth;
-                    generationJobs = fJobs;
-                    if (listView != null && listView.adapter != null) {
-                        listView.adapter.update(true);
-                    }
-                }
-                @Override public void onError(String message, int httpStatus) {}
-            }, null);
         });
     }
 
     private void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
         items.add(UItem.asHeader("E. Results, Analytics & Exports"));
         if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_VIEW_ANALYTICS_LOGS)) {
-            items.add(UItem.asButton(ID_EXAM_ANALYTICS, "Exam & Score Analytics"));
-            items.add(UItem.asButton(ID_CRASH_REPORTS, "Production Crash Reports (D1)"));
-            items.add(UItem.asButton(ID_API_USAGE, "API Usage & AI Cost Monitor"));
+            items.add(SettingsActivity.SettingCell.Factory.of(ID_EXAM_ANALYTICS, 0, 0, 0, "Exam & Score Analytics", "Attempts, average and highest scores per exam", null));
+            items.add(SettingsActivity.SettingCell.Factory.of(ID_CRASH_REPORTS, 0, 0, 0, "Production Crash Reports (D1)", "Aggregated crash signatures & top stack frames", null));
+            items.add(SettingsActivity.SettingCell.Factory.of(ID_API_USAGE, 0, 0, 0, "API Usage & AI Cost Monitor", "Monthly Gemini calls, creations & submissions", null));
         }
-        items.add(UItem.asButton(ID_LEADERBOARD, "Student Leaderboard"));
+        items.add(SettingsActivity.SettingCell.Factory.of(ID_LEADERBOARD, 0, 0, 0, "Student Leaderboard", "Overall student rankings across EVE exams", null));
         if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_EXPORT_DATA)) {
-            items.add(UItem.asButton(ID_EXPORT_EXAMS, "Export All Exam Data (JSON)"));
+            items.add(SettingsActivity.SettingCell.Factory.of(ID_EXPORT_EXAMS, 0, 0, 0, "Export All Exam Data (JSON)", "Copy full exam export JSON to clipboard", null));
         }
         items.add(UItem.asShadow(null));
 
@@ -143,23 +130,23 @@ public class EveAdminInsightsAndSystemFragment extends BaseFragment {
             String cfgSummary = appConfig != null
                     ? (appConfig.maintenanceMode ? "MAINTENANCE ON" : "Online") + " • Min v" + appConfig.minSupportedVersionCode + " • Default: " + appConfig.defaultPublishMode
                     : "Configure Maintenance Mode & Min Version";
-            items.add(UItem.asButton(ID_APP_CONFIG, "Maintenance Mode & App Config", cfgSummary));
+            items.add(SettingsActivity.SettingCell.Factory.of(ID_APP_CONFIG, 0, 0, 0, "Maintenance Mode & App Config", cfgSummary, null));
         }
-        items.add(UItem.asButton(ID_EXAM_SETTINGS, LocaleController.getString(R.string.SettingsChat)));
-        items.add(UItem.asButton(ID_LANGUAGE_SETTINGS, LocaleController.getString(R.string.SettingsLanguage), LocaleController.getCurrentLanguageName()));
+        items.add(SettingsActivity.SettingCell.Factory.of(ID_EXAM_SETTINGS, 0, 0, 0, LocaleController.getString(R.string.SettingsChat), "Appearance, theme & exam display defaults", null));
+        items.add(SettingsActivity.SettingCell.Factory.of(ID_LANGUAGE_SETTINGS, 0, 0, 0, LocaleController.getString(R.string.SettingsLanguage), "English / Hindi app locale", LocaleController.getCurrentLanguageName()));
         if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_PREMIUM)) {
-            items.add(UItem.asButton(ID_PREMIUM_CONFIG, "Premium Plan & UPI/QR Config"));
+            items.add(SettingsActivity.SettingCell.Factory.of(ID_PREMIUM_CONFIG, 0, 0, 0, "Premium Plan & UPI/QR Config", "Manage plan price, duration, UPI VPA & QR", null));
         }
         items.add(UItem.asShadow(null));
 
         if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_VIEW_ANALYTICS_LOGS)) {
             items.add(UItem.asHeader("M. System Health (Worker, D1, R2, Firebase)"));
-            items.add(UItem.asButton(ID_HEALTH_REFRESH, "Refresh Live Health Checks"));
-            items.add(UItem.asButton(ID_AI_HEALTH, "Run AI Provider Health Probe"));
-            items.add(UItem.asButton(ID_FAILED_JOBS, "Generation Jobs & Retry", generationJobs.size() + " recent jobs"));
+            items.add(SettingsActivity.SettingCell.Factory.of(ID_HEALTH_REFRESH, 0xFF3D8BEB, 0xFF2A6FD9, R.drawable.msg_retry, "Refresh Live Health Checks", "Probe Worker, D1, R2, Firebase & jobs", null));
+            items.add(SettingsActivity.SettingCell.Factory.of(ID_AI_HEALTH, 0xFF9C27B0, 0xFF6A1B9A, R.drawable.msg_stats, "Run AI Provider Health Probe", "Check live Gemini generation connectivity", null));
+            items.add(SettingsActivity.SettingCell.Factory.of(ID_FAILED_JOBS, 0xFFFF9800, 0xFFEF6C00, R.drawable.msg_list, "Generation Jobs & Retry", "Inspect failed or queued AI generation jobs", generationJobs.size() + " jobs"));
             for (int i = 0; i < serviceStatuses.size(); i++) {
                 EveAdminModels.SystemServiceStatus s = serviceStatuses.get(i);
-                items.add(UItem.asButton(BASE_SERVICE_ID + i, s.name.toUpperCase(Locale.US) + ": " + s.status, s.detail));
+                items.add(SettingsActivity.SettingCell.Factory.of(BASE_SERVICE_ID + i, 0, 0, 0, s.name.toUpperCase(Locale.US), s.detail, s.status));
             }
             items.add(UItem.asShadow(null));
         }

@@ -1410,10 +1410,21 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
 
         @Override
         protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-            super.onMeasure(
-                MeasureSpec.makeMeasureSpec(MeasureSpec.getSize(widthMeasureSpec), MeasureSpec.EXACTLY),
-                MeasureSpec.makeMeasureSpec(dp(mini ? 44 : twoLines ? 60 : 50), MeasureSpec.EXACTLY)
-            );
+            int exactWidth = MeasureSpec.makeMeasureSpec(MeasureSpec.getSize(widthMeasureSpec), MeasureSpec.EXACTLY);
+            if (twoLines) {
+                super.onMeasure(exactWidth, MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED));
+                int minHeight = dp(mini ? 52 : 60);
+                int desiredHeight = getMeasuredHeight() + dp(mini ? 12 : 16);
+                super.onMeasure(
+                    exactWidth,
+                    MeasureSpec.makeMeasureSpec(Math.max(minHeight, desiredHeight), MeasureSpec.EXACTLY)
+                );
+            } else {
+                super.onMeasure(
+                    exactWidth,
+                    MeasureSpec.makeMeasureSpec(dp(mini ? 44 : 50), MeasureSpec.EXACTLY)
+                );
+            }
         }
 
         public static class Background extends Drawable {

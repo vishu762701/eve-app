@@ -20,10 +20,12 @@ import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.UItem;
 import org.telegram.ui.Components.UniversalAdapter;
 import org.telegram.ui.Components.UniversalRecyclerView;
+import org.telegram.ui.SettingsActivity;
 import org.telegram.ui.eve.exams.EveExamModels;
 import org.telegram.ui.eve.exams.EveExamTestsFragment;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 
@@ -43,7 +45,8 @@ public class EveAdminExamsFragment extends BaseFragment {
     private UniversalRecyclerView listView;
     private boolean loading = true;
     private String errorText = "";
-    private EveAdminModels.DashboardSnapshot snapshot;
+    private List<EveAdminModels.AdminExamItem> exams = Collections.emptyList();
+    private List<EveAdminModels.AdminGeneratedTestItem> generatedTests = Collections.emptyList();
 
     @Override
     public boolean onFragmentCreate() {
@@ -71,6 +74,12 @@ public class EveAdminExamsFragment extends BaseFragment {
             }
         });
 
+        EveAdminModels.DashboardSnapshot cached = repo.getCachedSnapshot();
+        if (cached != null) {
+            exams = cached.exams;
+            generatedTests = cached.generatedTests;
+        }
+
         FrameLayout root = new FrameLayout(context);
         root.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundGray));
         listView = new UniversalRecyclerView(this, this::fillItems, this::onClick, null);
@@ -84,11 +93,14 @@ public class EveAdminExamsFragment extends BaseFragment {
         loading = true;
         errorText = "";
         updateList();
-        repo.loadDashboardAsync(new EveAdminRepository.ResultCallback<EveAdminModels.DashboardSnapshot>() {
+        repo.loadExamsCatalogAsync(new EveAdminRepository.ResultCallback<EveAdminRepository.ExamsCatalogData>() {
             @Override
-            public void onSuccess(EveAdminModels.DashboardSnapshot data) {
+            public void onSuccess(EveAdminRepository.ExamsCatalogData data) {
                 loading = false;
-                snapshot = data;
+                if (data != null) {
+                    exams = data.exams;
+                    generatedTests = data.generatedTests;
+                }
                 updateList();
             }
 
@@ -109,41 +121,43 @@ public class EveAdminExamsFragment extends BaseFragment {
 
     private void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
         items.add(UItem.asHeader("Exam Operations"));
-        items.add(UItem.asButton(ID_CREATE, "Create New Exam"));
-        items.add(UItem.asButton(ID_MANAGE_TESTS, "Manage Generated Tests & Schedule",
-                snapshot != null ? snapshot.generatedTests.size() + " tests" : ""));
+        items.add(SettingsActivity.SettingCell.Factory.of(
+                ID_CREATE, 0xFF4CAF50, 0xFF2E7D32, R.drawable.msg_add,
+                "Create New Exam", "Add subject, timer, questions & publish status", null));
+        items.add(SettingsActivity.SettingCell.Factory.of(
+                ID_MANAGE_TESTS, 0xFF3D8BEB, 0xFF2A6FD9, R.drawable.msg_list,
+                "Manage Generated Tests & Schedule",
+                "Inspect, schedule, publish, pause or delete mock tests",
+                generatedTests.size() + " tests"));
         if (!errorText.isEmpty()) {
             items.add(UItem.asShadow("Error: " + errorText));
-        } else if (loading && snapshot == null) {
+        } else if (loading && exams.isEmpty()) {
             items.add(UItem.asShadow("Loading exams from D1..."));
         } else {
             items.add(UItem.asShadow("Tap any exam below to Edit, Duplicate, Preview, Publish/Pause/Archive, manage Syllabus, or Delete."));
         }
 
-        if (snapshot != null) {
-            items.add(UItem.asHeader("Exam Catalog (" + snapshot.exams.size() + ")"));
-            for (int i = 0; i < snapshot.exams.size(); i++) {
-                EveAdminModels.AdminExamItem exam = snapshot.exams.get(i);
-                String statusLabel = exam.isArchived() ? "Archived" : (exam.isPaused() ? "Paused" : "Live");
-                String syllabusTag = !exam.syllabusFileName.isEmpty() ? " • PDF: " + exam.syllabusFileName : "";
-                String sub = String.format(Locale.US, "%s • %d min • %d Qs • %s%s",
-                        exam.category, exam.timeLimitMinutes, exam.questionCount, statusLabel, syllabusTag);
-                items.add(UItem.asButton(BASE_EXAM_ID + i, exam.examName, sub));
-            }
-            items.add(UItem.asShadow(null));
+        items.add(UItem.asHeader("Exam Catalog (" + exams.size() + ")"));
+        for (int i = 0; i < exams.size(); i++) {
+            EveAdminModels.AdminExamItem exam = exams.get(i);
+            String statusLabel = exam.isArchived() ? "Archived" : (exam.isPaused() ? "Paused" : "Live");
+            String syllabusTag = !exam.syllabusFileName.isEmpty() ? " • PDF: " + exam.syllabusFileName : "";
+            String sub = String.format(Locale.US, "%s • %d min • %d Qs%s",
+                    exam.category, exam.timeLimitMinutes, exam.questionCount, syllabusTag);
+            items.add(SettingsActivity.SettingCell.Factory.of(BASE_EXAM_ID + i, 0, 0, 0, exam.examName, sub, statusLabel));
         }
+        items.add(UItem.asShadow(null));
     }
 
     private void onClick(UItem item, View view, int position, float x, float y) {
         if (item.id == ID_CREATE) {
             EveAdminDialogs.showCreateOrEditExamDialog(this, repo, null, this::reload);
         } else if (item.id == ID_MANAGE_TESTS) {
-            List<EveAdminModels.AdminGeneratedTestItem> tests = snapshot != null ? snapshot.generatedTests : new ArrayList<>();
-            EveAdminDialogs.showGeneratedTestsManager(this, repo, tests, this::reload);
-        } else if (item.id >= BASE_EXAM_ID && snapshot != null) {
+            EveAdminDialogs.showGeneratedTestsManager(this, repo, new ArrayList<>(generatedTests), this::reload);
+        } else if (item.id >= BASE_EXAM_ID) {
             int idx = item.id - BASE_EXAM_ID;
-            if (idx >= 0 && idx < snapshot.exams.size()) {
-                showExamActions(snapshot.exams.get(idx));
+            if (idx >= 0 && idx < exams.size()) {
+                showExamActions(exams.get(idx));
             }
         }
     }
@@ -204,10 +218,11 @@ public class EveAdminExamsFragment extends BaseFragment {
     }
 
     private void updateExamPublishMode(EveAdminModels.AdminExamItem exam, String mode) {
-        repo.runWithAdminToken(new EveAdminRepository.ResultCallback<Void>() {
+        EveAdminRepository.ResultCallback<String> cb = new EveAdminRepository.ResultCallback<String>() {
             @Override
-            public void onSuccess(Void data) {
-                BulletinFactory.of(EveAdminExamsFragment.this).createSimpleBulletin(R.raw.contact_check, "Exam updated to " + mode).show();
+            public void onSuccess(String msg) {
+                repo.invalidateCache();
+                BulletinFactory.of(EveAdminExamsFragment.this).createSimpleBulletin(R.raw.contact_check, msg).show();
                 reload();
             }
 
@@ -215,20 +230,11 @@ public class EveAdminExamsFragment extends BaseFragment {
             public void onError(String message, int httpStatus) {
                 BulletinFactory.of(EveAdminExamsFragment.this).createErrorBulletin(message).show();
             }
-        }, token -> {
+        };
+        repo.runWithAdminToken(cb, token -> {
             repo.updateExam(token, exam.id, exam.examName, exam.category, exam.timeLimitMinutes,
                     exam.questionCount, exam.negativeMarkingText, mode);
-            repo.postSuccess(new EveAdminRepository.ResultCallback<Void>() {
-                @Override
-                public void onSuccess(Void data) {
-                    BulletinFactory.of(EveAdminExamsFragment.this).createSimpleBulletin(R.raw.contact_check, "Exam set to " + mode).show();
-                    reload();
-                }
-
-                @Override
-                public void onError(String message, int httpStatus) {
-                }
-            }, null);
+            repo.postSuccess(cb, "Exam set to " + mode);
         });
     }
 
@@ -260,13 +266,13 @@ public class EveAdminExamsFragment extends BaseFragment {
     }
 
     private void promptReassignSyllabus(EveAdminModels.AdminExamItem sourceExam) {
-        if (snapshot == null || snapshot.exams.size() < 2) {
+        if (exams.size() < 2) {
             BulletinFactory.of(this).createErrorBulletin("Need at least two exams to reassign syllabus.").show();
             return;
         }
         List<EveAdminModels.AdminExamItem> targets = new ArrayList<>();
         List<String> labels = new ArrayList<>();
-        for (EveAdminModels.AdminExamItem e : snapshot.exams) {
+        for (EveAdminModels.AdminExamItem e : exams) {
             if (!e.id.equals(sourceExam.id)) {
                 targets.add(e);
                 labels.add(e.examName);

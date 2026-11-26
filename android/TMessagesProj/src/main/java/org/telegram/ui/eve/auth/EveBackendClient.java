@@ -512,10 +512,11 @@ public final class EveBackendClient {
                 InputStream stream = code >= 400 ? conn.getErrorStream() : conn.getInputStream();
                 String body = readStream(stream);
                 return new HttpResponse(code, body);
-            } finally {
+            } catch (IOException e) {
                 if (conn != null) {
                     conn.disconnect();
                 }
+                throw e;
             }
         }
 

@@ -15,10 +15,12 @@ import org.telegram.ui.eve.auth.EveBackendClient;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 /**
  * Authoritative EVE Admin Control Center repository backed by Cloudflare Worker + D1.
@@ -35,8 +37,10 @@ public final class EveAdminRepository {
     private static volatile EveAdminRepository instance;
 
     private final EveBackendClient client;
-    private final ExecutorService executor = Executors.newCachedThreadPool();
+    private final ExecutorService executor = Executors.newFixedThreadPool(6);
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private volatile EveAdminModels.DashboardSnapshot cachedSnapshot;
+    private volatile long cachedSnapshotAtMs;
 
     public static EveAdminRepository getInstance() {
         EveAdminRepository current = instance;
@@ -56,18 +60,126 @@ public final class EveAdminRepository {
         this.client = client != null ? client : new EveBackendClient();
     }
 
+    public EveAdminModels.DashboardSnapshot getCachedSnapshot() {
+        return cachedSnapshot;
+    }
+
+    public long getCachedSnapshotAtMs() {
+        return cachedSnapshotAtMs;
+    }
+
+    public void invalidateCache() {
+        cachedSnapshot = null;
+        cachedSnapshotAtMs = 0L;
+    }
+
+    public static final class ExamsCatalogData {
+        public final List<EveAdminModels.AdminExamItem> exams;
+        public final List<EveAdminModels.AdminGeneratedTestItem> generatedTests;
+
+        public ExamsCatalogData(List<EveAdminModels.AdminExamItem> exams, List<EveAdminModels.AdminGeneratedTestItem> generatedTests) {
+            this.exams = exams != null ? exams : Collections.emptyList();
+            this.generatedTests = generatedTests != null ? generatedTests : Collections.emptyList();
+        }
+    }
+
+    public static final class InsightsBundle {
+        public final EveAdminModels.AppConfigModel appConfig;
+        public final List<EveAdminModels.SystemServiceStatus> serviceStatuses;
+        public final List<EveAdminModels.GenerationJobItem> generationJobs;
+
+        public InsightsBundle(
+                EveAdminModels.AppConfigModel appConfig,
+                List<EveAdminModels.SystemServiceStatus> serviceStatuses,
+                List<EveAdminModels.GenerationJobItem> generationJobs) {
+            this.appConfig = appConfig;
+            this.serviceStatuses = serviceStatuses != null ? serviceStatuses : Collections.emptyList();
+            this.generationJobs = generationJobs != null ? generationJobs : Collections.emptyList();
+        }
+    }
+
+    public void loadExamsCatalogAsync(ResultCallback<ExamsCatalogData> callback) {
+        withAdminToken(callback, token -> {
+            Future<List<EveAdminModels.AdminExamItem>> examsFuture = executor.submit(() ->
+                    EveAdminModels.AdminExamItem.parseList(client.fetchExamsJson(token)));
+            Future<List<EveAdminModels.AdminGeneratedTestItem>> testsFuture = executor.submit(() ->
+                    EveAdminModels.AdminGeneratedTestItem.parseList(client.fetchGeneratedTestsJson(token, null)));
+            try {
+                ExamsCatalogData result = new ExamsCatalogData(examsFuture.get(), testsFuture.get());
+                postSuccess(callback, result);
+            } catch (Exception ex) {
+                throw unwrapBackendException(ex, "/api/exams");
+            }
+        });
+    }
+
+    public void loadInsightsOverviewAsync(EveAdminModels.AdminProfile profile, ResultCallback<InsightsBundle> callback) {
+        withAdminToken(callback, token -> {
+            Future<EveAdminModels.AppConfigModel> cfgFuture = executor.submit(() -> {
+                try {
+                    return fetchAppConfig(token);
+                } catch (Throwable ignored) {
+                    return null;
+                }
+            });
+            Future<List<EveAdminModels.SystemServiceStatus>> healthFuture = executor.submit(() -> {
+                if (!EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_VIEW_ANALYTICS_LOGS)) {
+                    return Collections.emptyList();
+                }
+                try {
+                    return fetchSystemHealth(token);
+                } catch (Throwable ignored) {
+                    return Collections.emptyList();
+                }
+            });
+            Future<List<EveAdminModels.GenerationJobItem>> jobsFuture = executor.submit(() -> {
+                if (!EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_VIEW_ANALYTICS_LOGS)) {
+                    return Collections.emptyList();
+                }
+                try {
+                    return fetchFailedJobs(token);
+                } catch (Throwable ignored) {
+                    return Collections.emptyList();
+                }
+            });
+            try {
+                postSuccess(callback, new InsightsBundle(cfgFuture.get(), healthFuture.get(), jobsFuture.get()));
+            } catch (Exception ex) {
+                throw unwrapBackendException(ex, "/api/admin/system/health");
+            }
+        });
+    }
+
     public void loadDashboardAsync(ResultCallback<EveAdminModels.DashboardSnapshot> callback) {
         withAdminToken(callback, token -> {
             EveAdminModels.DashboardSnapshot snapshot = loadDashboardSnapshot(token);
+            cachedSnapshot = snapshot;
+            cachedSnapshotAtMs = System.currentTimeMillis();
             postSuccess(callback, snapshot);
         });
     }
 
     public EveAdminModels.DashboardSnapshot loadDashboardSnapshot(String token) throws EveBackendClient.BackendException {
-        JSONObject meRoot = client.getJsonRoot("/api/admin/me", token);
-        EveAdminModels.AdminProfile profile = EveAdminModels.AdminProfile.fromJson(meRoot.optJSONObject("data"));
+        Future<EveAdminModels.AdminProfile> meFuture = executor.submit(() -> {
+            JSONObject meRoot = client.getJsonRoot("/api/admin/me", token);
+            return EveAdminModels.AdminProfile.fromJson(meRoot.optJSONObject("data"));
+        });
+        Future<List<EveAdminModels.AdminExamItem>> examsFuture = executor.submit(() ->
+                EveAdminModels.AdminExamItem.parseList(client.fetchExamsJson(token)));
+        Future<List<EveAdminModels.AdminGeneratedTestItem>> testsFuture = executor.submit(() ->
+                EveAdminModels.AdminGeneratedTestItem.parseList(client.fetchGeneratedTestsJson(token, null)));
 
-        List<EveAdminModels.AdminExamItem> exams = EveAdminModels.AdminExamItem.parseList(client.fetchExamsJson(token));
+        final EveAdminModels.AdminProfile profile;
+        final List<EveAdminModels.AdminExamItem> exams;
+        final List<EveAdminModels.AdminGeneratedTestItem> tests;
+        try {
+            profile = meFuture.get();
+            exams = examsFuture.get();
+            tests = testsFuture.get();
+        } catch (Exception ex) {
+            throw unwrapBackendException(ex, "/api/admin/me");
+        }
+
         int publishedExams = 0;
         int draftExams = 0;
         for (EveAdminModels.AdminExamItem exam : exams) {
@@ -78,7 +190,6 @@ public final class EveAdminRepository {
             }
         }
 
-        List<EveAdminModels.AdminGeneratedTestItem> tests = EveAdminModels.AdminGeneratedTestItem.parseList(client.fetchGeneratedTestsJson(token, null));
         int liveTests = 0;
         int draftTests = 0;
         for (EveAdminModels.AdminGeneratedTestItem test : tests) {
@@ -89,22 +200,78 @@ public final class EveAdminRepository {
             }
         }
 
+        Future<JSONObject> userStatsFuture = executor.submit(() -> {
+            if (!EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_USERS)) {
+                return null;
+            }
+            return client.getJsonRoot("/api/admin/stats/users", token).optJSONObject("data");
+        });
+        Future<JSONArray> examAnalyticsFuture = executor.submit(() -> {
+            if (!EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_VIEW_ANALYTICS_LOGS)) {
+                return null;
+            }
+            return client.getJsonRoot("/api/admin/analytics/exams", token).optJSONArray("data");
+        });
+        Future<List<EveAdminModels.AuditLogEntry>> logsFuture = executor.submit(() -> {
+            if (!EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_VIEW_ANALYTICS_LOGS)) {
+                return new ArrayList<>();
+            }
+            JSONArray logs = client.getJsonRoot("/api/admin/audit-log?limit=15", token).optJSONArray("data");
+            return EveAdminModels.AuditLogEntry.parseList(logs);
+        });
+        Future<List<EveAdminModels.PaymentTransactionItem>> txFuture = executor.submit(() -> {
+            if (!EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_PREMIUM)) {
+                return Collections.emptyList();
+            }
+            return fetchTransactions(token, 100);
+        });
+        Future<Integer> premiumCountFuture = executor.submit(() -> {
+            if (!EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_PREMIUM)) {
+                return 0;
+            }
+            try {
+                return fetchPremiumUsers(token).size();
+            } catch (Throwable ignored) {
+                return 0;
+            }
+        });
+        Future<Integer> pendingReportsFuture = executor.submit(() -> {
+            if (!EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MODERATE_FEEDBACK)) {
+                return 0;
+            }
+            try {
+                int count = 0;
+                for (EveAdminModels.QuestionReportItem r : fetchReports(token, null)) {
+                    if ("pending".equalsIgnoreCase(r.status)) {
+                        count++;
+                    }
+                }
+                return count;
+            } catch (Throwable ignored) {
+                return 0;
+            }
+        });
+
         int totalStudents = 0;
         int activeStudents = 0;
-        if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_USERS)) {
-            JSONObject userStats = client.getJsonRoot("/api/admin/stats/users", token).optJSONObject("data");
-            if (userStats != null) {
-                totalStudents = userStats.optInt("totalUsers", 0);
-                activeStudents = userStats.optInt("onlineUsers", 0);
-            }
-        }
-
         int totalAttempts = 0;
         double scoreSum = 0.0;
         int scoreCount = 0;
         List<EveAdminModels.AuditLogEntry> recentActions = new ArrayList<>();
-        if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_VIEW_ANALYTICS_LOGS)) {
-            JSONArray examAnalytics = client.getJsonRoot("/api/admin/analytics/exams", token).optJSONArray("data");
+        int totalTransactions = 0;
+        int paidTransactions = 0;
+        int pendingTransactions = 0;
+        long totalRevenueInr = 0;
+        int activePremiumUsers = 0;
+        int pendingReports = 0;
+
+        try {
+            JSONObject userStats = userStatsFuture.get();
+            if (userStats != null) {
+                totalStudents = userStats.optInt("totalUsers", 0);
+                activeStudents = userStats.optInt("onlineUsers", 0);
+            }
+            JSONArray examAnalytics = examAnalyticsFuture.get();
             if (examAnalytics != null) {
                 for (int i = 0; i < examAnalytics.length(); i++) {
                     JSONObject row = examAnalytics.optJSONObject(i);
@@ -118,18 +285,8 @@ public final class EveAdminRepository {
                     }
                 }
             }
-            JSONArray logs = client.getJsonRoot("/api/admin/audit-log?limit=15", token).optJSONArray("data");
-            recentActions = EveAdminModels.AuditLogEntry.parseList(logs);
-        }
-        double averageScorePct = scoreCount > 0 ? (scoreSum / scoreCount) : 0.0;
-
-        int totalTransactions = 0;
-        int paidTransactions = 0;
-        int pendingTransactions = 0;
-        long totalRevenueInr = 0;
-        int activePremiumUsers = 0;
-        if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_PREMIUM)) {
-            List<EveAdminModels.PaymentTransactionItem> txList = fetchTransactions(token, 100);
+            recentActions = logsFuture.get();
+            List<EveAdminModels.PaymentTransactionItem> txList = txFuture.get();
             totalTransactions = txList.size();
             for (EveAdminModels.PaymentTransactionItem tx : txList) {
                 if ("PAID".equalsIgnoreCase(tx.status)) {
@@ -139,23 +296,12 @@ public final class EveAdminRepository {
                     pendingTransactions++;
                 }
             }
-            try {
-                activePremiumUsers = fetchPremiumUsers(token).size();
-            } catch (Throwable ignored) {
-            }
+            activePremiumUsers = premiumCountFuture.get();
+            pendingReports = pendingReportsFuture.get();
+        } catch (Exception ex) {
+            throw unwrapBackendException(ex, "/api/admin/dashboard");
         }
-
-        int pendingReports = 0;
-        if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MODERATE_FEEDBACK)) {
-            try {
-                for (EveAdminModels.QuestionReportItem r : fetchReports(token, null)) {
-                    if ("pending".equalsIgnoreCase(r.status)) {
-                        pendingReports++;
-                    }
-                }
-            } catch (Throwable ignored) {
-            }
-        }
+        double averageScorePct = scoreCount > 0 ? (scoreSum / scoreCount) : 0.0;
 
         return new EveAdminModels.DashboardSnapshot(
                 profile,
@@ -179,6 +325,23 @@ public final class EveAdminRepository {
                 exams,
                 tests,
                 recentActions
+        );
+    }
+
+    private static EveBackendClient.BackendException unwrapBackendException(Throwable t, String fallbackEndpoint) {
+        Throwable cur = t;
+        while (cur != null) {
+            if (cur instanceof EveBackendClient.BackendException) {
+                return (EveBackendClient.BackendException) cur;
+            }
+            cur = cur.getCause();
+        }
+        return new EveBackendClient.BackendException(
+                500,
+                fallbackEndpoint,
+                "ADMIN_LOAD_FAILED",
+                EveBackendClient.ErrorKind.D1_OR_SERVER_ERROR,
+                t != null && t.getMessage() != null ? t.getMessage() : "Unable to load admin data."
         );
     }
 
@@ -748,8 +911,12 @@ public final class EveAdminRepository {
                 postError(callback, "Sign in with a verified EVE administrator account to access the Admin Control Center.", 401);
                 return;
             }
-            user.getIdToken(true).addOnCompleteListener(task -> {
+            user.getIdToken(!allowRetryOn401).addOnCompleteListener(task -> {
                 if (!task.isSuccessful() || task.getResult() == null || task.getResult().getToken() == null) {
+                    if (allowRetryOn401) {
+                        withAdminTokenInternal(callback, work, false);
+                        return;
+                    }
                     postError(callback, "Unable to refresh Firebase admin credentials. Sign in again.", 401);
                     return;
                 }

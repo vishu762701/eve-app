@@ -142,4 +142,24 @@ public class EveAdminControlCenterTest {
         repo.addAdmin("admin-jwt", "co@example.com", Arrays.asList("manage_exams", "manage_questions"), "Co-Admin");
         assertTrue(recordedRequests.containsKey("POST https://eve-backend.anyqueairdrop.workers.dev/api/admin/admins"));
     }
+
+    @Test
+    public void parallelDashboardSnapshot_propagatesUnauthorizedAndManagesCache() {
+        EveBackendClient failingClient = new EveBackendClient("https://eve-backend.anyqueairdrop.workers.dev", (method, url, token, body) -> {
+            if (url.endsWith("/api/admin/me")) {
+                return new EveBackendClient.HttpResponse(401, "{\"success\":false,\"error\":\"Token expired\",\"code\":\"AUTH_REQUIRED\"}");
+            }
+            return new EveBackendClient.HttpResponse(200, "{\"success\":true,\"data\":[]}");
+        });
+        EveAdminRepository repo = new EveAdminRepository(failingClient);
+        try {
+            repo.loadDashboardSnapshot("expired-jwt");
+            org.junit.Assert.fail("Expected BackendException for 401 /api/admin/me");
+        } catch (EveBackendClient.BackendException expected) {
+            assertTrue(expected.unauthorized);
+            assertEquals(401, expected.httpStatus);
+        }
+        repo.invalidateCache();
+        assertEquals(0L, repo.getCachedSnapshotAtMs());
+    }
 }

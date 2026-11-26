@@ -286,6 +286,9 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         blur3_updateColors();
         checkContactsTabBadge();
         checkUnreadCount(true);
+        if (tabs != null && tabs[INDEX_PROFILE] != null) {
+            tabs[INDEX_PROFILE].updateUserAvatar(currentAccount);
+        }
 
         showAccountChangeHint();
     }
@@ -391,6 +394,9 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
 
         updateLayout();
         checkUnreadCount(false);
+        if (tabs != null && tabs[INDEX_PROFILE] != null) {
+            tabs[INDEX_PROFILE].updateUserAvatar(currentAccount);
+        }
         return contentView;
     }
 
@@ -1181,10 +1187,18 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         }
     }
 
+    private int lastFadeColor;
+    private boolean hasFadeColor;
+
     private void blur3_updateFadeColors() {
-        iBlur3SourceColor.setColor(getEstBackgroundColor());
-        if (fadeView != null) {
-            fadeView.invalidate();
+        final int color = getEstBackgroundColor();
+        if (!hasFadeColor || lastFadeColor != color) {
+            lastFadeColor = color;
+            hasFadeColor = true;
+            iBlur3SourceColor.setColor(color);
+            if (fadeView != null) {
+                fadeView.invalidate();
+            }
         }
     }
 

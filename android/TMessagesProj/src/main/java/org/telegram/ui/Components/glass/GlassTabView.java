@@ -430,11 +430,22 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
 
     public static GlassTabView createAvatar(Context context, Theme.ResourcesProvider resourcesProvider, int currentAccount, @StringRes int stringRes) {
         GlassTabView tab = new GlassTabView(context);
+        tab.resourcesProvider = resourcesProvider;
         tab.textView.setText(LocaleController.getString(stringRes));
         tab.imageView.setVisibility(GONE);
 
-        TLRPC.User user = MessagesController.getInstance(currentAccount).getUser(UserConfig.getInstance(currentAccount).getClientUserId());
-        AvatarDrawable avatarDrawable = new AvatarDrawable(user);
+        long uid = org.telegram.ui.eve.auth.EveAuthManager.getInstance().ensureLocalUiUser(currentAccount);
+        TLRPC.User user = uid != 0 ? MessagesController.getInstance(currentAccount).getUser(uid) : null;
+        AvatarDrawable avatarDrawable = new AvatarDrawable(resourcesProvider);
+        if (user != null) {
+            avatarDrawable.setInfo(currentAccount, user);
+        } else {
+            org.telegram.ui.eve.auth.EveUserProfile cached = org.telegram.ui.eve.auth.EveAuthManager.getInstance().getCachedProfile();
+            String label = cached != null && cached.displayName != null && !cached.displayName.trim().isEmpty()
+                    ? cached.displayName.trim() : "EVE";
+            avatarDrawable.setInfo(5, label, null);
+        }
+        tab.avatarDrawable = avatarDrawable;
 
         BackupImageView backupImageView = new BackupImageView(context);
         backupImageView.setForUserOrChat(user, avatarDrawable);
@@ -450,10 +461,24 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
     }
 
     public void updateUserAvatar(int currentAccount) {
+        if (backupImageView == null) {
+            return;
+        }
         long uid = org.telegram.ui.eve.auth.EveAuthManager.getInstance().ensureLocalUiUser(currentAccount);
         TLRPC.User user = uid != 0 ? MessagesController.getInstance(currentAccount).getUser(uid) : null;
-        AvatarDrawable avatarDrawable = new AvatarDrawable(user);
+        if (avatarDrawable == null) {
+            avatarDrawable = new AvatarDrawable(resourcesProvider);
+        }
+        if (user != null) {
+            avatarDrawable.setInfo(currentAccount, user);
+        } else {
+            org.telegram.ui.eve.auth.EveUserProfile cached = org.telegram.ui.eve.auth.EveAuthManager.getInstance().getCachedProfile();
+            String label = cached != null && cached.displayName != null && !cached.displayName.trim().isEmpty()
+                    ? cached.displayName.trim() : "EVE";
+            avatarDrawable.setInfo(5, label, null);
+        }
         backupImageView.setForUserOrChat(user, avatarDrawable);
+        backupImageView.invalidate();
     }
 
     public static GlassTabView createAttachTab(Context context, Theme.ResourcesProvider resourcesProvider) {

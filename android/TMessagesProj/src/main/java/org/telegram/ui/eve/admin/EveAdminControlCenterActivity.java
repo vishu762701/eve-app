@@ -19,6 +19,7 @@ import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.UItem;
 import org.telegram.ui.Components.UniversalAdapter;
 import org.telegram.ui.Components.UniversalRecyclerView;
+import org.telegram.ui.SettingsActivity;
 import org.telegram.ui.eve.auth.EveAuthCoordinator;
 import org.telegram.ui.eve.auth.EveAuthManager;
 import org.telegram.ui.eve.auth.EveUserProfile;
@@ -91,12 +92,26 @@ public class EveAdminControlCenterActivity extends BaseFragment {
 
         FrameLayout frameLayout = new FrameLayout(context);
         frameLayout.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundGray));
+        snapshot = repo.getCachedSnapshot();
+        if (snapshot != null && snapshot.adminProfile != null) {
+            actionBar.setSubtitle(snapshot.adminProfile.customTitle + " • " + snapshot.adminProfile.email);
+        }
         listView = new UniversalRecyclerView(this, this::fillItems, this::onClick, null);
         frameLayout.addView(listView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
         fragmentView = frameLayout;
 
         refreshDashboard();
         return frameLayout;
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        EveAdminModels.DashboardSnapshot latestCached = repo.getCachedSnapshot();
+        if (latestCached != null && latestCached != snapshot) {
+            snapshot = latestCached;
+            updateList();
+        }
     }
 
     private void refreshDashboard() {
@@ -137,13 +152,29 @@ public class EveAdminControlCenterActivity extends BaseFragment {
         String accountLabel = cached != null && !cached.email.isEmpty() ? cached.email : "Not signed in";
 
         items.add(UItem.asHeader("Admin Session & Server Authorization"));
-        items.add(UItem.asButton(ID_ADMIN_REFRESH,
-                loading ? "Syncing Dashboard Metrics..." : "Refresh Dashboard from EVE Cloud",
-                snapshot != null && snapshot.adminProfile != null
-                        ? snapshot.adminProfile.customTitle + " (" + snapshot.adminProfile.rights.size() + " rights)"
-                        : accountLabel));
-        if (snapshot == null || lastHttpStatus == 401 || lastHttpStatus == 403 || cached == null) {
-            items.add(UItem.asButton(ID_ADMIN_SIGN_IN, "Sign In with EVE Google Admin Account", accountLabel));
+        String sessionSubtitle;
+        String sessionBadge = null;
+        if (loading && snapshot == null) {
+            sessionSubtitle = "Syncing live dashboard metrics for " + accountLabel + "...";
+        } else if (snapshot != null && snapshot.adminProfile != null) {
+            sessionSubtitle = (loading ? "Refreshing • " : "Verified • ") + snapshot.adminProfile.email;
+            sessionBadge = snapshot.adminProfile.customTitle + " (" + snapshot.adminProfile.rights.size() + ")";
+        } else {
+            sessionSubtitle = accountLabel;
+        }
+        items.add(SettingsActivity.SettingCell.Factory.of(
+                ID_ADMIN_REFRESH,
+                0xFF3D8BEB, 0xFF2A6FD9, R.drawable.msg_retry,
+                loading ? "Syncing Admin Dashboard..." : "Refresh Dashboard",
+                sessionSubtitle,
+                sessionBadge));
+        if (lastHttpStatus == 401 || lastHttpStatus == 403 || cached == null) {
+            items.add(SettingsActivity.SettingCell.Factory.of(
+                    ID_ADMIN_SIGN_IN,
+                    0xFF56C35A, 0xFF2FA138, R.drawable.settings_account,
+                    "Sign In with EVE Google Admin Account",
+                    accountLabel,
+                    null));
         }
         if (!loadError.isEmpty()) {
             items.add(UItem.asShadow("Status (" + (lastHttpStatus > 0 ? "HTTP " + lastHttpStatus : "Offline") + "): " + loadError));
@@ -158,19 +189,33 @@ public class EveAdminControlCenterActivity extends BaseFragment {
 
         // A. DASHBOARD OVERVIEW
         items.add(UItem.asHeader("A. Dashboard Overview"));
-        items.add(UItem.asButton(ID_MOD_STUDENTS, "Students",
-                snapshot.totalStudents + " registered • " + snapshot.activeStudents + " active"));
-        items.add(UItem.asButton(ID_MOD_EXAMS, "Exams & Tests",
+        items.add(SettingsActivity.SettingCell.Factory.of(
+                ID_MOD_STUDENTS, 0, 0, 0,
+                "Students",
+                snapshot.totalStudents + " registered • " + snapshot.activeStudents + " active",
+                String.valueOf(snapshot.totalStudents)));
+        items.add(SettingsActivity.SettingCell.Factory.of(
+                ID_MOD_EXAMS, 0, 0, 0,
+                "Exams & Mock Tests",
                 snapshot.publishedExams + "/" + snapshot.totalExams + " live exams • "
-                        + snapshot.liveTests + "/" + snapshot.totalTests + " live tests"));
-        items.add(UItem.asButton(ID_MOD_INSIGHTS_SYSTEM, "Attempts & Average Score",
-                snapshot.completedAttempts + " attempts • avg " + String.format(Locale.US, "%.1f", snapshot.averageScorePct)));
-        items.add(UItem.asButton(ID_MOD_PAYMENTS, "Revenue & Pending Payments",
-                "₹" + snapshot.totalRevenueInr + " • " + snapshot.paidTransactions + " paid • "
-                        + snapshot.pendingTransactions + " pending • " + snapshot.activePremiumUsers + " premium"));
+                        + snapshot.liveTests + "/" + snapshot.totalTests + " live tests",
+                snapshot.publishedExams + "/" + snapshot.totalExams));
+        items.add(SettingsActivity.SettingCell.Factory.of(
+                ID_MOD_INSIGHTS_SYSTEM, 0, 0, 0,
+                "Attempts & Average Score",
+                snapshot.completedAttempts + " completed • Avg " + String.format(Locale.US, "%.1f", snapshot.averageScorePct),
+                String.valueOf(snapshot.completedAttempts)));
+        items.add(SettingsActivity.SettingCell.Factory.of(
+                ID_MOD_PAYMENTS, 0, 0, 0,
+                "Revenue & Pending Payments",
+                snapshot.paidTransactions + " paid • " + snapshot.pendingTransactions + " pending • " + snapshot.activePremiumUsers + " premium",
+                "₹" + snapshot.totalRevenueInr));
         if (snapshot.pendingReports > 0) {
-            items.add(UItem.asButton(ID_MOD_CONTENT_COMMS, "Pending Moderation Alerts",
-                    snapshot.pendingReports + " flagged question reports awaiting review"));
+            items.add(SettingsActivity.SettingCell.Factory.of(
+                    ID_MOD_CONTENT_COMMS, 0, 0, 0,
+                    "Pending Moderation Alerts",
+                    snapshot.pendingReports + " flagged question reports awaiting review",
+                    String.valueOf(snapshot.pendingReports)));
         }
         items.add(UItem.asShadow(buildRecentActionsSummary(snapshot.recentActions)));
 
@@ -182,16 +227,28 @@ public class EveAdminControlCenterActivity extends BaseFragment {
             items.add(UItem.asHeader("B & C. Exams, Syllabus & Question Bank"));
             if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_EXAMS)
                     || EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_SYLLABUS)) {
-                items.add(UItem.asButton(ID_MOD_EXAMS, "Exam & Syllabus Manager",
-                        "Create, edit, duplicate, preview, publish/pause/archive, syllabus & delete"));
+                items.add(SettingsActivity.SettingCell.Factory.of(
+                        ID_MOD_EXAMS,
+                        0xFFFF9800, 0xFFEF6C00, R.drawable.msg_list,
+                        "Exam & Syllabus Manager",
+                        "Edit, duplicate, preview, publish, pause, archive & syllabus",
+                        snapshot.totalExams + " exams"));
             }
             if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_GENERATED_TESTS)) {
-                items.add(UItem.asButton(ID_MOD_GENERATE_TEST, "Generate AI Mock Test Now",
-                        snapshot.generatedTests.size() + " generated tests"));
+                items.add(SettingsActivity.SettingCell.Factory.of(
+                        ID_MOD_GENERATE_TEST,
+                        0xFF9C27B0, 0xFF6A1B9A, R.drawable.msg_add,
+                        "Generate AI Mock Test",
+                        "Create & schedule new mock test sets",
+                        snapshot.generatedTests.size() + " tests"));
             }
             if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_QUESTIONS)) {
-                items.add(UItem.asButton(ID_MOD_QUESTIONS, "Question Bank & Bulk JSON Import",
-                        snapshot.exams.size() + " exams"));
+                items.add(SettingsActivity.SettingCell.Factory.of(
+                        ID_MOD_QUESTIONS,
+                        0xFF2196F3, 0xFF1565C0, R.drawable.msg_stats,
+                        "Question Bank & Bulk JSON Import",
+                        "Add, edit, AI-format explanations & import",
+                        null));
             }
             items.add(UItem.asShadow(null));
         }
@@ -201,14 +258,31 @@ public class EveAdminControlCenterActivity extends BaseFragment {
                 || EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_PREMIUM)) {
             items.add(UItem.asHeader("D, F & G. Students, Payments & EVE Premium"));
             if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_USERS)) {
-                items.add(UItem.asButton(ID_MOD_STUDENTS, "Student Directory & Attempt History",
+                items.add(SettingsActivity.SettingCell.Factory.of(
+                        ID_MOD_STUDENTS,
+                        0xFF4CAF50, 0xFF2E7D32, R.drawable.settings_account,
+                        "Student Directory & Attempts",
+                        "Search, suspend/enable, grant premium & inspect attempts",
                         snapshot.totalStudents + " users"));
             }
             if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_PREMIUM)) {
-                items.add(UItem.asButton(ID_MOD_PAYMENTS, "Payment Orders & Verification History",
+                items.add(SettingsActivity.SettingCell.Factory.of(
+                        ID_MOD_PAYMENTS,
+                        0xFF009688, 0xFF00695C, R.drawable.msg_stats,
+                        "Payment Orders & Verification",
+                        "Filter paid, pending, failed & expired orders",
                         snapshot.totalTransactions + " orders"));
-                items.add(UItem.asButton(ID_MOD_PREMIUM, "EVE Premium Pricing, UPI VPA & QR"));
-                items.add(UItem.asButton(ID_MOD_PREMIUM_USERS, "Premium Subscribers & Grant/Revoke",
+                items.add(SettingsActivity.SettingCell.Factory.of(
+                        ID_MOD_PREMIUM,
+                        0xFFB659FF, 0xFF617CFF, R.drawable.settings_premium,
+                        "EVE Premium Pricing, UPI VPA & QR",
+                        "Edit plan pricing, duration & checkout settings",
+                        null));
+                items.add(SettingsActivity.SettingCell.Factory.of(
+                        ID_MOD_PREMIUM_USERS,
+                        0xFFFF7043, 0xFFD84315, R.drawable.settings_premium,
+                        "Premium Subscribers",
+                        "View active subscribers, extend or revoke",
                         snapshot.activePremiumUsers + " active"));
             }
             items.add(UItem.asShadow(null));
@@ -219,25 +293,46 @@ public class EveAdminControlCenterActivity extends BaseFragment {
                 || EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_SEND_BROADCASTS)
                 || EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MODERATE_FEEDBACK)) {
             items.add(UItem.asHeader("H, I & J. Content, Notifications & Media Packs"));
-            items.add(UItem.asButton(ID_MOD_CONTENT_COMMS, "Content, Banners, Polls, Broadcasts & Inbox",
-                    "Banners, floating link, polls, broadcasts, flagged questions, feedback, about/terms"));
+            items.add(SettingsActivity.SettingCell.Factory.of(
+                    ID_MOD_CONTENT_COMMS,
+                    0xFF3F51B5, 0xFF283593, R.drawable.settings_sounds,
+                    "Content, Banners, Polls & Moderation",
+                    "Banners, floating link, broadcasts, flagged questions, feedback",
+                    snapshot.pendingReports > 0 ? snapshot.pendingReports + " flagged" : null));
             if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_CONTENT)) {
-                items.add(UItem.asButton(ID_MOD_PACK_MANAGER,
+                items.add(SettingsActivity.SettingCell.Factory.of(
+                        ID_MOD_PACK_MANAGER,
+                        0xFFFF5722, 0xFFE64A19, R.drawable.msg_sticker,
                         LocaleController.getString(R.string.EveAdminPackManager),
-                        LocaleController.getString(R.string.EveAdminPackManagerSubtitle)));
+                        LocaleController.getString(R.string.EveAdminPackManagerSubtitle),
+                        null));
             }
             items.add(UItem.asShadow(null));
         }
 
         // E, K, L & M. ANALYTICS, ROLES, APP CONFIG & SYSTEM HEALTH
         items.add(UItem.asHeader("E, K, L & M. Analytics, Roles, Config & Health"));
-        items.add(UItem.asButton(ID_MOD_INSIGHTS_SYSTEM, "Analytics, Crash Reports, App Config & System Health",
-                "Scores, D1 crashes, AI usage, export JSON, maintenance mode, Worker/D1/R2/Firebase"));
+        items.add(SettingsActivity.SettingCell.Factory.of(
+                ID_MOD_INSIGHTS_SYSTEM,
+                0xFF00BCD4, 0xFF00838F, R.drawable.settings_devices,
+                "Analytics, Crash Reports, Config & Health",
+                "Scores, D1 crashes, AI usage, export JSON, maintenance & Worker/D1/R2",
+                null));
         if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_ADMINS_RIGHTS)) {
-            items.add(UItem.asButton(ID_MOD_ADMINS, "Admin Users & RBAC Permissions"));
+            items.add(SettingsActivity.SettingCell.Factory.of(
+                    ID_MOD_ADMINS,
+                    0xFF607D8B, 0xFF37474F, R.drawable.settings_privacy,
+                    "Admin Users & RBAC Permissions",
+                    "Manage admin emails, custom titles & 13 granular rights",
+                    null));
         }
         if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_VIEW_ANALYTICS_LOGS)) {
-            items.add(UItem.asButton(ID_MOD_AUDIT, "Server Audit Log", snapshot.recentActions.size() + " recent"));
+            items.add(SettingsActivity.SettingCell.Factory.of(
+                    ID_MOD_AUDIT,
+                    0xFF795548, 0xFF4E342E, R.drawable.msg_list,
+                    "Server Audit Log",
+                    "Recent server-verified admin operations",
+                    snapshot.recentActions.size() + " recent"));
         }
         items.add(UItem.asShadow(null));
     }

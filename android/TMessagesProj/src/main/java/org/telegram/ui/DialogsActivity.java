@@ -323,11 +323,14 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         }
     }
 
+    private EveExamModels.ExamCatalogResult lastBoundExamCatalogResult;
+
     @Override
     public void onExamCatalogUpdated(EveExamModels.ExamCatalogResult result) {
-        if (!isEveExamsMode() || viewPages == null) {
+        if (!isEveExamsMode() || viewPages == null || result == lastBoundExamCatalogResult) {
             return;
         }
+        lastBoundExamCatalogResult = result;
         for (ViewPage viewPage : viewPages) {
             if (viewPage == null) {
                 continue;
@@ -1362,7 +1365,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 } else if (child == topPanelLayout || child == topBubblesFadeView || child == filterTabsView) {
                     childTop += actionBar.getMeasuredHeight();
                     childTop += dp(SEARCH_FIELD_HEIGHT);
-                } else                child.layout(childLeft, childTop, childLeft + width, childTop + height);
+                }
+                child.layout(childLeft, childTop, childLeft + width, childTop + height);
             }
 
             if (searchViewPager != null) {
@@ -2903,8 +2907,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             observersGroup.add(NotificationCenter.dialogTranslate);
         }
 
-        loadDialogs(getAccountInstance());
-        getMessagesController().loadPinnedDialogs(folderId, 0, null);
+        if (!isEveExamsMode()) {
+            loadDialogs(getAccountInstance());
+            getMessagesController().loadPinnedDialogs(folderId, 0, null);
+            if (getMessagesController().savedViewAsChats) {
+                getMessagesController().getSavedMessagesController().preloadDialogs(true);
+            }
+            getContactsController().loadGlobalPrivacySetting();
+            BirthdayController.getInstance(currentAccount).check();
+        }
         if (databaseMigrationHint != null && !getMessagesStorage().isDatabaseMigrationInProgress()) {
             View localView = databaseMigrationHint;
             if (localView.getParent() != null) {
@@ -2912,21 +2923,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             }
             databaseMigrationHint = null;
         }
-        if (isArchive()) {
-        } else {
-        }
-
-        getContactsController().loadGlobalPrivacySetting();
-
-        if (getMessagesController().savedViewAsChats) {
-            getMessagesController().getSavedMessagesController().preloadDialogs(true);
-        }
 
         if (communityId != 0) {
             getMessagesController().loadFullChat(communityId, 0, true);
         }
-
-        BirthdayController.getInstance(currentAccount).check();
         additionNavigationBarHeight = hasMainTabs ? dp(MAIN_TABS_HEIGHT_WITH_MARGINS) : 0;
         additionFloatingButtonOffset = hasMainTabs ? dp(DialogsActivity.MAIN_TABS_HEIGHT + DialogsActivity.MAIN_TABS_MARGIN) : 0;
 
@@ -6718,8 +6718,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         }
         if (isEveExamsMode()) {
             EveExamRepository.getInstance().loadExams(false);
-        }
-        if (viewPages != null) {
+        } else if (viewPages != null) {
             for (int a = 0; a < viewPages.length; a++) {
                 viewPages[a].dialogsAdapter.notifyDataSetChanged();
             }
@@ -6727,7 +6726,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         if (commentView != null) {
             commentView.onResume();
         }
-        if (!onlySelect && folderId == 0 && communityId == 0) {
+        if (!isEveExamsMode() && !onlySelect && folderId == 0 && communityId == 0) {
             getMediaDataController().checkStickers(MediaDataController.TYPE_EMOJI);
         }
         if (searchViewPager != null) {

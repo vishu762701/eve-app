@@ -1,5 +1,7 @@
 package org.telegram.ui.eve.exams;
 
+import android.content.Context;
+import android.content.SharedPreferences;
 import android.os.Handler;
 import android.os.Looper;
 
@@ -8,6 +10,7 @@ import com.google.firebase.auth.FirebaseUser;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.FileLog;
 import org.telegram.ui.eve.auth.EveAuthManager;
 import org.telegram.ui.eve.auth.EveBackendClient;
@@ -23,6 +26,7 @@ import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -50,8 +54,13 @@ public final class EveExamRepository {
 
     private static volatile EveExamRepository instance;
 
+    private static final String PREFS_CACHE = "eve_exam_catalog_cache";
+    private static final String KEY_EXAMS_JSON = "exams_json";
+    private static final String KEY_TESTS_JSON = "tests_json";
+    private static final String KEY_CACHED_AT = "cached_at_ms";
+
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
-    private final ExecutorService ioExecutor = Executors.newCachedThreadPool();
+    private final ExecutorService ioExecutor = Executors.newFixedThreadPool(4);
     private final CopyOnWriteArrayList<CatalogListener> listeners = new CopyOnWriteArrayList<>();
     private final AtomicBoolean loading = new AtomicBoolean(false);
     private final EveBackendClient backendClient;
@@ -62,6 +71,39 @@ public final class EveExamRepository {
 
     private EveExamRepository() {
         this.backendClient = new EveBackendClient();
+        hydrateFromDiskCache();
+    }
+
+    private void hydrateFromDiskCache() {
+        try {
+            Context ctx = ApplicationLoader.applicationContext;
+            if (ctx == null) return;
+            SharedPreferences prefs = ctx.getSharedPreferences(PREFS_CACHE, Context.MODE_PRIVATE);
+            String examsRaw = prefs.getString(KEY_EXAMS_JSON, "");
+            if (examsRaw == null || examsRaw.trim().isEmpty()) return;
+            JSONArray examsArr = new JSONArray(examsRaw);
+            String testsRaw = prefs.getString(KEY_TESTS_JSON, "[]");
+            JSONArray testsArr = (testsRaw != null && !testsRaw.trim().isEmpty()) ? new JSONArray(testsRaw) : new JSONArray();
+            List<EveExamModels.ExamSummary> parsed = parseExamCatalog(examsArr, testsArr);
+            if (!parsed.isEmpty()) {
+                currentResult = new EveExamModels.ExamCatalogResult(EveExamModels.LoadState.LOADED, parsed, "");
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private void saveDiskCache(JSONArray examsJson, JSONArray testsJson) {
+        try {
+            Context ctx = ApplicationLoader.applicationContext;
+            if (ctx == null || examsJson == null) return;
+            ctx.getSharedPreferences(PREFS_CACHE, Context.MODE_PRIVATE)
+                    .edit()
+                    .putString(KEY_EXAMS_JSON, examsJson.toString())
+                    .putString(KEY_TESTS_JSON, testsJson != null ? testsJson.toString() : "[]")
+                    .putLong(KEY_CACHED_AT, System.currentTimeMillis())
+                    .apply();
+        } catch (Throwable ignored) {
+        }
     }
 
     public static EveExamRepository getInstance() {
@@ -164,13 +206,20 @@ public final class EveExamRepository {
                     }
                     ioExecutor.execute(() -> {
                         try {
+                            Future<JSONArray> testsFuture = ioExecutor.submit(() -> {
+                                try {
+                                    return backendClient.fetchGeneratedTestsJson(token, null);
+                                } catch (Exception ignored) {
+                                    return null;
+                                }
+                            });
                             JSONArray examsJson = backendClient.fetchExamsJson(token);
                             JSONArray testsJson = null;
                             try {
-                                testsJson = backendClient.fetchGeneratedTestsJson(token, null);
+                                testsJson = testsFuture.get();
                             } catch (Exception ignored) {
-                                // Exam list still renders even if generated-tests enrichment fails.
                             }
+                            saveDiskCache(examsJson, testsJson);
                             List<EveExamModels.ExamSummary> parsed = parseExamCatalog(examsJson, testsJson);
                             lastSuccessLoadMs = System.currentTimeMillis();
                             EveExamModels.LoadState state = parsed.isEmpty()

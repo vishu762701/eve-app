@@ -21,6 +21,7 @@ import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.UItem;
 import org.telegram.ui.Components.UniversalAdapter;
 import org.telegram.ui.Components.UniversalRecyclerView;
+import org.telegram.ui.SettingsActivity;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -84,11 +85,11 @@ public class EveAdminContentAndCommsFragment extends BaseFragment {
     private void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
         if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_CONTENT)) {
             items.add(UItem.asHeader("H. Content & Home Management"));
-            items.add(UItem.asButton(ID_BANNERS, "Home Screen Banners", "View, edit links, reorder or remove banners"));
-            items.add(UItem.asButton(ID_FLOATING_LINK, "Floating Community Link", "Configure quick home community URL"));
-            items.add(UItem.asButton(ID_APP_CONTENT_ABOUT, "Edit About Page"));
-            items.add(UItem.asButton(ID_APP_CONTENT_PRIVACY, "Edit Privacy Policy Content"));
-            items.add(UItem.asButton(ID_APP_CONTENT_TERMS, "Edit Terms of Service"));
+            items.add(SettingsActivity.SettingCell.Factory.of(ID_BANNERS, 0, 0, 0, "Home Screen Banners", "View, edit links, reorder or remove banners", null));
+            items.add(SettingsActivity.SettingCell.Factory.of(ID_FLOATING_LINK, 0, 0, 0, "Floating Community Link", "Configure quick home community URL", null));
+            items.add(SettingsActivity.SettingCell.Factory.of(ID_APP_CONTENT_ABOUT, 0, 0, 0, "Edit About Page", "Update app About page copy", null));
+            items.add(SettingsActivity.SettingCell.Factory.of(ID_APP_CONTENT_PRIVACY, 0, 0, 0, "Edit Privacy Policy Content", "Update privacy policy served from backend", null));
+            items.add(SettingsActivity.SettingCell.Factory.of(ID_APP_CONTENT_TERMS, 0, 0, 0, "Edit Terms of Service", "Update student terms of service copy", null));
             items.add(UItem.asShadow(null));
         }
 
@@ -96,14 +97,14 @@ public class EveAdminContentAndCommsFragment extends BaseFragment {
                 || EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_SEND_BROADCASTS)) {
             items.add(UItem.asHeader("I. Notifications, Polls & Moderation"));
             if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_SEND_BROADCASTS)) {
-                items.add(UItem.asButton(ID_SEND_BROADCAST, "Send Broadcast Notification", "Delivers via EVE FCM & Announcements"));
-                items.add(UItem.asButton(ID_BROADCAST_HISTORY, "Broadcast History", "Inspect or delete sent notifications"));
+                items.add(SettingsActivity.SettingCell.Factory.of(ID_SEND_BROADCAST, 0, 0, 0, "Send Broadcast Notification", "Delivers via EVE FCM & Announcements", null));
+                items.add(SettingsActivity.SettingCell.Factory.of(ID_BROADCAST_HISTORY, 0, 0, 0, "Broadcast History", "Inspect or delete sent notifications", null));
             }
             if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MODERATE_FEEDBACK)) {
-                items.add(UItem.asButton(ID_POLLS, "Manage Student Polls", "Create, activate/close, or delete polls"));
-                items.add(UItem.asButton(ID_FLAGGED_REPORTS, "Flagged Questions Inbox", "Review, dismiss, or delete student reports"));
-                items.add(UItem.asButton(ID_FEEDBACK_MESSAGES, "Student Feedback Messages", "Read, reply, mark read, or delete"));
-                items.add(UItem.asButton(ID_FEEDBACK_POSTS, "Feedback Posts", "Create or remove feedback topics"));
+                items.add(SettingsActivity.SettingCell.Factory.of(ID_POLLS, 0, 0, 0, "Manage Student Polls", "Create, activate/close, or delete polls", null));
+                items.add(SettingsActivity.SettingCell.Factory.of(ID_FLAGGED_REPORTS, 0, 0, 0, "Flagged Questions Inbox", "Review, dismiss, or delete student reports", null));
+                items.add(SettingsActivity.SettingCell.Factory.of(ID_FEEDBACK_MESSAGES, 0, 0, 0, "Student Feedback Messages", "Read, reply, mark read, or delete", null));
+                items.add(SettingsActivity.SettingCell.Factory.of(ID_FEEDBACK_POSTS, 0, 0, 0, "Feedback Posts", "Create or remove feedback topics", null));
             }
             items.add(UItem.asShadow(null));
         }

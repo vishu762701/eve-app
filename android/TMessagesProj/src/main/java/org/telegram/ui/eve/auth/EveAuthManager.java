@@ -927,11 +927,19 @@ public final class EveAuthManager {
      * so Telegram's retained UI components (ProfileActivity, SettingsActivity, UserInfoActivity)
      * render EVE account data without requiring Telegram phone/OTP login or MTProto auth keys.
      */
+    private volatile String lastEnsuredUiSignature = "";
+
     public long ensureLocalUiUser(int account) {
         long userId = getEffectiveUiUserId();
         EveUserProfile profile = getCachedProfile();
         if (userId == 0L || profile == null) {
             return 0L;
+        }
+        String signature = account + "|" + profile.uid + "|" + profile.displayName + "|"
+                + profile.username + "|" + profile.bio + "|" + profile.dob + "|" + profile.phone;
+        MessagesController mc = MessagesController.getInstance(account);
+        if (signature.equals(lastEnsuredUiSignature) && mc.getUser(userId) != null && mc.getUserFull(userId) != null) {
+            return userId;
         }
         try {
             TLRPC.TL_user user = new TLRPC.TL_user();
@@ -973,9 +981,9 @@ public final class EveAuthManager {
                 userFull.flags2 |= 32;
             }
 
-            MessagesController mc = MessagesController.getInstance(account);
             mc.putUser(user, true);
             mc.putUserFull(userFull);
+            lastEnsuredUiSignature = signature;
         } catch (Throwable t) {
             FileLog.e("EveAuthManager: ensureLocalUiUser failed", t);
         }
