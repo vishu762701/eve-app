@@ -334,27 +334,21 @@ public class EveTestResultFragment extends BaseFragment {
         });
     }
 
-    private void showReportDialog(EveExamModels.AttemptAnswerReview ans) {
-        Activity activity = getParentActivity();
-        if (activity == null || ans.questionId.isEmpty()) return;
-        String[] reasons = new String[] {
-                "Wrong Question",
-                "No Solution",
-                "Wrong Translation",
-                "Out of Syllabus",
-                "Formatting Issues",
-                "Other"
-        };
-        final int[] pickedIdx = { 0 };
-        LinearLayout box = new LinearLayout(activity);
-        box.setOrientation(LinearLayout.VERTICAL);
-        int pad = AndroidUtilities.dp(16);
-        box.setPadding(pad, AndroidUtilities.dp(8), pad, 0);
+    public static final String[] REPORT_REASONS = new String[] {
+            "Wrong Question",
+            "No Solution",
+            "Wrong Translation",
+            "Out of Syllabus",
+            "Formatting Issues",
+            "Other"
+    };
 
-        RadioGroup reasonGroup = new RadioGroup(activity);
+    public static RadioGroup buildReportReasonGroup(Context context, String[] reasons, int[] pickedIdx) {
+        RadioGroup reasonGroup = new RadioGroup(context);
         reasonGroup.setOrientation(RadioGroup.VERTICAL);
+        pickedIdx[0] = 0;
         for (int i = 0; i < reasons.length; i++) {
-            RadioButton rb = new RadioButton(activity);
+            RadioButton rb = new RadioButton(context);
             rb.setId(i + 1);
             rb.setText(reasons[i]);
             rb.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
@@ -369,6 +363,20 @@ public class EveTestResultFragment extends BaseFragment {
                 pickedIdx[0] = idx;
             }
         });
+        return reasonGroup;
+    }
+
+    private void showReportDialog(EveExamModels.AttemptAnswerReview ans) {
+        Activity activity = getParentActivity();
+        if (activity == null || ans.questionId.isEmpty()) return;
+        final String[] reasons = REPORT_REASONS;
+        final int[] pickedIdx = { 0 };
+        LinearLayout box = new LinearLayout(activity);
+        box.setOrientation(LinearLayout.VERTICAL);
+        int pad = AndroidUtilities.dp(16);
+        box.setPadding(pad, AndroidUtilities.dp(8), pad, 0);
+
+        RadioGroup reasonGroup = buildReportReasonGroup(activity, reasons, pickedIdx);
         box.addView(reasonGroup);
 
         EditText commentInput = new EditText(activity);

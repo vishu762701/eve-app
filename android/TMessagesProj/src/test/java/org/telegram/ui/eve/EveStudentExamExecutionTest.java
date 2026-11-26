@@ -6,6 +6,10 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
+import android.widget.RadioButton;
+import android.widget.RadioGroup;
+
+import androidx.test.core.app.ApplicationProvider;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -133,5 +137,24 @@ public class EveStudentExamExecutionTest {
         eveData.put("title", "New SSC Mock Live");
         eveData.put("body", "Attempt Mock 4 now");
         assertFalse(EveNotificationHelper.isTelegramPushPayload(eveData));
+    }
+
+    @Test
+    public void reportDialogReasonSelector_defaultsToFirstAndTracksSingleChoiceSelection() {
+        int[] pickedIdx = new int[] { -1 };
+        RadioGroup group = EveTestResultFragment.buildReportReasonGroup(
+                ApplicationProvider.getApplicationContext(),
+                EveTestResultFragment.REPORT_REASONS,
+                pickedIdx
+        );
+        assertEquals(EveTestResultFragment.REPORT_REASONS.length, group.getChildCount());
+        assertEquals(0, pickedIdx[0]);
+        assertTrue(((RadioButton) group.getChildAt(0)).isChecked());
+
+        group.check(3);
+        assertEquals(2, pickedIdx[0]);
+        assertEquals("Wrong Translation", EveTestResultFragment.REPORT_REASONS[pickedIdx[0]]);
+        assertFalse(((RadioButton) group.getChildAt(0)).isChecked());
+        assertTrue(((RadioButton) group.getChildAt(2)).isChecked());
     }
 }

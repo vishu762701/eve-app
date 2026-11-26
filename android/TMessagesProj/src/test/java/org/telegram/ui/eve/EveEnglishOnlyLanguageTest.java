@@ -84,10 +84,15 @@ public class EveEnglishOnlyLanguageTest {
         hiConfig.setLocale(new Locale("hi"));
         Context hiContext = appContext.createConfigurationContext(hiConfig);
 
-        assertEquals("परीक्षा", hiContext.getString(R.string.MainTabsExams));
+        assertEquals("परीक्षाएँ", hiContext.getString(R.string.MainTabsExams));
         assertEquals("परीक्षा सेटिंग्स", hiContext.getString(R.string.ChatSettings));
         assertEquals("सबमिट करें", hiContext.getString(R.string.EveSubmitTest));
         assertEquals("लीडरबोर्ड", hiContext.getString(R.string.EveLeaderboard));
+
+        appContext.getSharedPreferences("mainconfig", Context.MODE_PRIVATE).edit().putString("language", "hi").commit();
+        assertEquals("हिन्दी", LocaleController.getCurrentLanguageName());
+        appContext.getSharedPreferences("mainconfig", Context.MODE_PRIVATE).edit().remove("language").commit();
+        assertEquals("English", LocaleController.getCurrentLanguageName());
     }
 
     private static LocaleController.LocaleInfo makeLocale(String code, String nameEnglish) {

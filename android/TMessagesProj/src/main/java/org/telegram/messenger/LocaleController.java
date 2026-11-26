@@ -1523,13 +1523,24 @@ public class LocaleController {
     }
 
     public static String getCurrentLanguageName() {
-        LocaleInfo localeInfo = getInstance().currentLocaleInfo;
         if (isEveRestrictedLanguageMode()) {
-            if (localeInfo != null && EVE_HINDI_LANGUAGE_CODE.equalsIgnoreCase(localeInfo.shortName)) {
-                return EVE_HINDI_LANGUAGE_NAME;
+            LocaleController inst = Instance;
+            LocaleInfo localeInfo = inst != null ? inst.currentLocaleInfo : null;
+            if (localeInfo != null) {
+                return EVE_HINDI_LANGUAGE_CODE.equalsIgnoreCase(localeInfo.shortName)
+                        ? EVE_HINDI_LANGUAGE_NAME
+                        : EVE_PERMANENT_LANGUAGE_NAME;
+            }
+            if (ApplicationLoader.applicationContext != null) {
+                SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("mainconfig", Context.MODE_PRIVATE);
+                String savedLang = preferences != null ? preferences.getString("language", null) : null;
+                if (EVE_HINDI_LANGUAGE_CODE.equalsIgnoreCase(savedLang)) {
+                    return EVE_HINDI_LANGUAGE_NAME;
+                }
             }
             return EVE_PERMANENT_LANGUAGE_NAME;
         }
+        LocaleInfo localeInfo = getInstance().currentLocaleInfo;
         return localeInfo == null || TextUtils.isEmpty(localeInfo.name) ? getString("LanguageName", R.string.LanguageName) : localeInfo.name;
     }
 
