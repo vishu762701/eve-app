@@ -421,6 +421,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         flagSecureReason.attach();
 
         super.onCreate(savedInstanceState);
+        org.telegram.ui.eve.auth.EveAuthManager.getInstance().refreshSessionSilentlyIfSignedIn();
         if (Build.VERSION.SDK_INT >= 24) {
             AndroidUtilities.isInMultiwindow = isInMultiWindowMode();
         }

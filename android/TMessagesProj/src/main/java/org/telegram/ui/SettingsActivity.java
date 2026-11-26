@@ -187,6 +187,12 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
     }
 
     private NotificationCenter.ObserversGroup observersGroup;
+    private final org.telegram.ui.eve.auth.EveAuthManager.SessionListener eveSessionListener =
+            (authenticated, profile, syncState, diagnosticMessage) -> {
+                if (listView != null && listView.adapter != null) {
+                    listView.adapter.update(true);
+                }
+            };
 
     @Override
     public boolean onFragmentCreate() {
@@ -200,6 +206,8 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
             .add(NotificationCenter.updateInterfaces)
             .add(NotificationCenter.starBalanceUpdated)
             .add(NotificationCenter.newSuggestionsAvailable);
+        org.telegram.ui.eve.auth.EveAuthManager.getInstance().addSessionListener(eveSessionListener);
+        org.telegram.ui.eve.auth.EveAuthManager.getInstance().refreshSessionSilentlyIfSignedIn();
 
         if (arguments != null) {
             hasMainTabs = arguments.getBoolean("hasMainTabs", false);
@@ -305,7 +313,6 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
                 listView.adapter.update(true);
             }
         };
-        search.loadFaqWebPage();
 
         listView = new UniversalRecyclerView(this, this::fillItems, this::onClick, this::onLongClick);
         listView.setCaptureSectionsDecoratorAllowed(true);
@@ -448,19 +455,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
         ThemeBind.textColor(versionView, Theme.key_windowBackgroundWhiteGrayText4, getResourceProvider());
         versionView.setPadding(dp(21), dp(10), dp(21), dp(10));
         versionView.setGravity(Gravity.CENTER);
-        ThemeBind.selectorBackground(versionView, Theme.createSelectorDrawable(getThemedColor(Theme.key_listSelector), Theme.RIPPLE_MASK_ALL), null, ThemeBind.of(Theme.key_listSelector), getResourceProvider());
-        versionView.setOnClickListener(v -> {
-            versionViewPressCount++;
-            if (versionViewPressCount < 2 && !BuildVars.DEBUG_PRIVATE_VERSION) {
-                try {
-                    Toast.makeText(getParentActivity(), getString(R.string.DebugMenuLongPress), Toast.LENGTH_SHORT).show();
-                } catch (Exception e) {
-                    FileLog.e(e);
-                }
-                return;
-            }
-            presentFragment(new DebugSettingsActivity());
-        });
+        // EVE-PATCH: Remove user-facing debug menu trigger from Settings footer.
 
         navigationBar = new View(context);
 //        fragmentView.addView(navigationBar, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 0, Gravity.BOTTOM | Gravity.FILL_HORIZONTAL));
@@ -481,6 +476,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
 
     @Override
     public void onFragmentDestroy() {
+        org.telegram.ui.eve.auth.EveAuthManager.getInstance().removeSessionListener(eveSessionListener);
         super.onFragmentDestroy();
         if (observersGroup != null) {
             observersGroup.removeAllObservers();
@@ -808,13 +804,19 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
 
         items.add(UItem.asShadow(null));
 
+        // EVE-PATCH: Provide EVE Cloud Google Sign-In / sync entry, and reveal Admin Control Center ONLY to verified backend admins.
+        final org.telegram.ui.eve.auth.EveAuthManager eveAuth = org.telegram.ui.eve.auth.EveAuthManager.getInstance();
+        final org.telegram.ui.eve.auth.EveUserProfile eveProfile = eveAuth.getCachedProfile();
+        final boolean signedInEve = eveAuth.isSignedInAccount() && eveProfile != null && !eveProfile.email.isEmpty();
+        final String eveAccountSubtitle = signedInEve
+                ? (eveProfile.email + (!eveProfile.eveId.isEmpty() ? " • " + eveProfile.eveId : ""))
+                : getString(R.string.EveCloudSignInSubtitle);
+        items.add(SettingCell.Factory.of(29, IconBackgroundColors.BLUE.top, IconBackgroundColors.BLUE.bottom, R.drawable.settings_account, getString(R.string.EveCloudAccount), eveAccountSubtitle));
+
         if (org.telegram.ui.eve.admin.EveAdminConfig.isAdminAvailable()) {
-            String adminSubtitle = org.telegram.ui.eve.admin.EveAdminConfig.isServerAdminSession()
-                    ? "Dashboard, Exams, Students & Pricing"
-                    : "Admin Portal & Diagnostics";
-            items.add(SettingCell.Factory.of(28, 0xFF3D8BEB, 0xFF2A6FD9, R.drawable.settings_devices, "EVE Admin Control Center", adminSubtitle));
-            items.add(UItem.asShadow(null));
+            items.add(SettingCell.Factory.of(28, 0xFF3D8BEB, 0xFF2A6FD9, R.drawable.settings_devices, getString(R.string.EveAdminControlCenter), getString(R.string.EveAdminControlCenterSubtitle)));
         }
+        items.add(UItem.asShadow(null));
 
         // EVE-PATCH: Mission 6 - Rebrand Settings entry to EVE Premium while preserving settings_premium star icon.
         if (isEveSettingsItemEnabled(EVE_SETTINGS_ITEM_PREMIUM) && !getMessagesController().premiumFeaturesBlocked()) {
@@ -824,29 +826,14 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
             items.add(UItem.asShadow(null));
 
         items.add(UItem.asHeader(getString(R.string.SettingsHelp)));
-        items.add(SettingCell.Factory.of(17, IconBackgroundColors.ORANGE.top, IconBackgroundColors.ORANGE.bottom, R.drawable.settings_ask, getString(R.string.AskAQuestion)));
-        items.add(SettingCell.Factory.of(18, IconBackgroundColors.BLUE_LIGHT.top, IconBackgroundColors.BLUE_LIGHT.bottom, R.drawable.settings_faq, getString(R.string.TelegramFAQ)));
+        items.add(SettingCell.Factory.of(17, IconBackgroundColors.ORANGE.top, IconBackgroundColors.ORANGE.bottom, R.drawable.settings_ask, getString(R.string.EveHelpSupport)));
+        items.add(SettingCell.Factory.of(18, IconBackgroundColors.BLUE_LIGHT.top, IconBackgroundColors.BLUE_LIGHT.bottom, R.drawable.settings_faq, getString(R.string.EveFaq)));
         if (isEveSettingsItemEnabled(EVE_SETTINGS_ITEM_TELEGRAM_FEATURES)) {
             items.add(SettingCell.Factory.of(EVE_SETTINGS_ITEM_TELEGRAM_FEATURES, IconBackgroundColors.PURPLE.top, IconBackgroundColors.PURPLE.bottom, R.drawable.settings_features, getString(R.string.TelegramFeatures)));
         }
         items.add(SettingCell.Factory.of(19, IconBackgroundColors.GREEN.top, IconBackgroundColors.GREEN.bottom, R.drawable.settings_policy, getString(R.string.PrivacyPolicy)));
 
-        if (SharedSettings.experimentalSettingsAllowed.get()) {
-            items.add(UItem.asShadow(null));
-            items.add(UItem.asHeader(getString(R.string.SettingsExperimental)));
-            items.add(SettingCell.Factory.of(24, 0xFFF45255, 0xFFDF3955, 0, getString(R.string.RoundVideoSettings)));
-            items.add(SettingCell.Factory.of(26, 0xFF55CA47, 0xFF27B434, 0, getString(R.string.AudioRecorderSettings)));
-            items.add(SettingCell.Factory.of(27, 0xFF3D8BEB, 0xFF2A6FD9, 0, getString(R.string.HeaderSettings)));
-        }
-
-        if (BuildVars.LOGS_ENABLED || BuildVars.DEBUG_PRIVATE_VERSION) {
-            items.add(UItem.asShadow(null));
-            items.add(UItem.asHeader(getString(R.string.SettingsDebug)));
-            items.add(SettingCell.Factory.of(20, 0xFF55CA47, 0xFF27B434, 0, getString(R.string.DebugSendLogs)));
-            items.add(SettingCell.Factory.of(21, 0xFF55CA47, 0xFF27B434, 0, getString(R.string.DebugSendLastLogs)));
-            items.add(SettingCell.Factory.of(22, 0xFFF45255, 0xFFDF3955, 0, getString(R.string.DebugClearLogs)));
-        }
-
+        // EVE-PATCH: Remove bottom user-facing DEBUG section and experimental settings from Settings screen.
         items.add(UItem.asCustomShadow(versionView));
     }
 
@@ -949,26 +936,20 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
                 break;
 
             case 17:
-                showDialog(AlertsCreator.createSupportAlert(this, resourceProvider));
+                showEveInfoDialog(getString(R.string.EveHelpSupport), getString(R.string.EveHelpSupportBody));
                 break;
             case 18:
-                Browser.openUrl(getParentActivity(), LocaleController.getString(R.string.TelegramFaqUrl));
+                showEveInfoDialog(getString(R.string.EveFaq), getString(R.string.EveFaqBody));
                 break;
             case 19:
-                Browser.openUrl(getParentActivity(), LocaleController.getString(R.string.PrivacyPolicyUrl));
+                showEveInfoDialog(getString(R.string.PrivacyPolicy), getString(R.string.EvePrivacyPolicyBody));
                 break;
 
             case 20:
-                ProfileActivity.sendLogs(getParentActivity(), false);
-                break;
             case 21:
-                ProfileActivity.sendLogs(getParentActivity(), true);
-                break;
             case 22:
-                FileLog.cleanupLogs();
-                break;
             case 23: {
-                // EVE-PATCH: Mission 6 - Navigation to Telegram Features promotional page removed.
+                // EVE-PATCH: User-facing DEBUG actions and Telegram Features navigation disabled.
                 break;
             }
             case 24: {
@@ -983,6 +964,10 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
                 if (org.telegram.ui.eve.admin.EveAdminConfig.isAdminAvailable()) {
                     presentSettingFragment(new org.telegram.ui.eve.admin.EveAdminControlCenterActivity());
                 }
+                break;
+            }
+            case 29: {
+                handleEveCloudAccountClick();
                 break;
             }
             case 27: {
@@ -1020,6 +1005,78 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
             }
         }
         return false;
+    }
+
+    private void showEveInfoDialog(String title, String message) {
+        Activity activity = getParentActivity();
+        if (activity == null) {
+            return;
+        }
+        showDialog(new AlertDialog.Builder(activity, resourceProvider)
+                .setTitle(title)
+                .setMessage(message)
+                .setPositiveButton(getString(R.string.OK), null)
+                .create());
+    }
+
+    private void handleEveCloudAccountClick() {
+        Activity activity = getParentActivity();
+        if (activity == null) {
+            return;
+        }
+        org.telegram.ui.eve.auth.EveAuthManager auth = org.telegram.ui.eve.auth.EveAuthManager.getInstance();
+        org.telegram.ui.eve.auth.EveUserProfile profile = auth.getCachedProfile();
+        if (auth.isSignedInAccount() && profile != null && !profile.email.isEmpty()) {
+            StringBuilder details = new StringBuilder();
+            details.append("Email: ").append(profile.email).append("\n");
+            if (!profile.eveId.isEmpty()) {
+                details.append("EVE ID: ").append(profile.eveId).append("\n");
+            }
+            details.append("Role: ").append(org.telegram.ui.eve.admin.EveAdminConfig.isServerAdminProfile(profile) ? "EVE Administrator" : "Student");
+            showDialog(new AlertDialog.Builder(activity, resourceProvider)
+                    .setTitle(getString(R.string.EveCloudAccount))
+                    .setMessage(details.toString())
+                    .setPositiveButton(getString(R.string.Refresh), (d, w) -> auth.reloadUserAndSync(new org.telegram.ui.eve.auth.EveAuthManager.AuthCallback() {
+                        @Override
+                        public void onSuccess(@NonNull org.telegram.ui.eve.auth.EveUserProfile synced, @NonNull org.telegram.ui.eve.auth.EveAuthCoordinator.SyncOutcome syncOutcome) {
+                            BulletinFactory.of(SettingsActivity.this).createSimpleBulletin(R.raw.info, "EVE Cloud synced (" + synced.email + ").").show();
+                            org.telegram.ui.eve.notifications.EveNotificationHelper.syncFcmTokenIfSignedIn();
+                            if (listView != null && listView.adapter != null) {
+                                listView.adapter.update(true);
+                            }
+                        }
+
+                        @Override
+                        public void onError(@NonNull String message, boolean accountDisabled) {
+                            BulletinFactory.of(SettingsActivity.this).createErrorBulletin(message).show();
+                        }
+                    }))
+                    .setNeutralButton(getString(R.string.LogOut), (d, w) -> auth.signOut(activity, () -> {
+                        if (listView != null && listView.adapter != null) {
+                            listView.adapter.update(true);
+                        }
+                    }))
+                    .setNegativeButton(getString(R.string.Cancel), null)
+                    .create());
+            return;
+        }
+
+        auth.signInWithGoogle(activity, new org.telegram.ui.eve.auth.EveAuthManager.AuthCallback() {
+            @Override
+            public void onSuccess(@NonNull org.telegram.ui.eve.auth.EveUserProfile synced, @NonNull org.telegram.ui.eve.auth.EveAuthCoordinator.SyncOutcome syncOutcome) {
+                BulletinFactory.of(SettingsActivity.this).createSimpleBulletin(R.raw.info, "Signed in as " + synced.email).show();
+                org.telegram.ui.eve.notifications.EveNotificationHelper.syncFcmTokenIfSignedIn();
+                org.telegram.ui.eve.exams.EveExamRepository.getInstance().loadExams(true);
+                if (listView != null && listView.adapter != null) {
+                    listView.adapter.update(true);
+                }
+            }
+
+            @Override
+            public void onError(@NonNull String message, boolean accountDisabled) {
+                BulletinFactory.of(SettingsActivity.this).createErrorBulletin(message).show();
+            }
+        });
     }
 
     public String getVersionName() {

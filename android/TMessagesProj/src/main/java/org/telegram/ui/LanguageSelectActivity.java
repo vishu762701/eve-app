@@ -88,7 +88,7 @@ public class LanguageSelectActivity extends BaseFragment implements Notification
     @Override
     public boolean onFragmentCreate() {
         fillLanguages();
-        if (!LocaleController.isEnglishOnlyMode()) {
+        if (!LocaleController.isEveRestrictedLanguageMode() && !LocaleController.isEnglishOnlyMode()) {
             LocaleController.getInstance().loadRemoteLanguages(currentAccount, false);
         }
         NotificationCenter.getGlobalInstance().addWeakObserver(this, NotificationCenter.suggestedLangpack);
@@ -184,7 +184,7 @@ public class LanguageSelectActivity extends BaseFragment implements Notification
             }
         });
         searchItem.setSearchFieldHint(LocaleController.getString(R.string.Search));
-        if (LocaleController.isEnglishOnlyMode()) {
+        if (LocaleController.isEveRestrictedLanguageMode()) {
             searchItem.setVisibility(View.GONE);
         }
 
@@ -303,7 +303,7 @@ public class LanguageSelectActivity extends BaseFragment implements Notification
                     presentFragment(new RestrictedLanguagesSelectActivity());
                     return;
                 }
-                if (LocaleController.isEnglishOnlyMode() || getParentActivity() == null || parentLayout == null || !(view instanceof TextRadioCell)) {
+                if (getParentActivity() == null || parentLayout == null || !(view instanceof TextRadioCell)) {
                     return;
                 }
                 boolean search = listView.getAdapter() == searchListViewAdapter;
@@ -323,7 +323,8 @@ public class LanguageSelectActivity extends BaseFragment implements Notification
                 }
                 if (localeInfo != null) {
                     LocaleController.LocaleInfo prevLocale = LocaleController.getInstance().getCurrentLocaleInfo();
-                    boolean sameLang = prevLocale == localeInfo;
+                    boolean sameLang = prevLocale != null && prevLocale.shortName != null
+                            && prevLocale.shortName.equalsIgnoreCase(localeInfo.shortName);
 
                     final AlertDialog progressDialog = new AlertDialog(getContext(), AlertDialog.ALERT_TYPE_SPINNER);
                     if (!sameLang) {
@@ -336,6 +337,9 @@ public class LanguageSelectActivity extends BaseFragment implements Notification
                             AndroidUtilities.runOnUIThread(() -> {
                                 simpleActionBar.closeSearchField();
                                 updateLanguage();
+                                if (listAdapter != null) {
+                                    listAdapter.notifyDataSetChanged();
+                                }
                             }, 10);
                         }
                     });
@@ -346,7 +350,7 @@ public class LanguageSelectActivity extends BaseFragment implements Notification
                     }
 
                     String langCode = localeInfo.pluralLangCode,
-                            prevLangCode = prevLocale.pluralLangCode;
+                            prevLangCode = prevLocale != null ? prevLocale.pluralLangCode : null;
                     HashSet<String> selectedLanguages = RestrictedLanguagesSelectActivity.getRestrictedLanguages();
                     HashSet<String> newSelectedLanguages = new HashSet<String>(selectedLanguages);
 
@@ -369,7 +373,7 @@ public class LanguageSelectActivity extends BaseFragment implements Notification
 
         listView.setOnItemLongClickListener((view, position) -> {
             try {
-                if (LocaleController.isEnglishOnlyMode() || getParentActivity() == null || parentLayout == null || !(view instanceof TextRadioCell)) {
+                if (LocaleController.isEveRestrictedLanguageMode() || getParentActivity() == null || parentLayout == null || !(view instanceof TextRadioCell)) {
                     return false;
                 }
                 boolean search = listView.getAdapter() == searchListViewAdapter;
@@ -448,32 +452,47 @@ public class LanguageSelectActivity extends BaseFragment implements Notification
         }
     }
 
-    // EVE-PATCH: Mission 5 - Filter selectable app languages down to permanent English only.
+    // EVE-PATCH: Filter selectable app languages down to English and Hindi only.
     public static ArrayList<LocaleController.LocaleInfo> filterSelectableLanguages(java.util.List<LocaleController.LocaleInfo> source) {
-        ArrayList<LocaleController.LocaleInfo> result = new ArrayList<>();
+        LocaleController.LocaleInfo english = null;
+        LocaleController.LocaleInfo hindi = null;
         if (source != null) {
             for (int i = 0; i < source.size(); i++) {
                 LocaleController.LocaleInfo info = source.get(i);
-                if (LocaleController.isAllowedApplicationLocale(info)) {
-                    result.add(info);
-                    break;
+                if (info == null || info.pathToFile != null) {
+                    continue;
+                }
+                if (english == null && LocaleController.EVE_PERMANENT_LANGUAGE_CODE.equalsIgnoreCase(info.shortName)) {
+                    english = info;
+                } else if (hindi == null && LocaleController.EVE_HINDI_LANGUAGE_CODE.equalsIgnoreCase(info.shortName)) {
+                    hindi = info;
                 }
             }
         }
-        if (result.isEmpty()) {
-            LocaleController.LocaleInfo english = new LocaleController.LocaleInfo();
+        if (english == null) {
+            english = new LocaleController.LocaleInfo();
             english.name = LocaleController.EVE_PERMANENT_LANGUAGE_NAME;
             english.nameEnglish = LocaleController.EVE_PERMANENT_LANGUAGE_NAME;
             english.shortName = english.pluralLangCode = LocaleController.EVE_PERMANENT_LANGUAGE_CODE;
             english.pathToFile = null;
             english.builtIn = true;
-            result.add(english);
         }
+        if (hindi == null) {
+            hindi = new LocaleController.LocaleInfo();
+            hindi.name = LocaleController.EVE_HINDI_LANGUAGE_NAME;
+            hindi.nameEnglish = LocaleController.EVE_HINDI_LANGUAGE_NAME_ENGLISH;
+            hindi.shortName = hindi.pluralLangCode = LocaleController.EVE_HINDI_LANGUAGE_CODE;
+            hindi.pathToFile = null;
+            hindi.builtIn = true;
+        }
+        ArrayList<LocaleController.LocaleInfo> result = new ArrayList<>(2);
+        result.add(english);
+        result.add(hindi);
         return result;
     }
 
     private void fillLanguages() {
-        if (LocaleController.isEnglishOnlyMode()) {
+        if (LocaleController.isEveRestrictedLanguageMode()) {
             sortedLanguages = filterSelectableLanguages(LocaleController.getInstance().languages);
             unofficialLanguages = new ArrayList<>();
             return;
@@ -639,9 +658,6 @@ public class LanguageSelectActivity extends BaseFragment implements Notification
         @Override
         public boolean isEnabled(RecyclerView.ViewHolder holder) {
             final int viewType = holder.getItemViewType();
-            if (viewType == VIEW_TYPE_LANGUAGE && LocaleController.isEnglishOnlyMode()) {
-                return false;
-            }
             return viewType == VIEW_TYPE_LANGUAGE || viewType == VIEW_TYPE_SETTINGS || viewType == VIEW_TYPE_SETTINGS_2 || viewType == VIEW_TYPE_SWITCH;
         }
 
@@ -756,7 +772,11 @@ public class LanguageSelectActivity extends BaseFragment implements Notification
                             textSettingsCell.setTextAndValueAndCheck(localeInfo.name, localeInfo.nameEnglish, false, false, !last);
                         }
                     }
-                    textSettingsCell.setChecked(localeInfo == LocaleController.getInstance().getCurrentLocaleInfo());
+                    LocaleController.LocaleInfo currentInfo = LocaleController.getInstance().getCurrentLocaleInfo();
+                    boolean isSelected = localeInfo != null && currentInfo != null
+                            && ((localeInfo == currentInfo)
+                            || (localeInfo.shortName != null && localeInfo.shortName.equalsIgnoreCase(currentInfo.shortName)));
+                    textSettingsCell.setChecked(isSelected);
                     break;
                 }
                 case VIEW_TYPE_SHADOW: {

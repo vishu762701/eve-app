@@ -43,9 +43,14 @@ public class PushListenerController {
     public @interface PushType {}
 
     public static final int NOTIFICATION_ID = 1;
+    // EVE-PATCH: Disable Telegram push registration and Telegram remote push presentation in EVE.
+    public static final boolean EVE_DISABLE_TELEGRAM_PUSH = true;
     private static CountDownLatch countDownLatch = new CountDownLatch(1);
 
     public static void sendRegistrationToServer(@PushType int pushType, String token) {
+        if (EVE_DISABLE_TELEGRAM_PUSH) {
+            return;
+        }
         Utilities.stageQueue.postRunnable(() -> {
             ConnectionsManager.setRegId(token, pushType, SharedConfig.pushStringStatus);
             if (token == null) {
@@ -93,6 +98,9 @@ public class PushListenerController {
     }
 
     public static void processRemoteMessage(@PushType int pushType, String data, long time) {
+        if (EVE_DISABLE_TELEGRAM_PUSH) {
+            return;
+        }
         String tag = pushType == PUSH_TYPE_FIREBASE ? "FCM" : "HCM";
         if (BuildVars.LOGS_ENABLED) {
             FileLog.d(tag + " PRE START PROCESSING");

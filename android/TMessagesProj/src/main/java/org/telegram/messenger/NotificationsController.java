@@ -1841,6 +1841,9 @@ public class NotificationsController extends BaseController implements Notificat
     }
 
     private void setBadge(int count) {
+        if (PushListenerController.EVE_DISABLE_TELEGRAM_PUSH) {
+            return;
+        }
         if (lastBadgeCount == count) {
             return;
         }
@@ -4158,6 +4161,10 @@ public class NotificationsController extends BaseController implements Notificat
     }
 
     private void showOrUpdateNotification(boolean notifyAboutLast) {
+        if (PushListenerController.EVE_DISABLE_TELEGRAM_PUSH) {
+            dismissNotification();
+            return;
+        }
         if (!getUserConfig().isClientActivated() || pushMessages.isEmpty() && storyPushMessages.isEmpty() || !SharedConfig.showNotificationsForAllAccounts && currentAccount != UserConfig.selectedAccount) {
             dismissNotification();
             return;

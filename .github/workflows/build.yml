@@ -215,6 +215,13 @@ jobs:
             echo "::error::Built APK package ID is not com.eve.app"
             exit 1
           fi
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "$APK_PATH" | tee apk-certs.txt
+          if [ -z "${EVE_SIGNING_STORE_FILE:-}" ] && [ -f "app/eve-debug.keystore" ]; then
+            if ! grep -iq "49:24:60:51:f9:0d:46:5f:b1:5e:de:4f:ef:1e:77:00:8b:60:76:93\|49246051f90d465fb15ede4fef1e77008b607693" apk-certs.txt; then
+              echo "::error::Built debug APK signing certificate does not match google-services.json SHA-1"
+              exit 1
+            fi
+          fi
           echo "sha256=$(sha256sum "$APK_PATH" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
       - name: Upload build failure logs

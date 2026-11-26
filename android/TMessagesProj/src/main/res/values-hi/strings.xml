@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="AppName">EVE</string>
+    <string name="AppNameBeta">EVE</string>
+    <string name="LanguageName">हिन्दी</string>
+    <string name="English">अंग्रेज़ी</string>
+    <string name="LanguageNameInEnglish">Hindi</string>
+    <string name="LanguageCode">hi</string>
+    <string name="ContinueOnThisLanguage">हिन्दी में जारी रखें</string>
+
+    <!-- Bottom Tabs & Main Screen -->
+    <string name="MainTabsExams">परीक्षाएँ</string>
+    <string name="MainTabsProfile">प्रोफ़ाइल</string>
+    <string name="MainTabsSettings">सेटिंग्स</string>
+    <string name="Settings">सेटिंग्स</string>
+    <string name="Search">खोजें</string>
+    <string name="SearchExams">परीक्षाएँ खोजें</string>
+    <string name="Refresh">रीफ़्रेश करें</string>
+    <string name="Close">बंद करें</string>
+    <string name="Cancel">रद्द करें</string>
+    <string name="OK">ठीक है</string>
+    <string name="Save">सहेजें</string>
+    <string name="Done">हो गया</string>
+    <string name="Delete">हटाएँ</string>
+    <string name="Back">वापस</string>
+    <string name="NoResult">कोई परिणाम नहीं मिला</string>
+
+    <!-- Settings & Account -->
+    <string name="SettingsAccount">खाता</string>
+    <string name="SettingsAccounts">खाते</string>
+    <string name="SettingsAccountInfo">नंबर, यूज़रनेम, बायो</string>
+    <string name="SettingsChat">परीक्षा सेटिंग्स</string>
+    <string name="ChatSettings">परीक्षा सेटिंग्स</string>
+    <string name="SettingsChatInfo">वॉलपेपर, नाइट मोड, एनिमेशन</string>
+    <string name="SettingsPrivacySecurity">गोपनीयता और सुरक्षा</string>
+    <string name="SettingsPrivacySecurityInfo">लास्ट सीन, डिवाइस, पासकी</string>
+    <string name="SettingsNotifications">सूचनाएँ</string>
+    <string name="SettingsNotificationsInfo">ध्वनि, कॉल, बैज</string>
+    <string name="SettingsData">डेटा और स्टोरेज</string>
+    <string name="SettingsDataInfo">मीडिया डाउनलोड सेटिंग्स</string>
+    <string name="SettingsFolders">फ़ोल्डर</string>
+    <string name="SettingsFoldersInfo">फ़ोल्डर सेटिंग्स</string>
+    <string name="SettingsDevices">डिवाइस</string>
+    <string name="SettingsDevicesInfo">कनेक्टेड डिवाइस प्रबंधित करें</string>
+    <string name="SettingsPowerSaving">पावर सेविंग</string>
+    <string name="SettingsPowerSavingInfo">कम बैटरी पर पावर उपयोग घटाएँ</string>
+    <string name="SettingsLanguage">भाषा</string>
+    <string name="Language">भाषा</string>
+    <string name="SettingsHelp">सहायता</string>
+    <string name="EditAccountInfo2">खाता</string>
+    <string name="EditProfileName">आपका नाम</string>
+    <string name="EditProfileFirstName">पहला नाम</string>
+    <string name="EditProfileLastName">अंतिम नाम</string>
+    <string name="EditProfileBioHint2">बायो</string>
+    <string name="EditAccountInfoHeader">आपकी जानकारी</string>
+    <string name="TapToChangePhone">फ़ोन नंबर बदलने के लिए टैप करें</string>
+    <string name="Username">यूज़रनेम</string>
+    <string name="AddUsername">यूज़रनेम जोड़ें</string>
+    <string name="ContactBirthday">जन्म तिथि</string>
+    <string name="AddBirthday">जन्म तिथि जोड़ें</string>
+    <string name="LogOut">लॉग आउट</string>
+    <string name="LogOutTitle">लॉग आउट करें</string>
+
+    <!-- Exam Settings retained strings -->
+    <string name="AutoNightTheme">ऑटो-नाइट मोड</string>
+    <string name="BrowseThemes">थीम ब्राउज़ करें</string>
+    <string name="ColorTheme">रंग थीम</string>
+    <string name="TextSizeHeader">टेक्स्ट का आकार</string>
+    <string name="BubbleRadius">मैसेज कोने</string>
+    <string name="ChatList">सूची दृश्य</string>
+    <string name="ChangeChatBackground">वॉलपेपर बदलें</string>
+    <string name="SetColor">नाम का रंग बदलें</string>
+    <string name="CompactMode">कॉम्पैक्ट मोड</string>
+
+    <!-- EVE Branding, Help & Disclosure -->
+    <string name="TelegramVersion">Android के लिए EVE %1$s</string>
+    <string name="EveThirdPartyApiDisclosure">Telegram API का उपयोग करने वाला स्वतंत्र तृतीय-पक्ष ऐप। यह आधिकारिक Telegram ऐप नहीं है।</string>
+    <string name="EveCloudAccount">EVE क्लाउड खाता</string>
+    <string name="EveCloudSignInSubtitle">परीक्षाएँ, परिणाम और एडमिन एक्सेस सिंक करने के लिए Google से साइन इन करें</string>
+    <string name="EveAdminControlCenter">EVE एडमिन नियंत्रण केंद्र</string>
+    <string name="EveAdminControlCenterSubtitle">डैशबोर्ड, परीक्षाएँ, छात्र और मूल्य</string>
+    <string name="EvePremium">EVE प्रीमियम</string>
+    <string name="EvePremiumSubtitle">EVE सदस्यता। परीक्षा प्लान और मूल्य EVE एडमिन नियंत्रण केंद्र से प्रबंधित होते हैं।</string>
+    <string name="EvePremiumFooterInfo">सशुल्क EVE प्लान और मूल्य EVE एडमिन द्वारा एडमिन नियंत्रण केंद्र से प्रबंधित किए जाते हैं।</string>
+    <string name="EveHelpSupport">EVE सहायता और समर्थन</string>
+    <string name="EveHelpSupportBody">मॉक टेस्ट, परिणाम या अपने EVE खाते में सहायता चाहिए?\n\nEVE सहायता से संपर्क करें: pronlike9@gmail.com\n\nEVE एक स्वतंत्र परीक्षा तैयारी ऐप है और Telegram से संबद्ध नहीं है।</string>
+    <string name="EveFaq">EVE सामान्य प्रश्न</string>
+    <string name="EveFaqBody">1. परीक्षाएँ और टेस्ट: प्रकाशित परीक्षाएँ देखने, समयबद्ध मॉक टेस्ट शुरू करने और व्याख्या सहित उत्तर देखने के लिए परीक्षाएँ टैब खोलें।\n\n2. भाषा: सेटिंग्स &gt; भाषा में जाकर कभी भी English और हिन्दी के बीच बदलें।\n\n3. गोपनीयता और सूचनाएँ: परीक्षा अलर्ट केवल EVE क्लाउड से आते हैं। कोई भी परीक्षा डेटा या परिणाम Telegram पर नहीं भेजा जाता।</string>
+    <string name="PrivacyPolicy">गोपनीयता नीति</string>
+    <string name="EvePrivacyPolicyBody">EVE Telegram API का उपयोग करने वाला एक स्वतंत्र तृतीय-पक्ष परीक्षा तैयारी ऐप है और यह आधिकारिक Telegram ऐप नहीं है और न ही Telegram से संबद्ध है।\n\n• EVE क्लाउड (Cloudflare Worker + D1) आपका EVE छात्र प्रोफ़ाइल, परीक्षा प्रयास, स्कोर और सदस्यता अधिकार संग्रहीत करता है।\n• Firebase Authentication और FCM EVE खाता साइन-इन और EVE परीक्षा सूचनाएँ संभालते हैं।\n• EVE कभी भी आपकी परीक्षा सूचनाएँ, स्कोर या छात्र डेटा Telegram पर नहीं भेजता।\n\nसंपर्क: pronlike9@gmail.com</string>
+
+    <!-- Intro / Onboarding -->
+    <string name="Page1Title">EVE</string>
+    <string name="Page1Message">EVE सरकारी और प्रवेश परीक्षाओं की तैयारी के लिए आपका मॉक टेस्ट मंच है।</string>
+    <string name="StartMessaging">शुरू करें</string>
+
+    <!-- Exams Catalog & Player -->
+    <string name="EveExamsEmptyTitle">कोई परीक्षा उपलब्ध नहीं</string>
+    <string name="EveExamsEmptyHelp">EVE पर प्रकाशित सरकारी परीक्षाएँ और मॉक टेस्ट यहाँ दिखाई देंगे।</string>
+    <string name="EveExamsLoadingTitle">परीक्षाएँ लोड हो रही हैं</string>
+    <string name="EveExamsLoadingHelp">EVE क्लाउड से उपलब्ध परीक्षाएँ लाई जा रही हैं...</string>
+    <string name="EveExamsAuthTitle">EVE क्लाउड से जुड़ें</string>
+    <string name="EveExamsAuthHelp">उपलब्ध परीक्षाएँ लोड करने के लिए Google से साइन इन करने हेतु यहाँ टैप करें।</string>
+    <string name="EveExamsErrorTitle">परीक्षाएँ लोड नहीं हो सकीं</string>
+    <string name="EveExamsErrorHelp">EVE क्लाउड से परीक्षाएँ फिर से लोड करने के लिए यहाँ टैप करें।</string>
+    <string name="EveExamsSearchEmptyTitle">कोई मिलती परीक्षा नहीं</string>
+    <string name="EveExamsSearchEmptyHelp">परीक्षा के नाम या श्रेणी से खोजने का प्रयास करें।</string>
+    <string name="EveExamTests">उपलब्ध टेस्ट</string>
+    <string name="EveExamConfiguration">परीक्षा विवरण और निर्देश</string>
+    <string name="EveCategory">श्रेणी</string>
+    <string name="EveTimeLimit">समय सीमा</string>
+    <string name="EveQuestionsPerTest">प्रश्न</string>
+    <string name="EveNegativeMarking">नकारात्मक अंकन</string>
+    <string name="EveStartTest">टेस्ट शुरू करें</string>
+    <string name="EveResumeTest">टेस्ट जारी रखें</string>
+    <string name="EveResultHistory">परिणाम इतिहास</string>
+    <string name="EveLeaderboard">लीडरबोर्ड</string>
+    <string name="EveAnnouncements">EVE सूचनाएँ</string>
+    <string name="EvePrevious">पिछला</string>
+    <string name="EveNext">अगला</string>
+    <string name="EveSaveAndNext">सहेजें और अगला</string>
+    <string name="EveMarkForReview">समीक्षा के लिए चिह्नित करें</string>
+    <string name="EveUnmarkReview">चिह्नित</string>
+    <string name="EveClearResponse">साफ़ करें</string>
+    <string name="EveSubmitTest">सबमिट करें</string>
+    <string name="EveSubmitConfirmTitle">टेस्ट सबमिट करें?</string>
+    <string name="EveSubmitConfirmBody">उत्तर दिए: %1$d • समीक्षा चिह्नित: %2$d • अनुत्तरित: %3$d\n\nक्या आप मूल्यांकन के लिए अपने उत्तर अभी सबमिट करना चाहते हैं?</string>
+    <string name="EveScore">अंक</string>
+    <string name="EveAccuracy">सटीकता</string>
+    <string name="EveCorrect">सही</string>
+    <string name="EveWrong">गलत</string>
+    <string name="EveUnattempted">अनुत्तरित</string>
+    <string name="EveTimeTaken">लिया गया समय</string>
+    <string name="EveExplanation">व्याख्या</string>
+    <string name="EveYourAnswer">आपका उत्तर</string>
+    <string name="EveCorrectAnswer">सही उत्तर</string>
+    <string name="EveReattempt">पुनः प्रयास करें</string>
+    <string name="EveReattemptConfirmTitle">टेस्ट का पुनः प्रयास करें?</string>
+    <string name="EveReattemptConfirmBody">नया प्रयास शुरू करने पर यदि आपके खाते की सीमा अनुमति देती है तो पिछला प्रयास लॉक रीसेट होगा।</string>
+    <string name="EveReportQuestion">प्रश्न की रिपोर्ट करें</string>
+    <string name="EveBookmark">बुकमार्क</string>
+    <string name="EveBookmarked">बुकमार्क किया गया</string>
+    <string name="EveYourRank">आपकी रैंक</string>
+    <string name="EveNoHistory">अभी तक कोई परीक्षा प्रयास दर्ज नहीं है।</string>
+    <string name="EveNoLeaderboard">अभी तक कोई लीडरबोर्ड प्रविष्टि नहीं है।</string>
+    <string name="EveNoAnnouncements">अभी कोई EVE घोषणा उपलब्ध नहीं है।</string>
+    <string name="EveAllSections">सभी अनुभाग</string>
+    <string name="EvePremiumActive">EVE प्रीमियम सक्रिय</string>
+    <string name="EvePremiumUpgrade">EVE प्रीमियम अपग्रेड करें</string>
+    <string name="EvePremiumPayUpi">UPI / QR से भुगतान करें</string>
+</resources>

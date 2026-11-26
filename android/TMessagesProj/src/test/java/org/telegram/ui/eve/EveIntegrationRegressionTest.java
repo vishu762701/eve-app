@@ -94,10 +94,11 @@ public class EveIntegrationRegressionTest {
         assertFalse(ThemeActivity.isEveExamSettingSectionEnabled(ThemeActivity.EVE_SECTION_CHAT_LIST_SWIPE));
         assertTrue(ThemeActivity.isEveExamSettingSectionEnabled(ThemeActivity.EVE_SECTION_WALLPAPER));
 
-        // Mission 5: English-only permanent language
-        assertTrue(LocaleController.isEnglishOnlyMode());
+        // Mission 5: Dual English and Hindi restricted language set
+        assertFalse(LocaleController.isEnglishOnlyMode());
+        assertTrue(LocaleController.isEveRestrictedLanguageMode());
         assertEquals("English", LocaleController.getCurrentLanguageName());
-        assertEquals(1, LanguageSelectActivity.filterSelectableLanguages(Collections.emptyList()).size());
+        assertEquals(2, LanguageSelectActivity.filterSelectableLanguages(Collections.emptyList()).size());
 
         // Mission 6: Telegram Features removed & EVE Premium rebranded
         assertFalse(SettingsActivity.isEveSettingsItemEnabled(SettingsActivity.EVE_SETTINGS_ITEM_TELEGRAM_FEATURES));
@@ -105,7 +106,9 @@ public class EveIntegrationRegressionTest {
         assertTrue(PremiumPreviewFragment.isEvePremiumTransformEnabled());
         assertEquals("EVE Premium", appContext.getString(R.string.EvePremium));
 
-        // Mission 7: Worker + D1 Admin RBAC
+        // Mission 7: Worker + D1 Admin RBAC (hidden unless verified server admin)
+        assertFalse(EveAdminConfig.isAdminAvailable());
+        assertTrue(org.telegram.messenger.PushListenerController.EVE_DISABLE_TELEGRAM_PUSH);
         EveUserProfile verifiedAdmin = new EveUserProfile(
                 "u1", "EVE0001", "Admin", "admin@example.com", "", "google.com",
                 true, EveUserProfile.STATUS_ACTIVE, true, "admin", "General", "", 1L, 1L, 1L, true);

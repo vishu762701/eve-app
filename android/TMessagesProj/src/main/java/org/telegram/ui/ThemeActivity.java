@@ -343,7 +343,7 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
             sizeBar.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
             addView(sizeBar, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 38, Gravity.LEFT | Gravity.TOP, 5, 5, 39, 0));
 
-            final boolean showCompactMode = BuildVars.DEBUG_PRIVATE_VERSION;
+            final boolean showCompactMode = true;
             compactModeCell = new TextCheckCell(context);
             compactModeCell.setBackground(Theme.getSelectorDrawable(false));
             compactModeCell.setTextAndCheck(getString(R.string.CompactMode), SharedConfig.compactMode, false);

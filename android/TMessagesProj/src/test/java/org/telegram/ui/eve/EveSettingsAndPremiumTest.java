@@ -7,6 +7,7 @@ import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.os.Handler;
 import android.os.Looper;
 
@@ -25,9 +26,11 @@ import org.telegram.ui.Components.Premium.GLIcon.Icon3D;
 import org.telegram.ui.Components.Premium.StarParticlesView;
 import org.telegram.ui.PremiumPreviewFragment;
 import org.telegram.ui.SettingsActivity;
+import org.telegram.ui.eve.premium.EvePremiumRepository;
 
 /**
- * Behavioral & visual-asset regression tests for Mission 6 (Settings Cleanup & EVE Premium).
+ * Behavioral & visual-asset regression tests for Settings Cleanup, EVE Help/Support,
+ * and EVE Premium + Worker-backed UPI/QR billing.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = 35, manifest = Config.NONE, application = Application.class)
@@ -43,11 +46,14 @@ public class EveSettingsAndPremiumTest {
     }
 
     @Test
-    public void telegramFeatures_isRemovedWhileOtherSettingsRemainEnabled() {
+    public void telegramFeatures_isRemovedAndHelpStringsAreEveBranded() {
         assertFalse(SettingsActivity.isEveSettingsItemEnabled(SettingsActivity.EVE_SETTINGS_ITEM_TELEGRAM_FEATURES));
         assertTrue(SettingsActivity.isEveSettingsItemEnabled(SettingsActivity.EVE_SETTINGS_ITEM_PREMIUM));
-        assertEquals("Ask a Question", appContext.getString(R.string.AskAQuestion));
+        assertEquals("EVE Help & Support", appContext.getString(R.string.EveHelpSupport));
+        assertEquals("EVE FAQ", appContext.getString(R.string.EveFaq));
         assertEquals("Privacy Policy", appContext.getString(R.string.PrivacyPolicy));
+        assertTrue(appContext.getString(R.string.EvePrivacyPolicyBody).contains("Telegram API"));
+        assertTrue(appContext.getString(R.string.EvePrivacyPolicyBody).contains("never sends"));
     }
 
     @Test
@@ -67,5 +73,9 @@ public class EveSettingsAndPremiumTest {
         assertEquals("GLIconTextureView", GLIconTextureView.class.getSimpleName());
         assertEquals("StarParticlesView", StarParticlesView.class.getSimpleName());
         assertNotNull(Icon3D.class);
+
+        Bitmap qr = EvePremiumRepository.generateQrBitmap("upi://pay?pa=eve@upi&am=199&cu=INR", 128);
+        assertNotNull(qr);
+        assertEquals(128, qr.getWidth());
     }
 }

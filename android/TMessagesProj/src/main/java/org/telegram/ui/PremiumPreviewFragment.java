@@ -40,6 +40,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -79,6 +80,7 @@ import org.telegram.tgnet.TLRPC;
 import org.telegram.tgnet.tl.TL_account;
 import org.telegram.tgnet.tl.TL_stars;
 import org.telegram.ui.ActionBar.ActionBar;
+import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.EdgeToEdgeSupportMode;
 import org.telegram.ui.ActionBar.Theme;
@@ -451,6 +453,9 @@ public class PremiumPreviewFragment extends BaseFragment implements Notification
         return true;
     }
 
+    private org.telegram.ui.eve.premium.EvePremiumRepository.PremiumSnapshot evePremiumSnapshot;
+    private boolean evePremiumLoading = false;
+
     public PremiumPreviewFragment setForcePremium() {
         this.forcePremium = true;
         return this;
@@ -540,7 +545,10 @@ public class PremiumPreviewFragment extends BaseFragment implements Notification
         premiumFeatures.clear();
         morePremiumFeatures.clear();
         if (type == FEATURES_PREMIUM) {
-            if (!isEvePremiumTransformEnabled()) {
+            if (isEvePremiumTransformEnabled()) {
+                fillEvePremiumBenefits();
+                loadEvePremiumData();
+            } else {
                 fillPremiumFeaturesList(premiumFeatures, currentAccount, false);
             }
         } else {
@@ -900,6 +908,14 @@ public class PremiumPreviewFragment extends BaseFragment implements Notification
                     return;
                 }
 
+                if (isEvePremiumTransformEnabled() && type == FEATURES_PREMIUM) {
+                    showDialog(new AlertDialog.Builder(getParentActivity(), resourceProvider)
+                            .setTitle(cell.data.title)
+                            .setMessage(cell.data.description)
+                            .setPositiveButton(getString(R.string.OK), null)
+                            .create());
+                    return;
+                }
                 PremiumPreviewFragment.sentShowFeaturePreview(currentAccount, cell.data.type);
                 SubscriptionTier tier = selectedTierIndex < 0 || selectedTierIndex >= subscriptionTiers.size() ? null : subscriptionTiers.get(selectedTierIndex);
                 showDialog(new PremiumFeatureBottomSheet(PremiumPreviewFragment.this, getContext(), currentAccount, type == FEATURES_BUSINESS, cell.data.type, false, tier));
@@ -1448,8 +1464,9 @@ public class PremiumPreviewFragment extends BaseFragment implements Notification
             showAdsInfoRow = rowCount++;
         }
 
-        final boolean showSubscribeButton = !(isEvePremiumTransformEnabled() && type == FEATURES_PREMIUM)
-                && (!getUserConfig().isPremium() || currentSubscriptionTier != null && !subscriptionTiers.isEmpty() && selectedTierIndex >= 0 && selectedTierIndex < subscriptionTiers.size() && currentSubscriptionTier.getMonths() < subscriptionTiers.get(selectedTierIndex).getMonths() && !forcePremium);
+        final boolean eveShowButton = isEvePremiumTransformEnabled() && type == FEATURES_PREMIUM;
+        final boolean showSubscribeButton = eveShowButton
+                || (!getUserConfig().isPremium() || currentSubscriptionTier != null && !subscriptionTiers.isEmpty() && selectedTierIndex >= 0 && selectedTierIndex < subscriptionTiers.size() && currentSubscriptionTier.getMonths() < subscriptionTiers.get(selectedTierIndex).getMonths() && !forcePremium);
         AndroidUtilities.updateViewVisibilityAnimated(buttonContainer, showSubscribeButton, 1f, false);
 
         int buttonHeight = buttonContainer.getVisibility() == View.VISIBLE ? dp(64) : 0;
@@ -1623,7 +1640,14 @@ public class PremiumPreviewFragment extends BaseFragment implements Notification
                 } else if (position == statusRow && type == FEATURES_BUSINESS) {
                     privacyCell.setText(getString(R.string.PremiumPreviewMoreBusinessFeaturesInfo));
                 } else if (position == statusRow && isEvePremiumTransformEnabled()) {
-                    privacyCell.setText(getString(R.string.EvePremiumFooterInfo));
+                    if (evePremiumSnapshot != null && evePremiumSnapshot.status.isPremium) {
+                        String exp = evePremiumSnapshot.status.isLifetime ? "Lifetime" : "Active";
+                        privacyCell.setText(getString(R.string.EvePremiumActive) + " • " + evePremiumSnapshot.status.planName + " (" + exp + ")");
+                    } else if (evePremiumSnapshot != null && evePremiumSnapshot.plan.isEnabled) {
+                        privacyCell.setText("₹" + evePremiumSnapshot.plan.priceInr + " • " + (evePremiumSnapshot.plan.isLifetime ? "Lifetime" : evePremiumSnapshot.plan.durationDays + " days") + " • Managed by EVE Admin Control Center");
+                    } else {
+                        privacyCell.setText(getString(R.string.EvePremiumFooterInfo));
+                    }
                 } else if (position == statusRow) {
                     TLRPC.TL_help_premiumPromo premiumPromo = getMediaDataController().getPremiumPromo();
                     if (premiumPromo == null) {
@@ -2069,8 +2093,17 @@ public class PremiumPreviewFragment extends BaseFragment implements Notification
         public void updateText() {
             if (type == FEATURES_PREMIUM) {
                 if (isEvePremiumTransformEnabled()) {
-                    titleView.setText(getString(R.string.EvePremium));
-                    subtitleView.setText(AndroidUtilities.replaceTags(getString(R.string.EvePremiumSubtitle)));
+                    String title = evePremiumSnapshot != null ? evePremiumSnapshot.plan.planName : getString(R.string.EvePremium);
+                    String sub;
+                    if (evePremiumSnapshot != null && evePremiumSnapshot.status.isPremium) {
+                        sub = getString(R.string.EvePremiumActive) + " • " + evePremiumSnapshot.plan.description;
+                    } else if (evePremiumSnapshot != null && !evePremiumSnapshot.plan.description.isEmpty()) {
+                        sub = evePremiumSnapshot.plan.description;
+                    } else {
+                        sub = getString(R.string.EvePremiumSubtitle);
+                    }
+                    titleView.setText(title);
+                    subtitleView.setText(AndroidUtilities.replaceTags(sub));
                 } else {
                     titleView.setText(getString(forcePremium ? R.string.TelegramPremiumSubscribedTitle : R.string.TelegramPremium));
                     subtitleView.setText(AndroidUtilities.replaceTags(getString(getUserConfig().isPremium() || forcePremium ? R.string.TelegramPremiumSubscribedSubtitle : R.string.TelegramPremiumSubtitle)));
@@ -2127,8 +2160,146 @@ public class PremiumPreviewFragment extends BaseFragment implements Notification
         }
     }
 
+    private void fillEvePremiumBenefits() {
+        premiumFeatures.clear();
+        java.util.List<String> benefits = (evePremiumSnapshot != null && !evePremiumSnapshot.plan.benefits.isEmpty())
+                ? evePremiumSnapshot.plan.benefits
+                : java.util.Arrays.asList(
+                        "Access all eligible mock tests & exam series",
+                        "Unlimited mock test reattempts without the 3-attempt limit",
+                        "Server-verified EVE Cloud sync & leaderboard tracking"
+                );
+        int[] icons = new int[] {
+                R.drawable.msg_premium_limits,
+                R.drawable.msg_premium_speed,
+                R.drawable.msg_premium_badge
+        };
+        for (int i = 0; i < benefits.size(); i++) {
+            String title = benefits.get(i);
+            premiumFeatures.add(new PremiumFeatureData(
+                    i + 1,
+                    icons[i % icons.length],
+                    title,
+                    "Managed by EVE Cloud & EVE Admin Control Center."
+            ));
+        }
+    }
+
+    private void loadEvePremiumData() {
+        if (evePremiumLoading) {
+            return;
+        }
+        evePremiumLoading = true;
+        org.telegram.ui.eve.premium.EvePremiumRepository.getInstance().loadSnapshot((snap, err) -> {
+            evePremiumLoading = false;
+            if (snap != null) {
+                evePremiumSnapshot = snap;
+                fillEvePremiumBenefits();
+                if (backgroundView != null) {
+                    backgroundView.updateText();
+                }
+                updateRows();
+                updateButtonText(false);
+                if (listView != null && listView.getAdapter() != null) {
+                    listView.getAdapter().notifyDataSetChanged();
+                }
+            }
+        });
+    }
+
+    private void startEveUpiCheckout(org.telegram.ui.eve.premium.EvePremiumRepository.PlanDetails plan) {
+        Activity activity = getParentActivity();
+        if (activity == null) {
+            return;
+        }
+        if (!org.telegram.ui.eve.auth.EveAuthManager.getInstance().isSignedInAccount()) {
+            org.telegram.ui.eve.auth.EveAuthManager.getInstance().signInWithGoogle(activity, new org.telegram.ui.eve.auth.EveAuthManager.AuthCallback() {
+                @Override
+                public void onSuccess(@NonNull org.telegram.ui.eve.auth.EveUserProfile profile, @NonNull org.telegram.ui.eve.auth.EveAuthCoordinator.SyncOutcome syncOutcome) {
+                    loadEvePremiumData();
+                }
+
+                @Override
+                public void onError(@NonNull String message, boolean accountDisabled) {
+                    BulletinFactory.of(PremiumPreviewFragment.this).createErrorBulletin(message).show();
+                }
+            });
+            return;
+        }
+        String method = plan.qrEnabled ? "qr" : "upi";
+        org.telegram.ui.eve.premium.EvePremiumRepository.getInstance().createOrder(method, (order, error) -> {
+            if (order == null) {
+                BulletinFactory.of(PremiumPreviewFragment.this).createErrorBulletin(error != null ? error : "Unable to start checkout.").show();
+                return;
+            }
+            LinearLayout box = new LinearLayout(activity);
+            box.setOrientation(LinearLayout.VERTICAL);
+            int pad = dp(16);
+            box.setPadding(pad, pad, pad, pad);
+
+            TextView info = new TextView(activity);
+            info.setText("Order: " + order.orderId + "\nPlan: " + order.planName + "\nAmount: ₹" + order.amount);
+            box.addView(info);
+
+            Bitmap qrBmp = org.telegram.ui.eve.premium.EvePremiumRepository.generateQrBitmap(order.qrData, dp(200));
+            if (qrBmp != null) {
+                ImageView iv = new ImageView(activity);
+                iv.setImageBitmap(qrBmp);
+                iv.setPadding(0, dp(12), 0, dp(12));
+                box.addView(iv, LayoutHelper.createLinear(200, 200, Gravity.CENTER_HORIZONTAL));
+            }
+
+            AlertDialog.Builder b = new AlertDialog.Builder(activity, resourceProvider)
+                    .setTitle(getString(R.string.EvePremiumPayUpi))
+                    .setView(box)
+                    .setPositiveButton("Verify Status", (d, w) ->
+                            org.telegram.ui.eve.premium.EvePremiumRepository.getInstance().checkOrderStatus(order.orderId, (st, stErr) -> {
+                                if (st != null && st.isPremium) {
+                                    BulletinFactory.of(PremiumPreviewFragment.this).createSimpleBulletin(R.raw.info, "EVE Premium activated!").show();
+                                    loadEvePremiumData();
+                                } else {
+                                    BulletinFactory.of(PremiumPreviewFragment.this).createSimpleBulletin(R.raw.info,
+                                            st != null ? "Order status: " + st.status : (stErr != null ? stErr : "Pending server verification.")).show();
+                                }
+                            }))
+                    .setNegativeButton(getString(R.string.Close), null);
+            if (!order.upiUri.isEmpty()) {
+                b.setNeutralButton("Open UPI App", (d, w) -> {
+                    try {
+                        activity.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(order.upiUri)));
+                    } catch (Throwable t) {
+                        BulletinFactory.of(PremiumPreviewFragment.this).createErrorBulletin("No UPI app found on device.").show();
+                    }
+                });
+            }
+            showDialog(b.create());
+        });
+    }
+
     private void updateButtonText(boolean animated) {
         if (premiumButtonView == null) {
+            return;
+        }
+        if (isEvePremiumTransformEnabled() && type == FEATURES_PREMIUM) {
+            if (evePremiumSnapshot != null && evePremiumSnapshot.status.isPremium) {
+                premiumButtonView.setButton(getString(R.string.EvePremiumActive), null, animated);
+                premiumButtonView.setFlickerDisabled(true);
+                buttonContainerInternal.setOnClickListener(v -> loadEvePremiumData());
+            } else if (evePremiumSnapshot != null && evePremiumSnapshot.plan.isEnabled) {
+                premiumButtonView.setButton(getString(R.string.EvePremiumPayUpi) + " • ₹" + evePremiumSnapshot.plan.priceInr, null, animated);
+                premiumButtonView.setFlickerDisabled(false);
+                buttonContainerInternal.setOnClickListener(v -> startEveUpiCheckout(evePremiumSnapshot.plan));
+            } else if (!org.telegram.ui.eve.auth.EveAuthManager.getInstance().isSignedInAccount()) {
+                premiumButtonView.setButton(getString(R.string.EveCloudAccount), null, animated);
+                premiumButtonView.setFlickerDisabled(false);
+                buttonContainerInternal.setOnClickListener(v -> startEveUpiCheckout(
+                        evePremiumSnapshot != null ? evePremiumSnapshot.plan : new org.telegram.ui.eve.premium.EvePremiumRepository.PlanDetails(false, "default", "EVE Premium", 99, "INR", 30, false, "", null, false, false, 10)
+                ));
+            } else {
+                premiumButtonView.setButton(getString(R.string.EvePremium), null, animated);
+                premiumButtonView.setFlickerDisabled(true);
+                buttonContainerInternal.setOnClickListener(v -> BulletinFactory.of(this).createSimpleBulletin(R.raw.info, getString(R.string.EvePremiumFooterInfo)).show());
+            }
             return;
         }
         if (getUserConfig().isPremium() && currentSubscriptionTier != null && selectedTierIndex < subscriptionTiers.size() && subscriptionTiers.get(selectedTierIndex).getMonths() < currentSubscriptionTier.getMonths()) {

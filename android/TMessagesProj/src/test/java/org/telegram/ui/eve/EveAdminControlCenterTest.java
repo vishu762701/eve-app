@@ -40,6 +40,8 @@ public class EveAdminControlCenterTest {
         assertTrue(EveAdminConfig.isServerAdminProfile(owner));
         assertFalse(EveAdminConfig.isServerAdminProfile(unverifiedAdmin));
         assertFalse(EveAdminConfig.isServerAdminProfile(student));
+        // Signed-out / student runtime sessions must never expose Admin Control Center even in debug builds.
+        assertFalse(EveAdminConfig.isAdminAvailable());
 
         EveAdminModels.AdminProfile subAdmin = new EveAdminModels.AdminProfile(
                 "mod@example.com", false, "Exam Mod",

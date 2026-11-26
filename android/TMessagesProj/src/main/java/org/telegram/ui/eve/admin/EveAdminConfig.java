@@ -73,7 +73,7 @@ public final class EveAdminConfig {
     }
 
     public static boolean isAdminAvailable() {
-        return isServerAdminSession() || EveInspectionMode.isEnabledForCurrentBuild();
+        return isServerAdminSession();
     }
 
     private static SharedPreferences prefs() {

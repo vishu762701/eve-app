@@ -27,17 +27,21 @@ public class GcmPushListenerService extends FirebaseMessagingService {
             FileLog.d("FCM received data: " + data + " from: " + from);
         }
 
-        PushListenerController.processRemoteMessage(PushListenerController.PUSH_TYPE_FIREBASE, data.get("p"), time);
+        // EVE-PATCH: Complete notification separation — drop Telegram chat pushes and route EVE exam alerts to EVE pipeline only.
+        if (org.telegram.ui.eve.notifications.EveNotificationHelper.isTelegramPushPayload(data)) {
+            return;
+        }
+        org.telegram.ui.eve.notifications.EveNotificationHelper.handleIncomingFcmMessage(getApplicationContext(), message);
     }
 
     @Override
     public void onNewToken(@NonNull String token) {
         AndroidUtilities.runOnUIThread(() -> {
             if (BuildVars.LOGS_ENABLED) {
-                FileLog.d("Refreshed FCM token: " + token);
+                FileLog.d("Refreshed FCM token for EVE");
             }
             ApplicationLoader.postInitApplication();
-            PushListenerController.sendRegistrationToServer(PushListenerController.PUSH_TYPE_FIREBASE, token);
+            org.telegram.ui.eve.notifications.EveNotificationHelper.registerFcmToken(token);
         });
     }
 }

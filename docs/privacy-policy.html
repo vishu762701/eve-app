@@ -18,11 +18,12 @@
 
 <p>Eve ("the App", "we", "us") is a free mock test / exam preparation app for Government and entrance exams in India. This Privacy Policy explains what information the App collects and how it is used.</p>
 
-<h2>Information We Collect</h2>
+<h2>Information We Collect &amp; Third-Party APIs</h2>
 <ul>
-  <li><strong>Google Sign-In:</strong> When you sign in, we receive your name, email address, and profile photo from your Google account, via Firebase Authentication.</li>
-  <li><strong>Test Attempts:</strong> We store your exam attempts, scores, selected answers, and attempt dates so you can view your test history.</li>
-  <li><strong>Device / Notification Token:</strong> To send you notifications about new exams or daily reminders, we store a Firebase Cloud Messaging token linked to your account.</li>
+  <li><strong>Independent Third-Party Application Disclosure:</strong> EVE is an independent third-party exam preparation application that integrates the Telegram API (MTProto) for optional user authentication and retained communication infrastructure. EVE is not an official Telegram application and is not affiliated with or endorsed by Telegram.</li>
+  <li><strong>Google Sign-In &amp; EVE Cloud Account:</strong> When you sign in with Google or email via Firebase Authentication, we receive your name, email address, and profile photo to identify your EVE Cloud student/administrator account on our Cloudflare Worker + D1 backend.</li>
+  <li><strong>Test Attempts &amp; Leaderboard:</strong> We store your exam attempts, server-verified scores, selected answers, bookmarks, and attempt dates in EVE's Cloudflare D1 database so you can view your test history and rankings.</li>
+  <li><strong>Device / Notification Token:</strong> To send EVE exam and result notifications, we store a Firebase Cloud Messaging (FCM) token linked to your EVE Cloud account. EVE does not send exam notifications, scores, or student data to Telegram.</li>
 </ul>
 
 <h2>How We Use Your Information</h2>

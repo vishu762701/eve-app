@@ -398,14 +398,8 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         if (tabsView == null) {
             return;
         }
-
-        final int unreadCount = MessagesStorage.getInstance(currentAccount).getMainUnreadCount();
-        if (unreadCount > 0) {
-            final String unreadCountFmt = LocaleController.formatNumber(unreadCount, ',');
-            tabs[INDEX_CHATS].setCounter(unreadCountFmt, false, animated);
-        } else {
-            tabs[INDEX_CHATS].setCounter(null, false, animated);
-        }
+        // EVE-PATCH: Do not display Telegram chat unread-message badges on the EVE Exams tab.
+        tabs[INDEX_CHATS].setCounter(null, false, animated);
     }
 
     public boolean openContactsSelector(View anchor) {
@@ -992,6 +986,18 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
             }
         } else if (id == NotificationCenter.contactsPermissionBadgeCheck) {
             checkContactsTabBadge();
+        } else if (id == NotificationCenter.reloadInterface) {
+            if (tabs != null) {
+                if (tabs[INDEX_CHATS] != null) {
+                    tabs[INDEX_CHATS].setText(LocaleController.getString(R.string.MainTabsExams));
+                }
+                if (tabs[INDEX_SETTINGS] != null) {
+                    tabs[INDEX_SETTINGS].setText(LocaleController.getString(R.string.Settings));
+                }
+                if (tabs[INDEX_PROFILE] != null) {
+                    tabs[INDEX_PROFILE].setText(LocaleController.getString(R.string.MainTabsProfile));
+                }
+            }
         }
     }
 
@@ -1011,7 +1017,8 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
             .add(NotificationCenter.contactsPermissionBadgeCheck)
             .addGlobal(NotificationCenter.appUpdateAvailable)
             .addGlobal(NotificationCenter.appUpdateLoading)
-            .addGlobal(NotificationCenter.needSetDayNightTheme);
+            .addGlobal(NotificationCenter.needSetDayNightTheme)
+            .addGlobal(NotificationCenter.reloadInterface);
 
         return super.onFragmentCreate();
     }

@@ -606,6 +606,15 @@ public class LocaleController {
         languagesDict.put(localeInfo.shortName, localeInfo);
 
         localeInfo = new LocaleInfo();
+        localeInfo.name = EVE_HINDI_LANGUAGE_NAME;
+        localeInfo.nameEnglish = EVE_HINDI_LANGUAGE_NAME_ENGLISH;
+        localeInfo.shortName = localeInfo.pluralLangCode = EVE_HINDI_LANGUAGE_CODE;
+        localeInfo.pathToFile = null;
+        localeInfo.builtIn = true;
+        languages.add(localeInfo);
+        languagesDict.put(localeInfo.shortName, localeInfo);
+
+        localeInfo = new LocaleInfo();
         localeInfo.name = "Italiano";
         localeInfo.nameEnglish = "Italian";
         localeInfo.shortName = localeInfo.pluralLangCode = "it";
@@ -686,9 +695,11 @@ public class LocaleController {
         languages.add(localeInfo);
         languagesDict.put(localeInfo.shortName, localeInfo);
 
-        loadOtherLanguages();
-        if (remoteLanguages.isEmpty()) {
-            AndroidUtilities.runOnUIThread(() -> loadRemoteLanguages(UserConfig.selectedAccount));
+        if (!isEveRestrictedLanguageMode()) {
+            loadOtherLanguages();
+            if (remoteLanguages.isEmpty()) {
+                AndroidUtilities.runOnUIThread(() -> loadRemoteLanguages(UserConfig.selectedAccount));
+            }
         }
 
         for (int a = 0; a < otherLanguages.size(); a++) {
@@ -732,9 +743,16 @@ public class LocaleController {
         boolean override = false;
 
         try {
-            if (isEnglishOnlyMode()) {
-                currentInfo = getLanguageFromDict(EVE_PERMANENT_LANGUAGE_CODE);
-                override = true;
+            if (isEveRestrictedLanguageMode()) {
+                SharedPreferences preferences = MessagesController.getGlobalMainSettings();
+                String savedLang = preferences.getString("language", null);
+                if (EVE_HINDI_LANGUAGE_CODE.equalsIgnoreCase(savedLang)) {
+                    currentInfo = getLanguageFromDict(EVE_HINDI_LANGUAGE_CODE);
+                    override = true;
+                } else {
+                    currentInfo = getLanguageFromDict(EVE_PERMANENT_LANGUAGE_CODE);
+                    override = EVE_PERMANENT_LANGUAGE_CODE.equalsIgnoreCase(savedLang);
+                }
             } else {
                 SharedPreferences preferences = MessagesController.getGlobalMainSettings();
                 String lang = preferences.getString("language", null);
@@ -922,6 +940,9 @@ public class LocaleController {
     private boolean patching = false;
 
     public void checkForcePatchLangpack(int currentAccount, Runnable ifDone) {
+        if (isEveRestrictedLanguageMode()) {
+            return;
+        }
         String lng = LocaleController.getCurrentLanguageName();
         boolean shouldPatch = MessagesController.getInstance(currentAccount).checkResetLangpack > 0 && !MessagesController.getGlobalMainSettings().getBoolean("langpack_patched" + lng, false) && !patching;
         if (shouldPatch) {
@@ -1315,16 +1336,33 @@ public class LocaleController {
 
     public static final String EVE_PERMANENT_LANGUAGE_CODE = "en";
     public static final String EVE_PERMANENT_LANGUAGE_NAME = "English";
+    public static final String EVE_HINDI_LANGUAGE_CODE = "hi";
+    public static final String EVE_HINDI_LANGUAGE_NAME = "हिन्दी";
+    public static final String EVE_HINDI_LANGUAGE_NAME_ENGLISH = "Hindi";
 
-    // EVE-PATCH: Mission 5 - English is the permanent application language default.
+    // EVE-PATCH: EVE supports exactly English and Hindi application languages, without Telegram cloud langpack overrides.
     public static boolean isEnglishOnlyMode() {
+        return false;
+    }
+
+    public static boolean isEveRestrictedLanguageMode() {
         return true;
+    }
+
+    public static boolean isHindiSelected() {
+        LocaleInfo info = getInstance().currentLocaleInfo;
+        if (info != null && EVE_HINDI_LANGUAGE_CODE.equalsIgnoreCase(info.shortName)) {
+            return true;
+        }
+        Locale loc = getInstance().currentLocale;
+        return loc != null && EVE_HINDI_LANGUAGE_CODE.equalsIgnoreCase(loc.getLanguage());
     }
 
     public static boolean isAllowedApplicationLocale(LocaleInfo localeInfo) {
         return localeInfo != null
-                && EVE_PERMANENT_LANGUAGE_CODE.equalsIgnoreCase(localeInfo.shortName)
-                && localeInfo.pathToFile == null;
+                && localeInfo.pathToFile == null
+                && (EVE_PERMANENT_LANGUAGE_CODE.equalsIgnoreCase(localeInfo.shortName)
+                    || EVE_HINDI_LANGUAGE_CODE.equalsIgnoreCase(localeInfo.shortName));
     }
 
     public int applyLanguage(LocaleInfo localeInfo, boolean override, boolean init, final int currentAccount) {
@@ -1335,10 +1373,10 @@ public class LocaleController {
         if (localeInfo == null) {
             return 0;
         }
-        if (isEnglishOnlyMode() && !isAllowedApplicationLocale(localeInfo)) {
-            LocaleInfo english = getLanguageFromDict(EVE_PERMANENT_LANGUAGE_CODE);
-            if (isAllowedApplicationLocale(english)) {
-                return applyLanguage(english, override, init, false, false, currentAccount, onDone);
+        if (isEveRestrictedLanguageMode() && !isAllowedApplicationLocale(localeInfo)) {
+            LocaleInfo fallback = getLanguageFromDict(EVE_PERMANENT_LANGUAGE_CODE);
+            if (isAllowedApplicationLocale(fallback)) {
+                return applyLanguage(fallback, override, init, false, false, currentAccount, onDone);
             }
         }
         int requestId = 0;
@@ -1485,10 +1523,13 @@ public class LocaleController {
     }
 
     public static String getCurrentLanguageName() {
-        if (isEnglishOnlyMode()) {
+        LocaleInfo localeInfo = getInstance().currentLocaleInfo;
+        if (isEveRestrictedLanguageMode()) {
+            if (localeInfo != null && EVE_HINDI_LANGUAGE_CODE.equalsIgnoreCase(localeInfo.shortName)) {
+                return EVE_HINDI_LANGUAGE_NAME;
+            }
             return EVE_PERMANENT_LANGUAGE_NAME;
         }
-        LocaleInfo localeInfo = getInstance().currentLocaleInfo;
         return localeInfo == null || TextUtils.isEmpty(localeInfo.name) ? getString("LanguageName", R.string.LanguageName) : localeInfo.name;
     }
 
@@ -3401,7 +3442,7 @@ public class LocaleController {
     }
 
     public void loadRemoteLanguages(final int currentAccount, boolean applyCurrent) {
-        if (loadingRemoteLanguages) {
+        if (isEveRestrictedLanguageMode() || loadingRemoteLanguages) {
             return;
         }
         loadingRemoteLanguages = true;
@@ -3541,6 +3582,12 @@ public class LocaleController {
     }
 
     private int applyRemoteLanguage(LocaleInfo localeInfo, String langCode, boolean force, final int currentAccount, Runnable onDone) {
+        if (isEveRestrictedLanguageMode()) {
+            if (onDone != null) {
+                onDone.run();
+            }
+            return 0;
+        }
         if (localeInfo == null || !localeInfo.isRemote() && !localeInfo.isUnofficial()) {
             return 0;
         }

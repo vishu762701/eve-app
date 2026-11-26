@@ -16125,6 +16125,9 @@ public class MessagesController extends BaseController implements NotificationCe
     }
 
     public void registerForPush(@PushListenerController.PushType int pushType, String regid) {
+        if (PushListenerController.EVE_DISABLE_TELEGRAM_PUSH) {
+            return;
+        }
         if (TextUtils.isEmpty(regid) || registeringForPush || getUserConfig().getClientUserId() == 0) {
             return;
         }

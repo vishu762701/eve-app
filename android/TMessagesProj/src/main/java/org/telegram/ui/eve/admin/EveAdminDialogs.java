@@ -2,9 +2,13 @@ package org.telegram.ui.eve.admin;
 
 import android.app.Activity;
 import android.content.Context;
+import android.graphics.Bitmap;
+import android.net.Uri;
 import android.text.InputType;
+import android.view.Gravity;
 import android.widget.CheckBox;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -15,6 +19,7 @@ import org.telegram.messenger.R;
 import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.Components.BulletinFactory;
+import org.telegram.ui.eve.premium.EvePremiumRepository;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -53,7 +58,7 @@ public final class EveAdminDialogs {
                 ? addField(activity, container, "AI Generation Prompt Notes (optional)", "", InputType.TYPE_CLASS_TEXT)
                 : null;
 
-        new AlertDialog.Builder(activity)
+        AlertDialog.Builder builder = new AlertDialog.Builder(activity)
                 .setTitle(existing == null ? "Create Exam" : "Edit Exam: " + existing.examName)
                 .setView(wrapScroll(activity, container))
                 .setPositiveButton(existing == null ? "Create" : "Save", (d, w) -> {
@@ -82,8 +87,36 @@ public final class EveAdminDialogs {
                         }
                     });
                 })
-                .setNegativeButton("Cancel", null)
-                .show();
+                .setNegativeButton("Cancel", null);
+        if (existing != null) {
+            builder.setNeutralButton("Duplicate / Pause", (d, w) -> new AlertDialog.Builder(activity)
+                    .setTitle(existing.examName)
+                    .setItems(new String[] {
+                            "Duplicate Exam as Copy",
+                            "Pause Exam & Unpublish All Tests"
+                    }, (d2, action) -> {
+                        EveAdminRepository.ResultCallback<String> cb = callback(fragment, msg -> {
+                            showInfo(fragment, msg);
+                            if (onSaved != null) onSaved.run();
+                        });
+                        repo.runWithAdminToken(cb, token -> {
+                            if (action == 0) {
+                                String copyId = repo.createExam(token, existing.examName + " (Copy)", existing.category,
+                                        existing.timeLimitMinutes, existing.questionCount, existing.testNumber,
+                                        existing.negativeMarkingText, "paused", existing.generationPrompt);
+                                repo.postSuccess(cb, "Duplicated as draft exam (" + copyId + ").");
+                            } else {
+                                repo.updateExam(token, existing.id, existing.examName, existing.category,
+                                        existing.timeLimitMinutes, existing.questionCount, existing.negativeMarkingText, "paused");
+                                repo.unpublishExamTests(token, existing.id);
+                                repo.postSuccess(cb, "Exam paused & tests unpublished.");
+                            }
+                        });
+                    })
+                    .setNegativeButton("Cancel", null)
+                    .show());
+        }
+        builder.show();
     }
 
     public static void showGenerateTestDialog(
@@ -176,22 +209,63 @@ public final class EveAdminDialogs {
         Activity activity = fragment.getParentActivity();
         if (activity == null) return;
         String[] actions = new String[] {
+                "Preview & Validate Questions",
                 "Publish (Set LIVE)",
+                "Schedule Release (Hours From Now)",
                 "Move to DRAFT / Paused",
                 "Delete Unused Test"
         };
         new AlertDialog.Builder(activity)
                 .setTitle(test.title)
                 .setItems(actions, (d, which) -> {
+                    if (which == 0) {
+                        EveAdminRepository.ResultCallback<List<EveAdminModels.AdminQuestionItem>> pcb = callback(fragment, qs -> {
+                            StringBuilder sb = new StringBuilder();
+                            sb.append("Status: ").append(test.status).append(" • ").append(qs.size()).append(" questions\n\n");
+                            for (int i = 0; i < Math.min(qs.size(), 15); i++) {
+                                EveAdminModels.AdminQuestionItem q = qs.get(i);
+                                sb.append(i + 1).append(". ").append(q.questionText)
+                                        .append("\n   [Ans: ").append(q.correctAnswer).append("]\n");
+                            }
+                            if (qs.size() > 15) {
+                                sb.append("\n...and ").append(qs.size() - 15).append(" more questions.");
+                            }
+                            showTextDialog(activity, "Test Preview: " + test.title, sb.toString().trim());
+                        });
+                        repo.runWithAdminToken(pcb, token -> repo.postSuccess(pcb, repo.fetchGeneratedTestQuestions(token, test.id)));
+                        return;
+                    }
+                    if (which == 2) {
+                        LinearLayout box = makeFormContainer(activity);
+                        EditText hoursInput = addField(activity, box, "Release in how many hours? (0 = immediate)", "0", InputType.TYPE_CLASS_NUMBER);
+                        new AlertDialog.Builder(activity)
+                                .setTitle("Schedule: " + test.title)
+                                .setView(wrapScroll(activity, box))
+                                .setPositiveButton("Schedule", (d2, w2) -> {
+                                    int hrs = parseIntBounded(hoursInput, 0, 0, 720);
+                                    long availableFrom = hrs == 0 ? 0L : System.currentTimeMillis() + hrs * 3_600_000L;
+                                    EveAdminRepository.ResultCallback<String> scb = callback(fragment, msg -> {
+                                        showInfo(fragment, msg);
+                                        if (onMutated != null) onMutated.run();
+                                    });
+                                    repo.runWithAdminToken(scb, token -> {
+                                        repo.scheduleGeneratedTest(token, test.id, availableFrom);
+                                        repo.postSuccess(scb, hrs == 0 ? "Test scheduled for immediate availability." : "Test scheduled in " + hrs + "h.");
+                                    });
+                                })
+                                .setNegativeButton("Cancel", null)
+                                .show();
+                        return;
+                    }
                     EveAdminRepository.ResultCallback<String> cb = callback(fragment, msg -> {
                         showInfo(fragment, msg);
                         if (onMutated != null) onMutated.run();
                     });
                     repo.runWithAdminToken(cb, token -> {
-                        if (which == 0) {
+                        if (which == 1) {
                             repo.updateGeneratedTestStatus(token, test.id, "live");
                             repo.postSuccess(cb, "Test published LIVE.");
-                        } else if (which == 1) {
+                        } else if (which == 3) {
                             repo.updateGeneratedTestStatus(token, test.id, "paused");
                             repo.postSuccess(cb, "Test paused / moved out of live feed.");
                         } else {
@@ -232,26 +306,76 @@ public final class EveAdminDialogs {
         EveAdminRepository.ResultCallback<List<EveAdminModels.AdminQuestionItem>> cb = callback(fragment, questions -> {
             Activity activity = fragment.getParentActivity();
             if (activity == null) return;
-            String[] items = new String[questions.size() + 1];
+            String[] items = new String[questions.size() + 2];
             items[0] = "+ Add New Question to " + exam.examName;
+            items[1] = "+ Bulk Import Questions (JSON)";
             for (int i = 0; i < questions.size(); i++) {
                 EveAdminModels.AdminQuestionItem q = questions.get(i);
                 String snippet = q.questionText.length() > 64 ? q.questionText.substring(0, 64) + "..." : q.questionText;
-                items[i + 1] = (i + 1) + ". [" + q.correctAnswer + "] " + snippet;
+                items[i + 2] = (i + 1) + ". [" + q.correctAnswer + "] " + snippet;
             }
             new AlertDialog.Builder(activity)
                     .setTitle(exam.examName + " Questions (" + questions.size() + ")")
                     .setItems(items, (d, which) -> {
                         if (which == 0) {
                             showEditQuestionDialog(fragment, repo, exam, null, () -> loadAndShowExamQuestions(fragment, repo, exam));
+                        } else if (which == 1) {
+                            showBulkImportQuestionsDialog(fragment, repo, exam, () -> loadAndShowExamQuestions(fragment, repo, exam));
                         } else {
-                            showQuestionActions(fragment, repo, exam, questions.get(which - 1), () -> loadAndShowExamQuestions(fragment, repo, exam));
+                            showQuestionActions(fragment, repo, exam, questions.get(which - 2), () -> loadAndShowExamQuestions(fragment, repo, exam));
                         }
                     })
                     .setNegativeButton("Close", null)
                     .show();
         });
         repo.runWithAdminToken(cb, token -> repo.postSuccess(cb, repo.fetchQuestions(token, exam.id)));
+    }
+
+    private static void showBulkImportQuestionsDialog(
+            BaseFragment fragment,
+            EveAdminRepository repo,
+            EveAdminModels.AdminExamItem exam,
+            Runnable onImported) {
+        Activity activity = fragment.getParentActivity();
+        if (activity == null) return;
+        LinearLayout container = makeFormContainer(activity);
+        EditText jsonInput = addField(activity, container,
+                "Paste JSON array of questions ([{\"questionText\",\"optionA\",\"optionB\",\"optionC\",\"optionD\",\"correctAnswer\",\"explanation\",\"topic\"}])",
+                "",
+                InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+        new AlertDialog.Builder(activity)
+                .setTitle("Bulk Import: " + exam.examName)
+                .setView(wrapScroll(activity, container))
+                .setPositiveButton("Import", (d, w) -> {
+                    String raw = text(jsonInput);
+                    if (raw.isEmpty()) {
+                        showError(fragment, "Paste a JSON array of questions.");
+                        return;
+                    }
+                    org.json.JSONArray parsed;
+                    try {
+                        parsed = new org.json.JSONArray(raw);
+                        for (int i = 0; i < parsed.length(); i++) {
+                            JSONObject q = parsed.getJSONObject(i);
+                            if (!q.has("examId") || q.optString("examId").isEmpty()) {
+                                q.put("examId", exam.id);
+                            }
+                        }
+                    } catch (Exception e) {
+                        showError(fragment, "Invalid JSON array: " + e.getMessage());
+                        return;
+                    }
+                    EveAdminRepository.ResultCallback<String> cb = callback(fragment, msg -> {
+                        showInfo(fragment, msg);
+                        if (onImported != null) onImported.run();
+                    });
+                    repo.runWithAdminToken(cb, token -> {
+                        int count = repo.batchImportQuestions(token, parsed);
+                        repo.postSuccess(cb, "Imported " + count + " questions.");
+                    });
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
     }
 
     private static void showQuestionActions(
@@ -493,6 +617,42 @@ public final class EveAdminDialogs {
                             repo.postSuccess(saveCb, "Pricing & UPI/QR configuration saved to D1.");
                         });
                     })
+                    .setNeutralButton("Preview QR", (d, w) -> {
+                        String vpa = textOr(vpaInput, cfg.merchantVpa).trim();
+                        String merchant = textOr(merchantInput, cfg.merchantName).trim();
+                        int amount = parseIntBounded(priceInput, cfg.priceInr, 1, 1_000_000);
+                        String plan = textOr(planInput, "EVE Premium").trim();
+                        if (vpa.isEmpty()) {
+                            showInfo(fragment, "Enter a Merchant UPI VPA first to preview the payment QR code.");
+                            return;
+                        }
+                        String uri = "upi://pay?pa=" + Uri.encode(vpa)
+                                + "&pn=" + Uri.encode(merchant.isEmpty() ? "EVE" : merchant)
+                                + "&am=" + amount
+                                + "&cu=INR"
+                                + "&tn=" + Uri.encode(plan);
+                        Bitmap qr = EvePremiumRepository.generateQrBitmap(uri, AndroidUtilities.dp(220));
+                        LinearLayout qrBox = new LinearLayout(activity);
+                        qrBox.setOrientation(LinearLayout.VERTICAL);
+                        qrBox.setGravity(Gravity.CENTER_HORIZONTAL);
+                        int pad = AndroidUtilities.dp(18);
+                        qrBox.setPadding(pad, pad, pad, pad);
+                        if (qr != null) {
+                            ImageView qrView = new ImageView(activity);
+                            qrView.setImageBitmap(qr);
+                            qrBox.addView(qrView, new LinearLayout.LayoutParams(AndroidUtilities.dp(220), AndroidUtilities.dp(220)));
+                        }
+                        TextView note = new TextView(activity);
+                        note.setGravity(Gravity.CENTER);
+                        note.setPadding(0, AndroidUtilities.dp(12), 0, 0);
+                        note.setText("VPA: " + vpa + "\nMerchant: " + (merchant.isEmpty() ? "EVE" : merchant) + "\nAmount: ₹" + amount);
+                        qrBox.addView(note);
+                        new AlertDialog.Builder(activity)
+                                .setTitle("Merchant UPI QR Preview")
+                                .setView(qrBox)
+                                .setPositiveButton("Close", null)
+                                .show();
+                    })
                     .setNegativeButton("Cancel", null)
                     .show();
         });
@@ -500,26 +660,35 @@ public final class EveAdminDialogs {
     }
 
     public static void showTransactionsDialog(BaseFragment fragment, EveAdminRepository repo) {
-        EveAdminRepository.ResultCallback<List<EveAdminModels.PaymentTransactionItem>> cb = callback(fragment, txs -> {
-            Activity activity = fragment.getParentActivity();
-            if (activity == null) return;
-            StringBuilder sb = new StringBuilder();
-            if (txs.isEmpty()) {
-                sb.append("No payment orders recorded yet.");
-            } else {
-                SimpleDateFormat fmt = new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US);
-                for (int i = 0; i < Math.min(txs.size(), 40); i++) {
-                    EveAdminModels.PaymentTransactionItem tx = txs.get(i);
-                    sb.append("• ").append(tx.planName).append(" — ₹").append(tx.amount)
-                            .append(" [").append(tx.status).append("]\n  ")
-                            .append(tx.userEmail).append(" • ").append(tx.paymentMethod)
-                            .append(" • ").append(tx.createdAt > 0 ? fmt.format(new Date(tx.createdAt)) : "-")
-                            .append("\n");
-                }
-            }
-            showTextDialog(activity, "Payment Transactions (" + txs.size() + ")", sb.toString().trim());
-        });
-        repo.runWithAdminToken(cb, token -> repo.postSuccess(cb, repo.fetchTransactions(token, 50)));
+        Activity activity = fragment.getParentActivity();
+        if (activity == null) return;
+        String[] statuses = new String[] { "ALL", "SUCCESS", "CREATED", "EXPIRED", "REFUNDED" };
+        new AlertDialog.Builder(activity)
+                .setTitle("Filter Payment Orders")
+                .setItems(statuses, (d, which) -> {
+                    String filter = which == 0 ? "" : statuses[which];
+                    EveAdminRepository.ResultCallback<List<EveAdminModels.PaymentTransactionItem>> cb = callback(fragment, txs -> {
+                        StringBuilder sb = new StringBuilder();
+                        if (txs.isEmpty()) {
+                            sb.append("No payment orders recorded for this filter.");
+                        } else {
+                            SimpleDateFormat fmt = new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US);
+                            for (int i = 0; i < Math.min(txs.size(), 40); i++) {
+                                EveAdminModels.PaymentTransactionItem tx = txs.get(i);
+                                sb.append("• ").append(tx.planName).append(" — ₹").append(tx.amount)
+                                        .append(" [").append(tx.status).append("]\n  ")
+                                        .append(tx.orderId).append(" • ").append(tx.userEmail).append("\n  ")
+                                        .append(tx.paymentMethod).append(" • ")
+                                        .append(tx.createdAt > 0 ? fmt.format(new Date(tx.createdAt)) : "-")
+                                        .append("\n");
+                            }
+                        }
+                        showTextDialog(activity, "Payment Transactions (" + txs.size() + ")", sb.toString().trim());
+                    });
+                    repo.runWithAdminToken(cb, token -> repo.postSuccess(cb, repo.fetchTransactions(token, 50, filter)));
+                })
+                .setNegativeButton("Close", null)
+                .show();
     }
 
     public static void showAdminsManager(BaseFragment fragment, EveAdminRepository repo, Runnable onMutated) {

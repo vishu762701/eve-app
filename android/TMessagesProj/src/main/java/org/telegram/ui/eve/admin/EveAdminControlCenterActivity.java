@@ -226,11 +226,11 @@ public class EveAdminControlCenterActivity extends BaseFragment {
             items.add(UItem.asShadow(null));
         }
 
-        // H. LOCAL DIAGNOSTICS (DEBUG BUILDS ONLY)
-        if (EveInspectionMode.isEnabledForCurrentBuild()) {
+        // H. LOCAL DIAGNOSTICS (SERVER-VERIFIED ADMINS IN DEBUG BUILDS ONLY)
+        if (EveInspectionMode.isEnabledForCurrentBuild() && EveAdminConfig.isServerAdminSession()) {
             Context ctx = getContext();
             EveAdminConfig.CacheStats stats = EveAdminConfig.inspectCache(ctx);
-            items.add(UItem.asHeader("H. Local Diagnostics (DEBUG Build Only)"));
+            items.add(UItem.asHeader("H. Admin Diagnostics (DEBUG Build)"));
             items.add(UItem.asButton(ID_DEBUG_CRASH, "Crash Reports & ApplicationExitInfo"));
             items.add(UItem.asButton(ID_DEBUG_LOADING, "Loading States Viewer",
                     EveLoadingTracker.countNonTerminal() + " active"));
@@ -240,7 +240,6 @@ public class EveAdminControlCenterActivity extends BaseFragment {
             items.add(UItem.asButton(ID_DEBUG_RLOTTIE, "Run RLottie Native Probe", NativeLoader.loaded() ? "Native OK" : "Not Loaded"));
             items.add(UItem.asButton(ID_DEBUG_CACHE_CLEAR, "Clear Local Cache",
                     String.format(Locale.US, "%d files (%.1f MB)", stats.fileCount, stats.totalBytes / (1024f * 1024f))));
-            items.add(UItem.asButton(ID_DEBUG_SETTINGS, "Open Telegram Debug Settings"));
             items.add(UItem.asShadow("DEBUG diagnostics grant zero production backend authority."));
         }
     }

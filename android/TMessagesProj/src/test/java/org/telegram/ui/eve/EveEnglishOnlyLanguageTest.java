@@ -6,6 +6,7 @@ import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
 import android.content.Context;
+import android.content.res.Configuration;
 import android.os.Handler;
 import android.os.Looper;
 
@@ -17,15 +18,18 @@ import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 import org.telegram.messenger.ApplicationLoader;
+import org.telegram.messenger.BuildVars;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.R;
 import org.telegram.ui.LanguageSelectActivity;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Locale;
 
 /**
- * Behavioral regression tests for Mission 5 (English-only language enforcement).
+ * Behavioral regression tests for EVE dual-language support (English and हिन्दी only)
+ * and prevention of cloud langpack overrides over EVE branding/titles.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = 35, manifest = Config.NONE, application = Application.class)
@@ -41,38 +45,49 @@ public class EveEnglishOnlyLanguageTest {
     }
 
     @Test
-    public void localeController_locksApplicationLanguageToEnglish() {
-        assertTrue(LocaleController.isEnglishOnlyMode());
+    public void localeController_allowsOnlyEnglishAndHindi_andDisablesCloudOverrides() {
+        assertFalse(BuildVars.USE_CLOUD_STRINGS);
+        assertFalse(LocaleController.isEnglishOnlyMode());
+        assertTrue(LocaleController.isEveRestrictedLanguageMode());
         assertEquals("English", LocaleController.getCurrentLanguageName());
 
         LocaleController.LocaleInfo english = makeLocale("en", "English");
+        LocaleController.LocaleInfo hindi = makeLocale("hi", "हिन्दी");
         LocaleController.LocaleInfo arabic = makeLocale("ar", "Arabic");
         LocaleController.LocaleInfo belarusian = makeLocale("be", "Belarusian");
-        LocaleController.LocaleInfo catalan = makeLocale("ca", "Catalan");
         LocaleController.LocaleInfo chineseSimp = makeLocale("zh_CN", "Chinese (Simplified)");
-        LocaleController.LocaleInfo chineseTrad = makeLocale("zh_TW", "Chinese (Traditional)");
         LocaleController.LocaleInfo croatian = makeLocale("hr", "Croatian");
 
         assertTrue(LocaleController.isAllowedApplicationLocale(english));
+        assertTrue(LocaleController.isAllowedApplicationLocale(hindi));
         assertFalse(LocaleController.isAllowedApplicationLocale(arabic));
         assertFalse(LocaleController.isAllowedApplicationLocale(belarusian));
-        assertFalse(LocaleController.isAllowedApplicationLocale(catalan));
         assertFalse(LocaleController.isAllowedApplicationLocale(chineseSimp));
-        assertFalse(LocaleController.isAllowedApplicationLocale(chineseTrad));
         assertFalse(LocaleController.isAllowedApplicationLocale(croatian));
 
         ArrayList<LocaleController.LocaleInfo> filtered = LanguageSelectActivity.filterSelectableLanguages(
-                Arrays.asList(arabic, belarusian, catalan, english, chineseSimp, chineseTrad, croatian));
-        assertEquals(1, filtered.size());
+                Arrays.asList(arabic, belarusian, hindi, english, chineseSimp, croatian));
+        assertEquals(2, filtered.size());
         assertEquals("en", filtered.get(0).shortName);
         assertEquals("English", filtered.get(0).nameEnglish);
+        assertEquals("hi", filtered.get(1).shortName);
+        assertEquals("हिन्दी", filtered.get(1).name);
     }
 
     @Test
-    public void translationStringsAndSettingsLanguageTitle_remainIntact() {
+    public void hindiTranslations_existForEveNavigationAndExamControls() {
         assertEquals("Language", appContext.getString(R.string.SettingsLanguage));
         assertEquals("Show Translate Button", appContext.getString(R.string.ShowTranslateButton));
         assertEquals("Do Not Translate", appContext.getString(R.string.DoNotTranslate));
+
+        Configuration hiConfig = new Configuration(appContext.getResources().getConfiguration());
+        hiConfig.setLocale(new Locale("hi"));
+        Context hiContext = appContext.createConfigurationContext(hiConfig);
+
+        assertEquals("परीक्षा", hiContext.getString(R.string.MainTabsExams));
+        assertEquals("परीक्षा सेटिंग्स", hiContext.getString(R.string.ChatSettings));
+        assertEquals("सबमिट करें", hiContext.getString(R.string.EveSubmitTest));
+        assertEquals("लीडरबोर्ड", hiContext.getString(R.string.EveLeaderboard));
     }
 
     private static LocaleController.LocaleInfo makeLocale(String code, String nameEnglish) {

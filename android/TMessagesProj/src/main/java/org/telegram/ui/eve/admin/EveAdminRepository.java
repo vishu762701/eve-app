@@ -251,6 +251,35 @@ public final class EveAdminRepository {
         return data != null ? data.optString("id", "") : "";
     }
 
+    public void unpublishExamTests(String token, String examId) throws EveBackendClient.BackendException {
+        client.postJsonRoot("/api/exams/" + encode(examId) + "/unpublish-tests", token, new JSONObject());
+    }
+
+    public void scheduleGeneratedTest(String token, String testId, long availableFromMs) throws EveBackendClient.BackendException {
+        JSONObject payload = new JSONObject();
+        try {
+            payload.put("availableFrom", Math.max(0L, availableFromMs));
+        } catch (JSONException ignored) {
+        }
+        client.putJsonRoot("/api/generated-tests/" + encode(testId) + "/schedule", token, payload);
+    }
+
+    public List<EveAdminModels.AdminQuestionItem> fetchGeneratedTestQuestions(String token, String testId) throws EveBackendClient.BackendException {
+        JSONObject root = client.getJsonRoot("/api/generated-tests/" + encode(testId), token);
+        JSONObject data = root.optJSONObject("data");
+        return EveAdminModels.AdminQuestionItem.parseList(data != null ? data.optJSONArray("questions") : null);
+    }
+
+    public int batchImportQuestions(String token, JSONArray questionsArray) throws EveBackendClient.BackendException {
+        JSONObject payload = new JSONObject();
+        try {
+            payload.put("questions", questionsArray != null ? questionsArray : new JSONArray());
+        } catch (JSONException ignored) {
+        }
+        JSONObject root = client.postJsonRoot("/api/questions/batch", token, payload);
+        return root.optInt("count", questionsArray != null ? questionsArray.length() : 0);
+    }
+
     public void updateQuestion(
             String token,
             String questionId,
@@ -339,7 +368,15 @@ public final class EveAdminRepository {
     }
 
     public List<EveAdminModels.PaymentTransactionItem> fetchTransactions(String token, int limit) throws EveBackendClient.BackendException {
-        JSONObject root = client.getJsonRoot("/api/admin/premium/transactions?limit=" + Math.max(1, Math.min(limit, 200)), token);
+        return fetchTransactions(token, limit, "");
+    }
+
+    public List<EveAdminModels.PaymentTransactionItem> fetchTransactions(String token, int limit, String statusFilter) throws EveBackendClient.BackendException {
+        String path = "/api/admin/premium/transactions?limit=" + Math.max(1, Math.min(limit, 200));
+        if (statusFilter != null && !statusFilter.trim().isEmpty()) {
+            path += "&status=" + encode(statusFilter.trim().toUpperCase(Locale.US));
+        }
+        JSONObject root = client.getJsonRoot(path, token);
         return EveAdminModels.PaymentTransactionItem.parseList(root.optJSONArray("data"));
     }
 
@@ -399,11 +436,11 @@ public final class EveAdminRepository {
     private void withAdminToken(ResultCallback<?> callback, TokenWork work) {
         executor.execute(() -> {
             FirebaseUser user = resolveFirebaseUser();
-            if (user == null) {
+            if (user == null || user.isAnonymous()) {
                 postError(callback, "Sign in with a verified EVE administrator account to access the Admin Control Center.", 401);
                 return;
             }
-            user.getIdToken(false).addOnCompleteListener(task -> {
+            user.getIdToken(true).addOnCompleteListener(task -> {
                 if (!task.isSuccessful() || task.getResult() == null || task.getResult().getToken() == null) {
                     postError(callback, "Unable to refresh Firebase admin credentials. Sign in again.", 401);
                     return;

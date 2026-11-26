@@ -1,30 +1,38 @@
 package org.telegram.ui.eve.exams;
 
+import android.app.Activity;
 import android.content.Context;
 import android.view.View;
 import android.widget.FrameLayout;
 
+import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.R;
 import org.telegram.ui.ActionBar.ActionBar;
+import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.Theme;
-import org.telegram.ui.Components.BulletinFactory;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.UItem;
 import org.telegram.ui.Components.UniversalAdapter;
 import org.telegram.ui.Components.UniversalRecyclerView;
 
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 
 /**
- * Native Telegram BaseFragment showing real exam details and published mock tests
- * from the EVE Worker backend when an exam row is opened from the main Exams screen.
+ * Native Telegram BaseFragment showing real exam details, instructions,
+ * published mock tests, result history, and leaderboards from EVE Cloud.
  */
 public class EveExamTestsFragment extends BaseFragment {
 
     private static final int ID_REFRESH = 1;
+    private static final int ID_HISTORY = 300;
+    private static final int ID_OVERALL_LEADERBOARD = 301;
+    private static final int ID_ANNOUNCEMENTS = 302;
 
     private final EveExamModels.ExamSummary exam;
     private UniversalRecyclerView listView;
@@ -90,14 +98,19 @@ public class EveExamTestsFragment extends BaseFragment {
         if (exam == null) {
             return;
         }
-        items.add(UItem.asHeader("Exam Configuration"));
-        items.add(UItem.asButton(100, "Category", exam.category));
-        items.add(UItem.asButton(101, "Time Limit", exam.timeLimitMinutes + " min"));
-        items.add(UItem.asButton(102, "Questions per Test", String.valueOf(exam.questionCount)));
-        items.add(UItem.asButton(103, "Negative Marking", exam.negativeMarkingText));
+        items.add(UItem.asHeader(LocaleController.getString(R.string.EveExamConfiguration)));
+        items.add(UItem.asButton(100, LocaleController.getString(R.string.EveCategory), exam.category));
+        items.add(UItem.asButton(101, LocaleController.getString(R.string.EveTimeLimit), exam.timeLimitMinutes + " min"));
+        items.add(UItem.asButton(102, LocaleController.getString(R.string.EveQuestionsPerTest), String.valueOf(exam.questionCount)));
+        items.add(UItem.asButton(103, LocaleController.getString(R.string.EveNegativeMarking), exam.negativeMarkingText));
         items.add(UItem.asShadow(null));
 
-        items.add(UItem.asHeader("Available Tests"));
+        items.add(UItem.asButton(ID_HISTORY, LocaleController.getString(R.string.EveResultHistory)));
+        items.add(UItem.asButton(ID_OVERALL_LEADERBOARD, LocaleController.getString(R.string.EveLeaderboard)));
+        items.add(UItem.asButton(ID_ANNOUNCEMENTS, LocaleController.getString(R.string.EveAnnouncements)));
+        items.add(UItem.asShadow(null));
+
+        items.add(UItem.asHeader(LocaleController.getString(R.string.EveExamTests)));
         if (loading) {
             items.add(UItem.asShadow("Loading published tests from EVE Cloud..."));
             return;
@@ -110,13 +123,20 @@ public class EveExamTestsFragment extends BaseFragment {
             items.add(UItem.asShadow("No published tests available yet for this exam."));
             return;
         }
+        SimpleDateFormat fmt = new SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault());
+        long nowMs = System.currentTimeMillis();
         int idBase = 1000;
         for (int i = 0; i < tests.size(); i++) {
             EveExamModels.GeneratedTestSummary test = tests.get(i);
             if (!test.isLive()) {
                 continue;
             }
-            String value = test.questionCount > 0 ? test.questionCount + " Qs" : "Live";
+            String value;
+            if (test.availableFromMs > nowMs) {
+                value = "Opens " + fmt.format(new Date(test.availableFromMs));
+            } else {
+                value = test.questionCount > 0 ? test.questionCount + " Qs • " + LocaleController.getString(R.string.EveStartTest) : LocaleController.getString(R.string.EveStartTest);
+            }
             items.add(UItem.asButton(idBase + i, test.getDisplayTitle(), value));
         }
     }
@@ -126,15 +146,51 @@ public class EveExamTestsFragment extends BaseFragment {
             loadTests();
             return;
         }
+        if (item.id == ID_HISTORY) {
+            presentFragment(new EveResultHistoryFragment());
+            return;
+        }
+        if (item.id == ID_OVERALL_LEADERBOARD) {
+            presentFragment(new EveLeaderboardFragment("overall", LocaleController.getString(R.string.EveLeaderboard)));
+            return;
+        }
+        if (item.id == ID_ANNOUNCEMENTS) {
+            presentFragment(new EveAnnouncementsFragment());
+            return;
+        }
         if (item.id >= 1000) {
             int idx = item.id - 1000;
             if (idx >= 0 && idx < tests.size()) {
                 EveExamModels.GeneratedTestSummary selected = tests.get(idx);
-                BulletinFactory.of(this).createSimpleBulletin(
-                        R.raw.info,
-                        selected.getDisplayTitle() + " (" + selected.questionCount + " Qs) selected."
-                ).show();
+                openTestLaunchDialog(selected);
             }
         }
+    }
+
+    private void openTestLaunchDialog(EveExamModels.GeneratedTestSummary selected) {
+        Activity activity = getParentActivity();
+        if (activity == null) return;
+        String attemptKey = EveExamModels.buildAttemptKey(exam != null ? exam.id : selected.examId, selected.id);
+        int qCount = selected.questionCount > 0 ? selected.questionCount : (exam != null ? exam.questionCount : 20);
+        int mins = exam != null ? exam.timeLimitMinutes : 30;
+        String neg = exam != null ? exam.negativeMarkingText : "0";
+
+        StringBuilder msg = new StringBuilder();
+        msg.append(LocaleController.getString(R.string.EveQuestionsPerTest)).append(": ").append(qCount).append("\n");
+        msg.append(LocaleController.getString(R.string.EveTimeLimit)).append(": ").append(mins).append(" min\n");
+        msg.append(LocaleController.getString(R.string.EveNegativeMarking)).append(": ").append(neg).append("\n\n");
+        msg.append("• Timer runs monotonically once started.\n");
+        msg.append("• Answers are evaluated authoritatively by EVE Cloud.\n");
+        msg.append("• You can mark questions for review and switch sections anytime.");
+
+        new AlertDialog.Builder(activity)
+                .setTitle(selected.getDisplayTitle())
+                .setMessage(msg.toString())
+                .setPositiveButton(LocaleController.getString(R.string.EveStartTest), (d, w) ->
+                        presentFragment(new EveTestPlayerFragment(exam, selected)))
+                .setNeutralButton(LocaleController.getString(R.string.EveLeaderboard), (d, w) ->
+                        presentFragment(new EveLeaderboardFragment(attemptKey, selected.getDisplayTitle())))
+                .setNegativeButton(LocaleController.getString(R.string.Cancel), null)
+                .show();
     }
 }

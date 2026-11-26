@@ -184,6 +184,29 @@ public final class EveAuthManager {
         return getCurrentUser() != null;
     }
 
+    public boolean isSignedInAccount() {
+        FirebaseUser user = getCurrentUser();
+        return user != null && !user.isAnonymous();
+    }
+
+    public void refreshSessionSilentlyIfSignedIn() {
+        ensureInitialized();
+        FirebaseUser user = getCurrentUser();
+        if (user == null || user.isAnonymous()) {
+            return;
+        }
+        reloadUserAndSync(new AuthCallback() {
+            @Override
+            public void onSuccess(@NonNull EveUserProfile profile, @NonNull EveAuthCoordinator.SyncOutcome syncOutcome) {
+                org.telegram.ui.eve.notifications.EveNotificationHelper.syncFcmTokenIfSignedIn();
+            }
+
+            @Override
+            public void onError(@NonNull String message, boolean accountDisabled) {
+            }
+        });
+    }
+
     public boolean isSyncInFlight() {
         return syncInFlight.get();
     }
@@ -480,19 +503,31 @@ public final class EveAuthManager {
                     @Override
                     public void onError(@NonNull GetCredentialException e) {
                         if (e instanceof GetCredentialCancellationException) {
+                            if (stage != EveAuthCoordinator.GoogleSignInStage.EXPLICIT_SIGN_IN_WITH_GOOGLE_PICKER) {
+                                FileLog.d("EveAuthManager: Stage " + stage + " cancelled/dismissed; continuing to explicit Google picker.");
+                                mainHandler.post(() -> launchGoogleCredentialStage(
+                                        activity,
+                                        webClientId,
+                                        EveAuthCoordinator.GoogleSignInStage.EXPLICIT_SIGN_IN_WITH_GOOGLE_PICKER,
+                                        callback));
+                                return;
+                            }
                             postError(callback, EveAuthValidator.mapAuthErrorMessage("ERROR_CREDENTIAL_CANCELLED", null), false);
                             return;
                         }
-                        if (e instanceof NoCredentialException) {
+                        if (e instanceof NoCredentialException
+                                || stage != EveAuthCoordinator.GoogleSignInStage.EXPLICIT_SIGN_IN_WITH_GOOGLE_PICKER) {
                             EveAuthCoordinator.GoogleSignInStage nextStage = EveAuthCoordinator.nextGoogleFallbackStage(stage);
                             if (nextStage != null) {
-                                FileLog.d("EveAuthManager: Credential Manager stage " + stage + " returned NoCredentialException; retrying with " + nextStage);
+                                FileLog.d("EveAuthManager: Credential Manager stage " + stage + " failed (" + e.getClass().getSimpleName() + "); retrying with " + nextStage);
                                 mainHandler.post(() -> launchGoogleCredentialStage(activity, webClientId, nextStage, callback));
                                 return;
                             }
-                            FileLog.e("EveAuthManager: All Google Sign-In Credential Manager stages exhausted", e);
-                            postError(callback, EveAuthValidator.mapAuthErrorMessage("ERROR_NO_GOOGLE_CREDENTIAL", e.getMessage()), false);
-                            return;
+                            if (e instanceof NoCredentialException) {
+                                FileLog.e("EveAuthManager: All Google Sign-In Credential Manager stages exhausted", e);
+                                postError(callback, EveAuthValidator.mapAuthErrorMessage("ERROR_NO_GOOGLE_CREDENTIAL", e.getMessage()), false);
+                                return;
+                            }
                         }
                         FileLog.e("EveAuthManager: Credential Manager error at stage " + stage, e);
                         postError(callback, EveAuthValidator.mapAuthErrorMessage(null, e.getMessage()), false);

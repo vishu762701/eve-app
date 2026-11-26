@@ -4412,11 +4412,29 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             } else if (position == devicesRow) {
                 presentFragment(new SessionsActivity(0));
             } else if (position == questionRow) {
-                showDialog(AlertsCreator.createSupportAlert(ProfileActivity.this, resourcesProvider));
+                if (getParentActivity() != null) {
+                    showDialog(new AlertDialog.Builder(getParentActivity(), resourcesProvider)
+                            .setTitle(LocaleController.getString(R.string.EveHelpSupport))
+                            .setMessage(LocaleController.getString(R.string.EveHelpSupportBody))
+                            .setPositiveButton(LocaleController.getString(R.string.OK), null)
+                            .create());
+                }
             } else if (position == faqRow) {
-                Browser.openUrl(getParentActivity(), LocaleController.getString(R.string.TelegramFaqUrl));
+                if (getParentActivity() != null) {
+                    showDialog(new AlertDialog.Builder(getParentActivity(), resourcesProvider)
+                            .setTitle(LocaleController.getString(R.string.EveFaq))
+                            .setMessage(LocaleController.getString(R.string.EveFaqBody))
+                            .setPositiveButton(LocaleController.getString(R.string.OK), null)
+                            .create());
+                }
             } else if (position == policyRow) {
-                Browser.openUrl(getParentActivity(), LocaleController.getString(R.string.PrivacyPolicyUrl));
+                if (getParentActivity() != null) {
+                    showDialog(new AlertDialog.Builder(getParentActivity(), resourcesProvider)
+                            .setTitle(LocaleController.getString(R.string.PrivacyPolicy))
+                            .setMessage(LocaleController.getString(R.string.EvePrivacyPolicyBody))
+                            .setPositiveButton(LocaleController.getString(R.string.OK), null)
+                            .create());
+                }
             } else if (position == sendLogsRow) {
                 sendLogs(getParentActivity(), false);
             } else if (position == sendLastLogsRow) {
@@ -10661,18 +10679,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 questionRow = rowCount++;
                 faqRow = rowCount++;
                 policyRow = rowCount++;
-                if (BuildVars.LOGS_ENABLED || BuildVars.DEBUG_PRIVATE_VERSION) {
-                    helpSectionCell = rowCount++;
-                    debugHeaderRow = rowCount++;
-                }
-                if (BuildVars.LOGS_ENABLED) {
-                    sendLogsRow = rowCount++;
-                    sendLastLogsRow = rowCount++;
-                    clearLogsRow = rowCount++;
-                }
-                if (BuildVars.DEBUG_VERSION) {
-                    switchBackendRow = rowCount++;
-                }
+                // EVE-PATCH: Remove user-facing DEBUG rows from Settings/Profile view.
                 versionRow = rowCount++;
             } else {
                 String username = UserObject.getPublicUsername(user);
@@ -13548,9 +13555,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                     } else if (position == liteModeRow) {
                         textCell.setTextAndIcon(LocaleController.getString(R.string.PowerUsage), R.drawable.msg2_battery, true);
                     } else if (position == questionRow) {
-                        textCell.setTextAndIcon(LocaleController.getString(R.string.AskAQuestion), R.drawable.msg2_ask_question, true);
+                        textCell.setTextAndIcon(LocaleController.getString(R.string.EveHelpSupport), R.drawable.msg2_ask_question, true);
                     } else if (position == faqRow) {
-                        textCell.setTextAndIcon(LocaleController.getString(R.string.TelegramFAQ), R.drawable.msg2_help, true);
+                        textCell.setTextAndIcon(LocaleController.getString(R.string.EveFaq), R.drawable.msg2_help, true);
                     } else if (position == policyRow) {
                         textCell.setTextAndIcon(LocaleController.getString(R.string.PrivacyPolicy), R.drawable.msg2_policy, false);
                     } else if (position == sendLogsRow) {
@@ -14214,18 +14221,6 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             return new SearchResult[]{
                     new SearchResult(500, getString(R.string.EditName), 0, () -> f.presentFragment(new ChangeNameActivity(resourcesProvider))),
                     new SearchResult(501, getString(R.string.ChangePhoneNumber), 0, () -> f.presentFragment(new ActionIntroActivity(ActionIntroActivity.ACTION_TYPE_CHANGE_PHONE_NUMBER))).withLink("tg://settings/edit/change-number"),
-                    new SearchResult(502, getString(R.string.AddAnotherAccount), 0, () -> {
-                        int freeAccount = -1;
-                        for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
-                            if (!UserConfig.getInstance(a).isClientActivated()) {
-                                freeAccount = a;
-                                break;
-                            }
-                        }
-                        if (freeAccount >= 0) {
-                            f.presentFragment(new LoginActivity(freeAccount));
-                        }
-                    }).withLink("tg://settings/edit/add-account"),
                     // TODO:
 //                    new SearchResult(503, getString(R.string.UserBio), 0, () -> {
 //                        if (userInfo != null) {
@@ -14453,9 +14448,33 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                     new SearchResult(405, getString(R.string.ShowTranslateButton), getString(R.string.Language), R.drawable.msg2_language, () -> f.presentFragment(new LanguageSelectActivity())).withLink("tg://settings/language/show-button"),
                     MessagesController.getInstance(currentAccount).getTranslateController().isContextTranslateEnabled() ? new SearchResult(406, getString(R.string.DoNotTranslate), getString(R.string.Language), R.drawable.msg2_language, () -> f.presentFragment(new LanguageSelectActivity())).withLink("tg://settings/language/do-not-translate") : null,
 
-                    new SearchResult(402, getString(R.string.AskAQuestion), getString(R.string.SettingsHelp), R.drawable.msg2_help, () -> f.showDialog(AlertsCreator.createSupportAlert(f, null))).withLink("tg://settings/ask-question"),
-                    new SearchResult(403, getString(R.string.TelegramFAQ), getString(R.string.SettingsHelp), R.drawable.msg2_help, () -> Browser.openUrl(f.getParentActivity(), getString(R.string.TelegramFaqUrl))).withLink("tg://settings/faq"),
-                    new SearchResult(404, getString(R.string.PrivacyPolicy), getString(R.string.SettingsHelp), R.drawable.msg2_help, () -> Browser.openUrl(f.getParentActivity(), getString(R.string.PrivacyPolicyUrl))).withLink("tg://settings/privacy-policy"),
+                    new SearchResult(402, getString(R.string.EveHelpSupport), getString(R.string.SettingsHelp), R.drawable.msg2_help, () -> {
+                        if (f.getParentActivity() != null) {
+                            f.showDialog(new AlertDialog.Builder(f.getParentActivity(), resourcesProvider)
+                                    .setTitle(getString(R.string.EveHelpSupport))
+                                    .setMessage(getString(R.string.EveHelpSupportBody))
+                                    .setPositiveButton(getString(R.string.OK), null)
+                                    .create());
+                        }
+                    }),
+                    new SearchResult(403, getString(R.string.EveFaq), getString(R.string.SettingsHelp), R.drawable.msg2_help, () -> {
+                        if (f.getParentActivity() != null) {
+                            f.showDialog(new AlertDialog.Builder(f.getParentActivity(), resourcesProvider)
+                                    .setTitle(getString(R.string.EveFaq))
+                                    .setMessage(getString(R.string.EveFaqBody))
+                                    .setPositiveButton(getString(R.string.OK), null)
+                                    .create());
+                        }
+                    }),
+                    new SearchResult(404, getString(R.string.PrivacyPolicy), getString(R.string.SettingsHelp), R.drawable.msg2_help, () -> {
+                        if (f.getParentActivity() != null) {
+                            f.showDialog(new AlertDialog.Builder(f.getParentActivity(), resourcesProvider)
+                                    .setTitle(getString(R.string.PrivacyPolicy))
+                                    .setMessage(getString(R.string.EvePrivacyPolicyBody))
+                                    .setPositiveButton(getString(R.string.OK), null)
+                                    .create());
+                        }
+                    }),
             };
         }
 

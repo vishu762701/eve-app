@@ -43,7 +43,7 @@ android {
 
     androidResources {
         noCompress += "pack"
-        localeFilters += ["zz"]
+        localeFilters += ["en", "hi", "zz"]
     }
 
     signingConfigs {
@@ -54,6 +54,15 @@ android {
                 storePassword System.getenv("EVE_SIGNING_STORE_PASSWORD")
                 keyAlias System.getenv("EVE_SIGNING_KEY_ALIAS")
                 keyPassword System.getenv("EVE_SIGNING_KEY_PASSWORD")
+            } else {
+                // Fixed committed debug keystore so CI APKs always match google-services.json SHA-1 for Google Sign-In.
+                def repoDebugKeystore = file("../../app/eve-debug.keystore")
+                if (repoDebugKeystore.isFile()) {
+                    storeFile repoDebugKeystore
+                    storePassword "android"
+                    keyAlias "eve"
+                    keyPassword "android"
+                }
             }
             enableV1Signing = true
             enableV2Signing = true
