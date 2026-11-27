@@ -46,6 +46,7 @@ test("TelegramMediaVault.uploadFile sends sendDocument FormData and returns tg:<
   assert.ok(calls[0].init.body instanceof FormData);
   assert.equal(calls[0].init.body.get("chat_id"), "-1009876543210");
   assert.equal(calls[0].init.body.get("caption"), "syllabi/notes.pdf");
+  assert.equal(calls[0].init.body.get("disable_notification"), "true");
 
   // Supports video/animation/photo reclassification from Telegram response
   t.mock.method(globalThis, "fetch", async () =>

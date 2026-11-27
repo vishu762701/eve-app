@@ -795,3 +795,180 @@ test("Mini App modular JS compiles cleanly with zero syntax errors and all parit
     assert.ok(ah.infraHealth.backend.status === "verified");
   });
 });
+
+test("Mini App script compiles cleanly and reloads views post-mutation without getting stuck on Loading...", async () => {
+  assert.doesNotThrow(() => new Function(MINIAPP_SCRIPT));
+
+    function makeEl(id = "") {
+      const listeners = {};
+      return {
+        id,
+        innerHTML: "",
+        textContent: "",
+        value: "",
+        dataset: {},
+        className: "",
+        files: [],
+        style: {},
+        classList: {
+          _set: new Set(),
+          add(c) { this._set.add(c); },
+          remove(c) { this._set.delete(c); },
+          toggle(c) { if (this._set.has(c)) this._set.delete(c); else this._set.add(c); },
+          contains(c) { return this._set.has(c); },
+        },
+        addEventListener(ev, fn) { (listeners[ev] ||= []).push(fn); },
+        closest() { return null; },
+      };
+    }
+
+    const elements = new Map([
+      ["viewRoot", makeEl("viewRoot")],
+      ["topTitle", makeEl("topTitle")],
+      ["topSub", makeEl("topSub")],
+      ["syncPill", makeEl("syncPill")],
+      ["syncText", makeEl("syncText")],
+      ["sheetBackdrop", makeEl("sheetBackdrop")],
+      ["sheetTitle", makeEl("sheetTitle")],
+      ["sheetBody", makeEl("sheetBody")],
+      ["toast", makeEl("toast")],
+    ]);
+    const docListeners = {};
+    const store = new Map();
+    const localStorageMock = {
+      get length() { return store.size; },
+      key(i) { return Array.from(store.keys())[i] ?? null; },
+      getItem(k) { return store.has(k) ? store.get(k) : null; },
+      setItem(k, v) { store.set(k, String(v)); },
+      removeItem(k) { store.delete(k); },
+    };
+
+    let fetchCount = 0;
+    let examsVersion = 1;
+    let failNextOverview = false;
+    let slowResolve = null;
+    const windowMock = {
+      Telegram: {
+        WebApp: {
+          initData: "query_id=test",
+          BackButton: { show() {}, hide() {}, onClick() {} },
+          HapticFeedback: { impactOccurred() {}, notificationOccurred() {} },
+          ready() {},
+          expand() {},
+        },
+      },
+      scrollTo() {},
+      addEventListener() {},
+      fetch: async (url) => {
+        fetchCount++;
+        const u = String(url);
+        if (u.endsWith("/overview")) {
+          if (failNextOverview) {
+            failNextOverview = false;
+            throw new Error("Simulated network drop");
+          }
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              success: true,
+              data: { kpis: { totalExams: 1, liveExamsCount: 1 }, config: { aiProvider: "auto" } },
+            }),
+          };
+        }
+        if (u.endsWith("/exams")) {
+          if (examsVersion === 3) {
+            await new Promise((r) => { slowResolve = r; });
+          }
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              success: true,
+              data: [
+                {
+                  id: "ex-1",
+                  examName: examsVersion === 1 ? "UPSC Initial" : "UPSC Mutated v2",
+                  category: "UPSC",
+                  isLive: true,
+                  questionsCount: 5,
+                  tests: [{ id: "t-1", title: "Mock 1", testNumber: "Test 1", status: examsVersion === 1 ? "draft" : "live", questionCount: 10 }],
+                },
+              ],
+            }),
+          };
+        }
+        if (u.endsWith("/tests/t-1/status")) {
+          examsVersion = 2;
+          return { ok: true, status: 200, json: async () => ({ success: true, data: { updated: true } }) };
+        }
+        return { ok: true, status: 200, json: async () => ({ success: true, data: {} }) };
+      },
+    };
+    const documentMock = {
+      getElementById(id) {
+        if (!elements.has(id)) elements.set(id, makeEl(id));
+        return elements.get(id);
+      },
+      querySelectorAll() { return []; },
+      addEventListener(ev, fn) { (docListeners[ev] ||= []).push(fn); },
+    };
+
+    const run = new Function(
+      "window",
+      "document",
+      "localStorage",
+      "fetch",
+      MINIAPP_SCRIPT,
+    );
+    run(windowMock, documentMock, localStorageMock, windowMock.fetch);
+
+    // Wait for initial cold hub render even when cacheKey ('overview') !== view ('hub')
+    await new Promise((r) => setTimeout(r, 30));
+    assert.ok(fetchCount >= 1);
+    assert.ok(!elements.get("viewRoot").innerHTML.includes("Loading..."));
+    assert.equal(elements.get("syncText").textContent, "Live");
+    assert.ok(elements.get("syncPill").className.includes("ok"));
+
+    // Navigate to examDetail (route view 'examDetail' !== cacheKey 'exams')
+    windowMock.eveMiniAppNavigate("examDetail", { id: "ex-1", examName: "UPSC" });
+    await new Promise((r) => setTimeout(r, 30));
+    assert.ok(elements.get("viewRoot").innerHTML.includes("UPSC Initial"));
+    assert.ok(!elements.get("viewRoot").innerHTML.includes("Loading..."));
+    assert.equal(elements.get("syncText").textContent, "Live");
+
+    // Simulate post-mutation reload via click [data-act="toggle-test-live"]
+    const toggleNode = makeEl();
+    toggleNode.dataset = { act: "toggle-test-live", id: "t-1", next: "live" };
+    docListeners.click.forEach((fn) => fn({ target: { closest: () => toggleNode } }));
+
+    // Immediately after reload starts, old content stays visible instead of wiping to Loading...
+    await new Promise((r) => setTimeout(r, 5));
+    assert.ok(!elements.get("viewRoot").innerHTML.includes("Loading..."));
+    await new Promise((r) => setTimeout(r, 30));
+    assert.ok(elements.get("viewRoot").innerHTML.includes("Mock 1"));
+    assert.ok(elements.get("viewRoot").innerHTML.includes("UPSC Mutated v2"));
+    assert.ok(!elements.get("viewRoot").innerHTML.includes("Loading..."));
+    assert.equal(elements.get("syncText").textContent, "Live");
+    assert.ok(elements.get("syncPill").className.includes("ok"));
+
+    // Cold error shows Retry button instead of hanging on Loading...
+    localStorageMock.removeItem("eve_miniapp_swr_v2:overview");
+    elements.get("viewRoot").innerHTML = "";
+    failNextOverview = true;
+    windowMock.eveMiniAppNavigate("hub");
+    await new Promise((r) => setTimeout(r, 30));
+    assert.ok(elements.get("viewRoot").innerHTML.includes("Simulated network drop"));
+    assert.ok(elements.get("viewRoot").innerHTML.includes("reload-view"));
+
+    // Out-of-order response from slow exams request cannot clobber subsequent hub navigation
+    examsVersion = 3;
+    windowMock.eveMiniAppNavigate("examDetail", { id: "ex-1", examName: "UPSC" });
+    await new Promise((r) => setTimeout(r, 10));
+    windowMock.eveMiniAppNavigate("hub");
+    await new Promise((r) => setTimeout(r, 20));
+    assert.ok(elements.get("viewRoot").innerHTML.includes("Exams &amp; Sub-Exams"));
+  if (slowResolve) slowResolve();
+  await new Promise((r) => setTimeout(r, 20));
+  assert.ok(elements.get("viewRoot").innerHTML.includes("Exams &amp; Sub-Exams"));
+});

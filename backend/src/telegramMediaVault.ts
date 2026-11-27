@@ -167,6 +167,7 @@ export class TelegramMediaVault {
     form.append("chat_id", chatId);
     form.append("document", new Blob([arrayBuffer], { type: mime }), filename);
     form.append("caption", String(path || filename).slice(0, 1024));
+    form.append("disable_notification", "true");
 
     const res = await fetch(`https://api.telegram.org/bot${token}/sendDocument`, {
       method: "POST",

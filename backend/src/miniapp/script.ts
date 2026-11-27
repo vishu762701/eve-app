@@ -16,6 +16,10 @@ export const MINIAPP_SCRIPT = `
   var SWR_PREFIX = 'eve_miniapp_swr_v2:';
   var renderedCache = {};
   var stateCache = {};
+  var navSeq = 0;
+  var lastRenderedHash = '';
+  var lastRenderedViewKey = '';
+  var isLoadingPlaceholder = false;
   var navStack = [{ view: 'hub', params: {} }];
   var currentSheetHandler = null;
   var searchDebounce = null;
@@ -142,38 +146,117 @@ export const MINIAPP_SCRIPT = `
     });
   }
 
-  function swrLoad(cacheKey, apiPath, renderer) {
-    var cached = swrGet(cacheKey);
-    if (cached) {
-      stateCache[cacheKey] = cached;
-      renderedCache[cacheKey] = JSON.stringify(cached);
-      renderer(cached);
-      setSyncPill('Cached · Syncing', false);
-    } else {
-      document.getElementById('viewRoot').innerHTML = '<div class="tg-card pad empty-card">Loading...</div>';
-      setSyncPill('Syncing', false);
+  function viewRouteKey(r) {
+    var route = r || currentRoute();
+    return route.view + ':' + JSON.stringify(route.params || {});
+  }
+
+  function renderErrorCard(message) {
+    var root = document.getElementById('viewRoot');
+    lastRenderedHash = '';
+    lastRenderedViewKey = '';
+    isLoadingPlaceholder = false;
+    if (root) {
+      root.innerHTML = '<div class="tg-card pad empty-card">' + esc(message || 'Failed to load view') + '<br><br><button class="tg-btn sec sm" data-act="reload-view">Retry</button></div>';
     }
-    return api(apiPath).then(function (resp) {
-      var fresh = resp.data;
-      var freshJson = JSON.stringify(fresh);
+  }
+
+  function showLoadingPlaceholder(cacheKey) {
+    var root = document.getElementById('viewRoot');
+    lastRenderedHash = '';
+    lastRenderedViewKey = '';
+    isLoadingPlaceholder = true;
+    if (cacheKey) delete renderedCache[cacheKey];
+    if (root) {
+      root.innerHTML = '<div class="tg-card pad empty-card">Loading...</div>';
+    }
+  }
+
+  function swrLoad(cacheKey, apiPath, renderer, opts) {
+    opts = opts || {};
+    var preserveView = Boolean(opts.preserveView);
+    var forceRepaint = Boolean(opts.forceRepaint);
+    var activeViewKey = viewRouteKey();
+    var seq = ++navSeq;
+    var cached = swrGet(cacheKey);
+    var root = document.getElementById('viewRoot');
+    var hasRenderedSameView = Boolean(root && root.innerHTML && !isLoadingPlaceholder && lastRenderedViewKey === activeViewKey);
+    var keepExistingDom = preserveView || hasRenderedSameView;
+    var hasVisibleView = false;
+
+    if (cached) {
+      try {
+        var cachedJson = JSON.stringify(cached);
+        stateCache[cacheKey] = cached;
+        renderedCache[cacheKey] = cachedJson;
+        renderer(cached);
+        lastRenderedHash = cachedJson;
+        lastRenderedViewKey = activeViewKey;
+        isLoadingPlaceholder = false;
+        hasVisibleView = true;
+        setSyncPill('Cached · Syncing', false);
+      } catch (renderErr) {
+        renderErrorCard(renderErr && renderErr.message ? renderErr.message : 'Failed to render cached view');
+      }
+    } else if (keepExistingDom && hasRenderedSameView) {
+      hasVisibleView = true;
+      setSyncPill('Syncing...', false);
+    } else if (preserveView && root && root.innerHTML && !isLoadingPlaceholder) {
+      hasVisibleView = true;
+      setSyncPill('Syncing...', false);
+    } else {
+      showLoadingPlaceholder(cacheKey);
+      setSyncPill('Syncing...', false);
+    }
+
+    var loadPromise = api(apiPath).then(function (resp) {
+      if (seq !== navSeq) return resp && resp.data;
+      var fresh = resp && resp.data !== undefined ? resp.data : resp;
+      var freshJson = '';
+      try {
+        freshJson = JSON.stringify(fresh);
+      } catch (e) {
+        freshJson = String(Date.now());
+      }
       stateCache[cacheKey] = fresh;
-      if (renderedCache[cacheKey] !== freshJson) {
-        renderedCache[cacheKey] = freshJson;
-        if (currentRouteKey() === cacheKey || currentRoute().view === cacheKey.split(':')[0]) {
+      swrSet(cacheKey, fresh);
+      var shouldRepaint = forceRepaint || isLoadingPlaceholder || lastRenderedViewKey !== activeViewKey || lastRenderedHash !== freshJson;
+      if (shouldRepaint) {
+        try {
           renderer(fresh);
+          renderedCache[cacheKey] = freshJson;
+          lastRenderedHash = freshJson;
+          lastRenderedViewKey = activeViewKey;
+          isLoadingPlaceholder = false;
+        } catch (renderErr) {
+          lastRenderedHash = '';
+          lastRenderedViewKey = '';
+          isLoadingPlaceholder = false;
+          throw renderErr;
         }
       }
-      swrSet(cacheKey, fresh);
       setSyncPill('Live', true);
       return fresh;
     }).catch(function (err) {
-      setSyncPill(cached ? 'Offline Cache' : 'Error', false);
-      if (!cached) {
-        document.getElementById('viewRoot').innerHTML = '<div class="tg-card pad empty-card">' + esc(err.message) + '<br><br><button class="tg-btn sec sm" data-act="reload-view">Retry</button></div>';
+      if (seq !== navSeq) return;
+      var msg = (err && err.message) ? err.message : 'Failed to load data';
+      var stillHasView = Boolean(hasVisibleView && !isLoadingPlaceholder);
+      setSyncPill(stillHasView ? 'Offline Cache' : 'Error', false);
+      if (!stillHasView) {
+        renderErrorCard(msg);
       } else {
-        toast(err.message);
+        toast(msg);
       }
     });
+
+    if (loadPromise && typeof loadPromise.finally === 'function') {
+      loadPromise = loadPromise.finally(function () {
+        if (seq === navSeq && isLoadingPlaceholder) {
+          renderErrorCard('View could not be rendered. Please retry.');
+        }
+      });
+    }
+    return loadPromise;
   }
 
   function currentRoute() {
@@ -196,6 +279,7 @@ export const MINIAPP_SCRIPT = `
   function navigate(view, params) {
     haptic('light');
     closeSheet();
+    navSeq++;
     navStack.push({ view: view, params: params || {} });
     syncBackButton();
     renderCurrentView();
@@ -209,11 +293,16 @@ export const MINIAPP_SCRIPT = `
     }
     if (navStack.length > 1) {
       haptic('light');
+      navSeq++;
       navStack.pop();
       syncBackButton();
       renderCurrentView();
       window.scrollTo(0, 0);
     }
+  }
+
+  function reloadCurrentView() {
+    return renderCurrentView({ preserveView: true, forceRepaint: true });
   }
 
   if (tg && tg.BackButton) {
@@ -269,65 +358,66 @@ export const MINIAPP_SCRIPT = `
 
   // ===================== VIEW RENDERERS =====================
 
-  function renderCurrentView() {
+  function renderCurrentView(opts) {
     var r = currentRoute();
     var p = r.params || {};
     if (r.view === 'hub') {
       setHeader('EVE Admin Control Center', 'Telegram Owner Workspace');
-      swrLoad('overview', '/overview', renderHub);
+      return swrLoad('overview', '/overview', renderHub, opts);
     } else if (r.view === 'exams') {
       setHeader('Exams & Sub-Exams', 'Catalog, Avatars & AI Factory');
-      swrLoad('exams', '/exams', renderExamsList);
+      return swrLoad('exams', '/exams', renderExamsList, opts);
     } else if (r.view === 'examDetail') {
       setHeader(p.examName || 'Exam Detail', 'Settings, AI Studio, Tests & Bank');
-      swrLoad('exams', '/exams', function (list) { renderExamDetail(list, p.id); });
+      return swrLoad('exams', '/exams', function (list) { renderExamDetail(list, p.id); }, opts);
     } else if (r.view === 'questionBank') {
       setHeader((p.examName || 'Exam') + ' · Question Bank', 'Verified Questions & Bulk JSON Import');
-      swrLoad('qbank:' + p.id, '/exams/' + encodeURIComponent(p.id) + '/questions', function (qs) { renderQuestionBank(qs, p); });
+      return swrLoad('qbank:' + p.id, '/exams/' + encodeURIComponent(p.id) + '/questions', function (qs) { renderQuestionBank(qs, p); }, opts);
     } else if (r.view === 'contentHub') {
       setHeader('Content & Moderation', 'Banners, Broadcasts, Polls, Flags & Feedback');
       var tab = p.tab || 'banners';
-      swrLoad('content', '/content', function (data) { renderContentHub(data, tab); });
+      return swrLoad('content', '/content', function (data) { renderContentHub(data, tab); }, opts);
     } else if (r.view === 'flaggedFixer') {
       setHeader('Flagged Question Fixer', 'Inspect, Repair & Resolve');
-      swrLoad('report:' + p.id, '/reports/' + encodeURIComponent(p.id) + '/detail', function (detail) { renderFlaggedFixer(detail); });
+      return swrLoad('report:' + p.id, '/reports/' + encodeURIComponent(p.id) + '/detail', function (detail) { renderFlaggedFixer(detail); }, opts);
     } else if (r.view === 'students') {
       setHeader('Students Directory', 'Search, Filter & Account Actions');
       var filter = p.filter || 'all';
       var q = p.q || '';
-      swrLoad('students:' + filter + ':' + q, '/students?filter=' + encodeURIComponent(filter) + '&q=' + encodeURIComponent(q), function (data) { renderStudentsDir(data, filter, q); });
+      return swrLoad('students:' + filter + ':' + q, '/students?filter=' + encodeURIComponent(filter) + '&q=' + encodeURIComponent(q), function (data) { renderStudentsDir(data, filter, q); }, opts);
     } else if (r.view === 'studentProfile') {
       setHeader(p.name || 'Student Profile', 'Performance, Attempts & Premium');
-      swrLoad('student:' + p.id, '/students/' + encodeURIComponent(p.id), renderStudentProfile);
+      return swrLoad('student:' + p.id, '/students/' + encodeURIComponent(p.id), renderStudentProfile, opts);
     } else if (r.view === 'orders') {
       setHeader('Payment Orders', 'UPI Approval Queue & Ledger');
       var st = p.status || 'pending';
-      swrLoad('orders:' + st, '/orders?status=' + encodeURIComponent(st), function (data) { renderOrders(data, st); });
+      return swrLoad('orders:' + st, '/orders?status=' + encodeURIComponent(st), function (data) { renderOrders(data, st); }, opts);
     } else if (r.view === 'premiumConfig') {
       setHeader('Premium Plans & UPI', 'Pricing, Validity & Merchant QR/UPI');
-      swrLoad('premiumConfig', '/premium/config', renderPremiumConfig);
+      return swrLoad('premiumConfig', '/premium/config', renderPremiumConfig, opts);
     } else if (r.view === 'subscribers') {
       setHeader('Premium Subscribers', 'Active & Lifetime Entitlements');
-      swrLoad('subscribers', '/premium/subscribers', renderSubscribers);
+      return swrLoad('subscribers', '/premium/subscribers', renderSubscribers, opts);
     } else if (r.view === 'analyticsHealth') {
       setHeader('Analytics & Health', 'Exams, Crashes, Security & AI Usage');
       var atab = p.tab || 'exams';
-      swrLoad('analyticsHealth', '/analytics-health', function (data) { renderAnalyticsHealth(data, atab); });
+      return swrLoad('analyticsHealth', '/analytics-health', function (data) { renderAnalyticsHealth(data, atab); }, opts);
     } else if (r.view === 'config') {
       setHeader('Maintenance & AI Config', 'Global App State & Multi-Provider AI Router');
-      swrLoad('overview', '/overview', function (data) { renderConfigView(data.config || {}); });
+      return swrLoad('overview', '/overview', function (data) { renderConfigView(data.config || {}); }, opts);
     } else if (r.view === 'roles') {
       setHeader('Admin Roles', 'Team Access & Granular Permissions');
-      swrLoad('roles', '/roles', renderRolesList);
+      return swrLoad('roles', '/roles', renderRolesList, opts);
     } else if (r.view === 'roleEdit') {
       setHeader(p.email || 'Admin Permissions', 'Telegram-style Rights Editor');
-      swrLoad('roles', '/roles', function (data) { renderRoleEdit(data, p.email); });
+      return swrLoad('roles', '/roles', function (data) { renderRoleEdit(data, p.email); }, opts);
     } else if (r.view === 'auditLog') {
       setHeader('Audit Log', 'Categorized Admin Activity History');
       var cat = p.category || 'all';
       var aq = p.q || '';
-      swrLoad('audit:' + cat + ':' + aq, '/audit-log?category=' + encodeURIComponent(cat) + '&q=' + encodeURIComponent(aq), function (data) { renderAuditLog(data, cat, aq); });
+      return swrLoad('audit:' + cat + ':' + aq, '/audit-log?category=' + encodeURIComponent(cat) + '&q=' + encodeURIComponent(aq), function (data) { renderAuditLog(data, cat, aq); }, opts);
     }
+    return Promise.resolve();
   }
 
   // -------- 1. EXACT 3-CARD HOME HUB --------
@@ -1120,7 +1210,7 @@ export const MINIAPP_SCRIPT = `
           haptic('success');
           swrInvalidate(['exams', 'overview']);
           toast('Avatar updated!');
-          renderCurrentView();
+          reloadCurrentView();
         }).catch(function (e) { haptic('error'); toast(e.message); });
       });
     } else if (act === 'upload-syllabus') {
@@ -1133,7 +1223,7 @@ export const MINIAPP_SCRIPT = `
           haptic('success');
           swrInvalidate('exams');
           toast('Syllabus PDF attached!');
-          renderCurrentView();
+          reloadCurrentView();
         }).catch(function (e) { haptic('error'); toast(e.message); });
       });
     }
@@ -1148,7 +1238,7 @@ export const MINIAPP_SCRIPT = `
     var id = node.dataset.id || '';
     if (act === 'close-sheet') { closeSheet(); return; }
     if (act === 'close-sheet-backdrop') { if (ev.target === node) closeSheet(); return; }
-    if (act === 'reload-view') { renderCurrentView(); return; }
+    if (act === 'reload-view') { reloadCurrentView(); return; }
     if (act === 'noop') return;
 
     // Navigation Hub Actions
@@ -1258,7 +1348,7 @@ export const MINIAPP_SCRIPT = `
           closeSheet();
           swrInvalidate(['exams', 'overview']);
           toast('Created!');
-          renderCurrentView();
+          reloadCurrentView();
         }).catch(function (e) { haptic('error'); toast(e.message); });
       };
       finishCreate();
@@ -1295,7 +1385,7 @@ export const MINIAPP_SCRIPT = `
           publishMode: document.getElementById('edExPub').value
         })
       }).then(function () {
-        haptic('success'); closeSheet(); swrInvalidate(['exams', 'overview']); toast('Exam updated'); renderCurrentView();
+        haptic('success'); closeSheet(); swrInvalidate(['exams', 'overview']); toast('Exam updated'); reloadCurrentView();
       }).catch(function (e) { haptic('error'); toast(e.message); });
       return;
     }
@@ -1310,7 +1400,7 @@ export const MINIAPP_SCRIPT = `
     if (act === 'delete-syllabus') {
       confirmDialog('Remove syllabus PDF from this exam?', function () {
         api('/exams/' + encodeURIComponent(id) + '/syllabus', { method: 'DELETE' }).then(function () {
-          haptic('success'); swrInvalidate('exams'); toast('Syllabus removed'); renderCurrentView();
+          haptic('success'); swrInvalidate('exams'); toast('Syllabus removed'); reloadCurrentView();
         }).catch(function (e) { haptic('error'); toast(e.message); });
       });
       return;
@@ -1330,13 +1420,13 @@ export const MINIAPP_SCRIPT = `
     if (act === 'gen-ai-test') {
       toast('Generating AI mock test...');
       api('/exams/' + encodeURIComponent(id) + '/generate', { method: 'POST' }).then(function () {
-        haptic('success'); swrInvalidate(['exams', 'overview']); toast('AI Mock Test generated!'); renderCurrentView();
+        haptic('success'); swrInvalidate(['exams', 'overview']); toast('AI Mock Test generated!'); reloadCurrentView();
       }).catch(function (e) { haptic('error'); toast(e.message); });
       return;
     }
     if (act === 'assemble-bank-test') {
       api('/exams/' + encodeURIComponent(id) + '/assemble', { method: 'POST' }).then(function () {
-        haptic('success'); swrInvalidate(['exams', 'overview']); toast('Assembled from Question Bank!'); renderCurrentView();
+        haptic('success'); swrInvalidate(['exams', 'overview']); toast('Assembled from Question Bank!'); reloadCurrentView();
       }).catch(function (e) { haptic('error'); toast(e.message); });
       return;
     }
@@ -1344,14 +1434,14 @@ export const MINIAPP_SCRIPT = `
       var nextSt = node.dataset.next;
       node.classList.toggle('on');
       api('/tests/' + encodeURIComponent(id) + '/status', { method: 'PUT', body: JSON.stringify({ status: nextSt }) }).then(function () {
-        haptic('success'); swrInvalidate(['exams', 'overview']); toast('Test set to ' + nextSt); renderCurrentView();
+        haptic('success'); swrInvalidate(['exams', 'overview']); toast('Test set to ' + nextSt); reloadCurrentView();
       }).catch(function (e) { node.classList.toggle('on'); haptic('error'); toast(e.message); });
       return;
     }
     if (act === 'delete-test') {
       confirmDialog('Delete this generated test?', function () {
         api('/tests/' + encodeURIComponent(id), { method: 'DELETE' }).then(function () {
-          haptic('success'); swrInvalidate(['exams', 'overview']); toast('Test deleted'); renderCurrentView();
+          haptic('success'); swrInvalidate(['exams', 'overview']); toast('Test deleted'); reloadCurrentView();
         }).catch(function (e) { haptic('error'); toast(e.message); });
       });
       return;
@@ -1391,14 +1481,14 @@ export const MINIAPP_SCRIPT = `
       };
       var qUrl = id ? ('/questions/' + encodeURIComponent(id)) : ('/exams/' + encodeURIComponent(node.dataset.exam) + '/questions');
       api(qUrl, { method: id ? 'PUT' : 'POST', body: JSON.stringify(body) }).then(function () {
-        haptic('success'); closeSheet(); swrInvalidate(['qbank:' + node.dataset.exam, 'exams']); toast('Question saved'); renderCurrentView();
+        haptic('success'); closeSheet(); swrInvalidate(['qbank:' + node.dataset.exam, 'exams']); toast('Question saved'); reloadCurrentView();
       }).catch(function (e) { haptic('error'); toast(e.message); });
       return;
     }
     if (act === 'delete-q') {
       confirmDialog('Delete this question from the Question Bank?', function () {
         api('/questions/' + encodeURIComponent(id), { method: 'DELETE' }).then(function () {
-          haptic('success'); swrInvalidate(['qbank:' + node.dataset.exam, 'exams']); toast('Question deleted'); renderCurrentView();
+          haptic('success'); swrInvalidate(['qbank:' + node.dataset.exam, 'exams']); toast('Question deleted'); reloadCurrentView();
         }).catch(function (e) { haptic('error'); toast(e.message); });
       });
       return;
@@ -1418,7 +1508,7 @@ export const MINIAPP_SCRIPT = `
         method: 'POST',
         body: JSON.stringify({ questions: parsedBulk })
       }).then(function (res) {
-        haptic('success'); closeSheet(); swrInvalidate(['qbank:' + id, 'exams']); toast('Imported ' + (res.count || '') + ' questions!'); renderCurrentView();
+        haptic('success'); closeSheet(); swrInvalidate(['qbank:' + id, 'exams']); toast('Imported ' + (res.count || '') + ' questions!'); reloadCurrentView();
       }).catch(function (e) { haptic('error'); toast(e.message); });
       return;
     }
@@ -1448,7 +1538,7 @@ export const MINIAPP_SCRIPT = `
             linkLabel: document.getElementById('banLabel').value
           })
         }).then(function () {
-          haptic('success'); closeSheet(); swrInvalidate(['content', 'overview']); toast('Banner uploaded!'); renderCurrentView();
+          haptic('success'); closeSheet(); swrInvalidate(['content', 'overview']); toast('Banner uploaded!'); reloadCurrentView();
         }).catch(function (e) { haptic('error'); toast(e.message); });
       });
       return;
@@ -1457,13 +1547,13 @@ export const MINIAPP_SCRIPT = `
       var activeVal = node.dataset.next === 'true';
       node.classList.toggle('on');
       api('/banners/' + encodeURIComponent(id) + '/status', { method: 'PUT', body: JSON.stringify({ active: activeVal }) }).then(function () {
-        haptic('success'); swrInvalidate(['content', 'overview']); toast(activeVal ? 'Banner active' : 'Banner hidden'); renderCurrentView();
+        haptic('success'); swrInvalidate(['content', 'overview']); toast(activeVal ? 'Banner active' : 'Banner hidden'); reloadCurrentView();
       }).catch(function (e) { node.classList.toggle('on'); haptic('error'); toast(e.message); });
       return;
     }
     if (act === 'reorder-banner') {
       api('/banners/' + encodeURIComponent(id) + '/reorder', { method: 'PUT', body: JSON.stringify({ moveUp: node.dataset.up === '1' }) }).then(function () {
-        haptic('light'); swrInvalidate('content'); renderCurrentView();
+        haptic('light'); swrInvalidate('content'); reloadCurrentView();
       }).catch(function (e) { toast(e.message); });
       return;
     }
@@ -1480,14 +1570,14 @@ export const MINIAPP_SCRIPT = `
       api('/banners/' + encodeURIComponent(id) + '/link', {
         method: 'PUT',
         body: JSON.stringify({ linkUrl: document.getElementById('edBanUrl').value, linkLabel: document.getElementById('edBanLbl').value })
-      }).then(function () { haptic('success'); closeSheet(); swrInvalidate('content'); toast('Banner link updated'); renderCurrentView(); })
+      }).then(function () { haptic('success'); closeSheet(); swrInvalidate('content'); toast('Banner link updated'); reloadCurrentView(); })
         .catch(function (e) { haptic('error'); toast(e.message); });
       return;
     }
     if (act === 'delete-banner') {
       confirmDialog('Delete this Home banner?', function () {
         api('/banners/' + encodeURIComponent(id), { method: 'DELETE' }).then(function () {
-          haptic('success'); swrInvalidate(['content', 'overview']); toast('Banner deleted'); renderCurrentView();
+          haptic('success'); swrInvalidate(['content', 'overview']); toast('Banner deleted'); reloadCurrentView();
         }).catch(function (e) { haptic('error'); toast(e.message); });
       });
       return;
@@ -1509,14 +1599,14 @@ export const MINIAPP_SCRIPT = `
       api('/broadcasts', {
         method: 'POST',
         body: JSON.stringify({ title: document.getElementById('bcTitle').value, message: document.getElementById('bcMsg').value })
-      }).then(function () { haptic('success'); swrInvalidate('content'); toast('Broadcast sent!'); renderCurrentView(); })
+      }).then(function () { haptic('success'); swrInvalidate('content'); toast('Broadcast sent!'); reloadCurrentView(); })
         .catch(function (e) { haptic('error'); toast(e.message); });
       return;
     }
     if (act === 'delete-broadcast') {
       confirmDialog('Delete this broadcast?', function () {
         api('/broadcasts/' + encodeURIComponent(id), { method: 'DELETE' }).then(function () {
-          haptic('success'); swrInvalidate('content'); toast('Broadcast deleted'); renderCurrentView();
+          haptic('success'); swrInvalidate('content'); toast('Broadcast deleted'); reloadCurrentView();
         }).catch(function (e) { haptic('error'); toast(e.message); });
       });
       return;
@@ -1532,7 +1622,7 @@ export const MINIAPP_SCRIPT = `
     if (act === 'submit-create-poll') {
       var opts = document.getElementById('plOpts').value.split('\\n').map(function (s) { return s.trim(); }).filter(Boolean);
       api('/polls', { method: 'POST', body: JSON.stringify({ question: document.getElementById('plQ').value, options: opts }) }).then(function () {
-        haptic('success'); closeSheet(); swrInvalidate(['content', 'overview']); toast('Poll published!'); renderCurrentView();
+        haptic('success'); closeSheet(); swrInvalidate(['content', 'overview']); toast('Poll published!'); reloadCurrentView();
       }).catch(function (e) { haptic('error'); toast(e.message); });
       return;
     }
@@ -1540,14 +1630,14 @@ export const MINIAPP_SCRIPT = `
       var pNext = node.dataset.next === 'true';
       node.classList.toggle('on');
       api('/polls/' + encodeURIComponent(id) + '/status', { method: 'PUT', body: JSON.stringify({ active: pNext }) }).then(function () {
-        haptic('success'); swrInvalidate('content'); toast(pNext ? 'Poll active' : 'Poll closed'); renderCurrentView();
+        haptic('success'); swrInvalidate('content'); toast(pNext ? 'Poll active' : 'Poll closed'); reloadCurrentView();
       }).catch(function (e) { node.classList.toggle('on'); haptic('error'); toast(e.message); });
       return;
     }
     if (act === 'delete-poll') {
       confirmDialog('Delete this poll and its votes?', function () {
         api('/polls/' + encodeURIComponent(id), { method: 'DELETE' }).then(function () {
-          haptic('success'); swrInvalidate(['content', 'overview']); toast('Poll deleted'); renderCurrentView();
+          haptic('success'); swrInvalidate(['content', 'overview']); toast('Poll deleted'); reloadCurrentView();
         }).catch(function (e) { haptic('error'); toast(e.message); });
       });
       return;
@@ -1561,20 +1651,20 @@ export const MINIAPP_SCRIPT = `
     }
     if (act === 'submit-reply-feedback') {
       api('/feedback/' + encodeURIComponent(id) + '/reply', { method: 'POST', body: JSON.stringify({ reply: document.getElementById('fbReplyTxt').value }) }).then(function () {
-        haptic('success'); closeSheet(); swrInvalidate('content'); toast('Reply saved'); renderCurrentView();
+        haptic('success'); closeSheet(); swrInvalidate('content'); toast('Reply saved'); reloadCurrentView();
       }).catch(function (e) { haptic('error'); toast(e.message); });
       return;
     }
     if (act === 'read-feedback') {
       api('/feedback/' + encodeURIComponent(id) + '/read', { method: 'POST' }).then(function () {
-        haptic('success'); swrInvalidate('content'); renderCurrentView();
+        haptic('success'); swrInvalidate('content'); reloadCurrentView();
       }).catch(function (e) { toast(e.message); });
       return;
     }
     if (act === 'delete-feedback') {
       confirmDialog('Delete this feedback message?', function () {
         api('/feedback/' + encodeURIComponent(id), { method: 'DELETE' }).then(function () {
-          haptic('success'); swrInvalidate('content'); toast('Feedback deleted'); renderCurrentView();
+          haptic('success'); swrInvalidate('content'); toast('Feedback deleted'); reloadCurrentView();
         }).catch(function (e) { haptic('error'); toast(e.message); });
       });
       return;
@@ -1628,14 +1718,14 @@ export const MINIAPP_SCRIPT = `
         method: 'POST',
         body: JSON.stringify(isLife ? { isLifetime: true } : { days: 30 })
       }).then(function () {
-        haptic('success'); swrInvalidate(['student:' + id, 'students:', 'subscribers', 'overview']); toast(isLife ? 'Lifetime Premium granted!' : '+30d Premium granted!'); renderCurrentView();
+        haptic('success'); swrInvalidate(['student:' + id, 'students:', 'subscribers', 'overview']); toast(isLife ? 'Lifetime Premium granted!' : '+30d Premium granted!'); reloadCurrentView();
       }).catch(function (e) { haptic('error'); toast(e.message); });
       return;
     }
     if (act === 'revoke-prem') {
       confirmDialog('Revoke Premium access from this student?', function () {
         api('/users/' + encodeURIComponent(id) + '/premium/revoke', { method: 'POST' }).then(function () {
-          haptic('success'); swrInvalidate(['student:' + id, 'students:', 'subscribers', 'overview']); toast('Premium revoked'); renderCurrentView();
+          haptic('success'); swrInvalidate(['student:' + id, 'students:', 'subscribers', 'overview']); toast('Premium revoked'); reloadCurrentView();
         }).catch(function (e) { haptic('error'); toast(e.message); });
       });
       return;
@@ -1644,7 +1734,7 @@ export const MINIAPP_SCRIPT = `
       var banNext = node.dataset.next === 'true';
       confirmDialog((banNext ? 'Ban' : 'Unban') + ' this student account?', function () {
         api('/users/' + encodeURIComponent(id) + '/status', { method: 'POST', body: JSON.stringify({ disabled: banNext }) }).then(function () {
-          haptic('success'); swrInvalidate(['student:' + id, 'students:', 'overview']); toast(banNext ? 'Student banned' : 'Student unbanned'); renderCurrentView();
+          haptic('success'); swrInvalidate(['student:' + id, 'students:', 'overview']); toast(banNext ? 'Student banned' : 'Student unbanned'); reloadCurrentView();
         }).catch(function (e) { haptic('error'); toast(e.message); });
       });
       return;
@@ -1653,7 +1743,7 @@ export const MINIAPP_SCRIPT = `
       var isApprove = act === 'approve-order';
       var runOrd = function () {
         api('/orders/' + encodeURIComponent(id) + '/' + (isApprove ? 'approve' : 'reject'), { method: 'POST' }).then(function () {
-          haptic('success'); swrInvalidate(['orders:', 'subscribers', 'overview']); toast(isApprove ? 'Order approved!' : 'Order rejected'); renderCurrentView();
+          haptic('success'); swrInvalidate(['orders:', 'subscribers', 'overview']); toast(isApprove ? 'Order approved!' : 'Order rejected'); reloadCurrentView();
         }).catch(function (e) { haptic('error'); toast(e.message); });
       };
       if (!isApprove) confirmDialog('Reject UPI order ' + id + '?', runOrd);
@@ -1678,7 +1768,7 @@ export const MINIAPP_SCRIPT = `
           merchantVpa: document.getElementById('premVpa').value,
           merchantName: document.getElementById('premMerchant').value
         })
-      }).then(function () { haptic('success'); swrInvalidate(['premiumConfig', 'overview']); toast('Premium & UPI settings saved!'); renderCurrentView(); })
+      }).then(function () { haptic('success'); swrInvalidate(['premiumConfig', 'overview']); toast('Premium & UPI settings saved!'); reloadCurrentView(); })
         .catch(function (e) { haptic('error'); toast(e.message); });
       return;
     }
@@ -1693,14 +1783,14 @@ export const MINIAPP_SCRIPT = `
     }
     if (act === 'resolve-crash') {
       api('/crashes/' + encodeURIComponent(id) + '/resolve', { method: 'POST' }).then(function () {
-        haptic('success'); swrInvalidate(['analyticsHealth', 'overview']); toast('Crash marked fixed'); renderCurrentView();
+        haptic('success'); swrInvalidate(['analyticsHealth', 'overview']); toast('Crash marked fixed'); reloadCurrentView();
       }).catch(function (e) { haptic('error'); toast(e.message); });
       return;
     }
     if (act === 'delete-crash') {
       confirmDialog('Delete crash signature permanently?', function () {
         api('/crashes/' + encodeURIComponent(id), { method: 'DELETE' }).then(function () {
-          haptic('success'); swrInvalidate(['analyticsHealth', 'overview']); toast('Crash deleted'); renderCurrentView();
+          haptic('success'); swrInvalidate(['analyticsHealth', 'overview']); toast('Crash deleted'); reloadCurrentView();
         }).catch(function (e) { haptic('error'); toast(e.message); });
       });
       return;
@@ -1719,7 +1809,7 @@ export const MINIAPP_SCRIPT = `
           officialTelegramChannelUsername: document.getElementById('cfgTgCh').value,
           officialTelegramSupportUsername: document.getElementById('cfgTgSup').value
         })
-      }).then(function () { haptic('success'); swrInvalidate(['overview', 'content']); toast('System & AI config saved!'); renderCurrentView(); })
+      }).then(function () { haptic('success'); swrInvalidate(['overview', 'content']); toast('System & AI config saved!'); reloadCurrentView(); })
         .catch(function (e) { haptic('error'); toast(e.message); });
       return;
     }
@@ -1735,7 +1825,7 @@ export const MINIAPP_SCRIPT = `
       api('/roles', {
         method: 'POST',
         body: JSON.stringify({ email: document.getElementById('newAdminEmail').value, customTitle: document.getElementById('newAdminTitle').value })
-      }).then(function () { haptic('success'); closeSheet(); swrInvalidate(['roles', 'overview']); toast('Admin added!'); renderCurrentView(); })
+      }).then(function () { haptic('success'); closeSheet(); swrInvalidate(['roles', 'overview']); toast('Admin added!'); reloadCurrentView(); })
         .catch(function (e) { haptic('error'); toast(e.message); });
       return;
     }
@@ -1751,7 +1841,7 @@ export const MINIAPP_SCRIPT = `
           rights: selectedRights,
           customTitle: document.getElementById('roleTitleInput') ? document.getElementById('roleTitleInput').value : undefined
         })
-      }).then(function () { haptic('success'); swrInvalidate('roles'); toast('Permissions updated'); renderCurrentView(); })
+      }).then(function () { haptic('success'); swrInvalidate('roles'); toast('Permissions updated'); reloadCurrentView(); })
         .catch(function (e) { haptic('error'); toast(e.message); });
       return;
     }
@@ -1768,7 +1858,7 @@ export const MINIAPP_SCRIPT = `
       var cCat = node.dataset.cat || 'all';
       confirmDialog('Clear ' + cCat + ' audit log entries permanently?', function () {
         api('/audit-log?category=' + encodeURIComponent(cCat), { method: 'DELETE' }).then(function () {
-          haptic('success'); swrInvalidate('audit:'); toast('Audit logs cleared'); renderCurrentView();
+          haptic('success'); swrInvalidate('audit:'); toast('Audit logs cleared'); reloadCurrentView();
         }).catch(function (e) { haptic('error'); toast(e.message); });
       });
       return;
@@ -1778,6 +1868,7 @@ export const MINIAPP_SCRIPT = `
   // Legacy-friendly hooks for smoke verification
   window.eveMiniAppNavigate = navigate;
   window.eveMiniAppGoBack = goBack;
+  window.eveMiniAppReload = reloadCurrentView;
   renderCurrentView();
 })();
 `;
