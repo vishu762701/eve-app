@@ -182,8 +182,9 @@ public class EveTelegramDualSessionTest {
         assertEquals(28, DialogCell.resolveCustomDialogAvatarRoundRadiusDp(true));
 
         EveExamModels.ExamSummary exam = new EveExamModels.ExamSummary(
-                "ex-1", "UPSC CSE", 120, "UPSC", 100, "live", "", 1, 1700000000, "Mock 1", "Test 1",
-                "/api/exams/ex-1/avatar?v=4", "\uD83D\uDCDA", 3, false);
+                "ex-1", "UPSC CSE", 120, "UPSC", 100, "Test 1", "", "", "live",
+                1700000000000L, 1, "Mock 1", 1700000000, false,
+                "/api/exams/ex-1/avatar?v=4", "\uD83D\uDCDA", 3);
         DialogCell.CustomDialog examDialog = EveExamDialogsMapper.toCustomDialog(exam);
         assertEquals("/api/exams/ex-1/avatar?v=4", examDialog.avatarUrl);
         assertEquals("\uD83D\uDCDA", examDialog.avatarEmoji);
