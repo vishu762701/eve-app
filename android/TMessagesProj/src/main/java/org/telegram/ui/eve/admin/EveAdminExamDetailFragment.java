@@ -729,7 +729,13 @@ public class EveAdminExamDetailFragment extends BaseFragment {
             }
         };
         repo.runWithAdminToken(cb, token -> {
-            byte[] bytes = EveAdminExamPromptFragment.readUriBytes(act, uri, MAX_SYLLABUS_BYTES);
+            final byte[] bytes;
+            try {
+                bytes = EveAdminExamPromptFragment.readUriBytes(act, uri, MAX_SYLLABUS_BYTES);
+            } catch (Exception ex) {
+                repo.postError(cb, ex.getMessage() != null ? ex.getMessage() : "Could not read selected PDF.", 0);
+                return;
+            }
             if (bytes == null || bytes.length == 0) {
                 repo.postError(cb, "Could not read selected PDF or file exceeds 18MB.", 0);
                 return;
