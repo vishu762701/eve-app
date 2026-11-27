@@ -134,6 +134,9 @@ public final class EvePollModel {
         if (optionIndex < 0 || optionIndex >= options.size()) {
             return this;
         }
+        if (myVoteIndex != null && myVoteIndex.intValue() != optionIndex) {
+            return this;
+        }
         Map<Integer, Integer> updated = new HashMap<>(voteCounts);
         int nextTotal = totalVotes;
         if (myVoteIndex == null) {

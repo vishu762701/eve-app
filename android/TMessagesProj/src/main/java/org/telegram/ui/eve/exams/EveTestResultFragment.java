@@ -107,7 +107,15 @@ public class EveTestResultFragment extends BaseFragment {
     private final EveExamModels.AttemptResult result;
 
     private UniversalRecyclerView listView;
-    private boolean preferHindi = LocaleController.isHindiSelected();
+    private boolean preferHindi = safeIsHindiSelected();
+
+    private static boolean safeIsHindiSelected() {
+        try {
+            return LocaleController.isHindiSelected();
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
     private int currentFilter = FILTER_ALL;
     private String rankText = "";
     private boolean destroyed = false;

@@ -151,7 +151,15 @@ public class EveTestPlayerFragment extends BaseFragment {
     private int remainingSeconds = 0;
     private long timerAnchorElapsedMs = 0L;
     private long questionShownElapsedMs = 0L;
-    private boolean preferHindi = LocaleController.isHindiSelected();
+    private boolean preferHindi = safeIsHindiSelected();
+
+    private static boolean safeIsHindiSelected() {
+        try {
+            return LocaleController.isHindiSelected();
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
     private boolean submitting = false;
     private boolean finishedAttempt = false;
     private volatile boolean destroyed = false;
