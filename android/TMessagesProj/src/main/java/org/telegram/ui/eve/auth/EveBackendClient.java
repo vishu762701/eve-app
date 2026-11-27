@@ -52,7 +52,7 @@ public final class EveBackendClient {
         }
         return "";
     }
-    private static final int CONNECT_TIMEOUT_MS = 10_000;
+    private static final int CONNECT_TIMEOUT_MS = 8_000;
     private static final int READ_TIMEOUT_MS = 15_000;
 
     static {
@@ -94,6 +94,8 @@ public final class EveBackendClient {
         public final String announcementChannelAvatarUrl;
         public final String officialTelegramChannelUsername;
         public final String officialTelegramSupportUsername;
+        public final String aiProvider;
+        public final String aiModel;
 
         public AppConfigResult(
                 boolean maintenanceMode,
@@ -103,7 +105,7 @@ public final class EveBackendClient {
                 String announcementChannelName,
                 String announcementChannelAvatarUrl) {
             this(maintenanceMode, maintenanceMessage, minSupportedVersionCode, defaultPublishMode,
-                    announcementChannelName, announcementChannelAvatarUrl, "", "");
+                    announcementChannelName, announcementChannelAvatarUrl, "", "", "auto", "");
         }
 
         public AppConfigResult(
@@ -115,6 +117,22 @@ public final class EveBackendClient {
                 String announcementChannelAvatarUrl,
                 String officialTelegramChannelUsername,
                 String officialTelegramSupportUsername) {
+            this(maintenanceMode, maintenanceMessage, minSupportedVersionCode, defaultPublishMode,
+                    announcementChannelName, announcementChannelAvatarUrl,
+                    officialTelegramChannelUsername, officialTelegramSupportUsername, "auto", "");
+        }
+
+        public AppConfigResult(
+                boolean maintenanceMode,
+                String maintenanceMessage,
+                int minSupportedVersionCode,
+                String defaultPublishMode,
+                String announcementChannelName,
+                String announcementChannelAvatarUrl,
+                String officialTelegramChannelUsername,
+                String officialTelegramSupportUsername,
+                String aiProvider,
+                String aiModel) {
             this.maintenanceMode = maintenanceMode;
             this.maintenanceMessage = maintenanceMessage != null ? maintenanceMessage : "";
             this.minSupportedVersionCode = minSupportedVersionCode;
@@ -124,6 +142,9 @@ public final class EveBackendClient {
             this.announcementChannelAvatarUrl = announcementChannelAvatarUrl != null ? announcementChannelAvatarUrl.trim() : "";
             this.officialTelegramChannelUsername = officialTelegramChannelUsername != null ? officialTelegramChannelUsername.trim() : "";
             this.officialTelegramSupportUsername = officialTelegramSupportUsername != null ? officialTelegramSupportUsername.trim() : "";
+            String cleanProvider = aiProvider != null ? aiProvider.trim().toLowerCase(java.util.Locale.US) : "auto";
+            this.aiProvider = cleanProvider.isEmpty() ? "auto" : cleanProvider;
+            this.aiModel = aiModel != null ? aiModel.trim() : "";
         }
 
         public JSONObject toJson() {
@@ -137,6 +158,8 @@ public final class EveBackendClient {
                 obj.put("announcementChannelAvatarUrl", announcementChannelAvatarUrl);
                 obj.put("officialTelegramChannelUsername", officialTelegramChannelUsername);
                 obj.put("officialTelegramSupportUsername", officialTelegramSupportUsername);
+                obj.put("aiProvider", aiProvider);
+                obj.put("aiModel", aiModel);
             } catch (JSONException ignored) {
             }
             return obj;
@@ -144,7 +167,7 @@ public final class EveBackendClient {
 
         public static AppConfigResult fromJson(JSONObject data) {
             if (data == null) {
-                return new AppConfigResult(false, "", 1, "paused", "Announcements", "", "", "");
+                return new AppConfigResult(false, "", 1, "paused", "Announcements", "", "", "", "auto", "");
             }
             boolean maint = data.has("maintenanceMode")
                     ? data.optBoolean("maintenanceMode", false)
@@ -165,7 +188,11 @@ public final class EveBackendClient {
                     optCleanString(data, "official_telegram_channel_username", ""));
             String tgSupport = optCleanString(data, "officialTelegramSupportUsername",
                     optCleanString(data, "official_telegram_support_username", ""));
-            return new AppConfigResult(maint, msg, minVer, pub, chName, chAvatar, tgChannel, tgSupport);
+            String aiProvider = optCleanString(data, "aiProvider",
+                    optCleanString(data, "ai_provider", "auto"));
+            String aiModel = optCleanString(data, "aiModel",
+                    optCleanString(data, "ai_model", ""));
+            return new AppConfigResult(maint, msg, minVer, pub, chName, chAvatar, tgChannel, tgSupport, aiProvider, aiModel);
         }
     }
 
@@ -182,6 +209,8 @@ public final class EveBackendClient {
             conn.setConnectTimeout(CONNECT_TIMEOUT_MS);
             conn.setReadTimeout(READ_TIMEOUT_MS);
             conn.setUseCaches(false);
+            conn.setRequestProperty("Accept-Encoding", "gzip");
+            conn.setRequestProperty("Connection", "keep-alive");
             conn.setRequestProperty(HEADER_EVE_CLIENT, EVE_CLIENT_VERSION);
             if (bearerToken != null && !bearerToken.trim().isEmpty()) {
                 conn.setRequestProperty("Authorization", "Bearer " + bearerToken);
@@ -190,7 +219,12 @@ public final class EveBackendClient {
             if (code < 200 || code >= 300) {
                 throw new IOException("Asset download failed with HTTP " + code);
             }
-            try (InputStream is = conn.getInputStream();
+            String encoding = conn.getContentEncoding();
+            InputStream rawStream = conn.getInputStream();
+            InputStream effectiveStream = (encoding != null && encoding.toLowerCase(java.util.Locale.US).contains("gzip"))
+                    ? new GZIPInputStream(rawStream)
+                    : rawStream;
+            try (InputStream is = effectiveStream;
                  java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream()) {
                 byte[] buf = new byte[8192];
                 int n;

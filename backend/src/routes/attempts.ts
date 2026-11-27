@@ -6,6 +6,7 @@ import { parseAndValidateQuestions } from "../ai/generator";
 import { Hono } from "hono";
 import { AttemptAnswerRow, AttemptRow, AttemptSessionRow, AuthUser, Env, ExamRow, GeneratedTestRow, QuestionRow } from "../types";
 import { hideAnswers } from "../util/clientProtocol";
+import { purgeEdgeCache } from "../util/edgeCache";
 import { isUserPremium } from "./premium";
 
 export const attemptRoutes = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
@@ -1028,6 +1029,8 @@ attemptRoutes.post("/submit", async (c) => {
     if (winner) return winner;
     throw err;
   }
+
+  await purgeEdgeCache(c, ["/api/leaderboard"]);
 
   return c.json({
     success: true,

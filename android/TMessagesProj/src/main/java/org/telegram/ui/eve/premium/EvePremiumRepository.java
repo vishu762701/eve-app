@@ -260,14 +260,22 @@ public final class EvePremiumRepository {
     }
 
     public void createOrder(String paymentMethod, Callback<PaymentOrder> callback) {
+        createOrderInternal(paymentMethod, true, callback);
+    }
+
+    private void createOrderInternal(String paymentMethod, boolean allowRetryOn401, Callback<PaymentOrder> callback) {
         FirebaseUser user = EveAuthManager.getInstance().getCurrentUser();
         if (user == null || user.isAnonymous()) {
             post(callback, null, "Sign in with your Google EVE Cloud account first.");
             return;
         }
-        user.getIdToken(true).addOnSuccessListener(result -> {
+        user.getIdToken(!allowRetryOn401).addOnSuccessListener(result -> {
             String token = result != null ? result.getToken() : null;
             if (token == null || token.trim().isEmpty()) {
+                if (allowRetryOn401) {
+                    createOrderInternal(paymentMethod, false, callback);
+                    return;
+                }
                 post(callback, null, "Authentication token unavailable.");
                 return;
             }
@@ -292,11 +300,23 @@ public final class EvePremiumRepository {
                             d.optString("qrData", "")
                     );
                     post(callback, order, null);
+                } catch (EveBackendClient.BackendException be) {
+                    if (be.unauthorized && allowRetryOn401) {
+                        createOrderInternal(paymentMethod, false, callback);
+                        return;
+                    }
+                    post(callback, null, be.getMessage() != null ? be.getMessage() : "Unable to create payment order.");
                 } catch (Throwable t) {
                     post(callback, null, t.getMessage() != null ? t.getMessage() : "Unable to create payment order.");
                 }
             });
-        }).addOnFailureListener(e -> post(callback, null, "Could not verify EVE Cloud session."));
+        }).addOnFailureListener(e -> {
+            if (allowRetryOn401) {
+                createOrderInternal(paymentMethod, false, callback);
+                return;
+            }
+            post(callback, null, "Could not verify EVE Cloud session.");
+        });
     }
 
     public void checkOrderStatus(String orderId, Callback<OrderStatusResult> callback) {

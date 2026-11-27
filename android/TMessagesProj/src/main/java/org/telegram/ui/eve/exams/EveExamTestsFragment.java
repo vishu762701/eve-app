@@ -247,19 +247,47 @@ public class EveExamTestsFragment extends BaseFragment {
         }
         EveExamRepository.getInstance().loadTestsForExam(exam.id, (loaded, err) -> {
             if (destroyed) return;
+            boolean hadNoTests = tests.isEmpty();
             loading = false;
             autoSync.markSynced();
-            tests = loaded != null ? loaded : Collections.emptyList();
-            errorMessage = err != null ? err : "";
-            liveTests.clear();
-            for (EveExamModels.GeneratedTestSummary t : tests) {
+            List<EveExamModels.GeneratedTestSummary> nextTests = loaded != null ? loaded : Collections.emptyList();
+            String nextErr = err != null ? err : "";
+            List<EveExamModels.GeneratedTestSummary> nextLive = new ArrayList<>();
+            for (EveExamModels.GeneratedTestSummary t : nextTests) {
                 if (t != null && t.isLive()) {
-                    liveTests.add(t);
+                    nextLive.add(t);
                 }
             }
-            Collections.sort(liveTests, NATURAL_TEST_COMPARATOR);
-            applyFilter(searchQuery);
+            Collections.sort(nextLive, NATURAL_TEST_COMPARATOR);
+            boolean changed = hadNoTests || !nextErr.equals(errorMessage) || !testsListEquals(liveTests, nextLive);
+            tests = nextTests;
+            errorMessage = nextErr;
+            liveTests.clear();
+            liveTests.addAll(nextLive);
+            if (changed) {
+                applyFilter(searchQuery);
+            }
         });
+    }
+
+    private static boolean testsListEquals(
+            List<EveExamModels.GeneratedTestSummary> a,
+            List<EveExamModels.GeneratedTestSummary> b) {
+        if (a.size() != b.size()) return false;
+        for (int i = 0; i < a.size(); i++) {
+            EveExamModels.GeneratedTestSummary ta = a.get(i);
+            EveExamModels.GeneratedTestSummary tb = b.get(i);
+            if (!TextUtils.equals(ta.id, tb.id)
+                    || !TextUtils.equals(ta.title, tb.title)
+                    || !TextUtils.equals(ta.testNumber, tb.testNumber)
+                    || !TextUtils.equals(ta.status, tb.status)
+                    || ta.questionCount != tb.questionCount
+                    || ta.availableFromMs != tb.availableFromMs
+                    || !TextUtils.equals(ta.avatarUrl, tb.avatarUrl)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static final Pattern LABELED_NUMBER_PATTERN = Pattern.compile("(?:test|mock|set|paper|#)\\s*[-:#]?\\s*(\\d+)", Pattern.CASE_INSENSITIVE);

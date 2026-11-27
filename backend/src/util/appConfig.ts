@@ -6,6 +6,17 @@ export const DEFAULT_MAINTENANCE_MESSAGE =
   "Eve Mock Test is currently undergoing scheduled maintenance. Please check back shortly.";
 export const DEFAULT_ANNOUNCEMENT_CHANNEL_NAME = "Announcements";
 
+export const VALID_AI_PROVIDERS = ["auto", "openrouter", "groq", "openai", "gemini"] as const;
+export type AiProviderName = (typeof VALID_AI_PROVIDERS)[number];
+
+export function normalizeAiProvider(raw: unknown): AiProviderName {
+  const val = typeof raw === "string" ? raw.trim().toLowerCase() : "";
+  if ((VALID_AI_PROVIDERS as readonly string[]).includes(val)) {
+    return val as AiProviderName;
+  }
+  return "auto";
+}
+
 export interface NormalizedAppConfig {
   minimum_supported_version_code: number;
   maintenance_mode: boolean;
@@ -15,6 +26,8 @@ export interface NormalizedAppConfig {
   announcement_channel_avatar_url: string;
   official_telegram_channel_username: string;
   official_telegram_support_username: string;
+  ai_provider: AiProviderName;
+  ai_model: string;
   minSupportedVersionCode: number;
   maintenanceMode: boolean;
   maintenanceMessage: string;
@@ -23,6 +36,8 @@ export interface NormalizedAppConfig {
   announcementChannelAvatarUrl: string;
   officialTelegramChannelUsername: string;
   officialTelegramSupportUsername: string;
+  aiProvider: AiProviderName;
+  aiModel: string;
 }
 
 export function sanitizeTelegramAtUsername(raw: unknown): { valid: boolean; value: string; error?: string } {
@@ -96,6 +111,10 @@ export function normalizeAppConfigObject(raw: Record<string, any> | null | undef
   );
   const officialTelegramSupportUsername = tgSupportRes.valid ? tgSupportRes.value : "";
 
+  const aiProvider = normalizeAiProvider(src.ai_provider ?? src.aiProvider);
+  const rawAiModel = src.ai_model ?? src.aiModel;
+  const aiModel = typeof rawAiModel === "string" ? rawAiModel.trim().slice(0, 120) : "";
+
   return {
     ...src,
     minimum_supported_version_code: minVer,
@@ -106,6 +125,8 @@ export function normalizeAppConfigObject(raw: Record<string, any> | null | undef
     announcement_channel_avatar_url: announcementChannelAvatarUrl,
     official_telegram_channel_username: officialTelegramChannelUsername,
     official_telegram_support_username: officialTelegramSupportUsername,
+    ai_provider: aiProvider,
+    ai_model: aiModel,
     minSupportedVersionCode: minVer,
     maintenanceMode,
     maintenanceMessage,
@@ -114,6 +135,8 @@ export function normalizeAppConfigObject(raw: Record<string, any> | null | undef
     announcementChannelAvatarUrl,
     officialTelegramChannelUsername,
     officialTelegramSupportUsername,
+    aiProvider,
+    aiModel,
   };
 }
 

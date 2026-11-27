@@ -11,6 +11,7 @@ import { cors } from "hono/cors";
 import { handleScheduledTestGeneration } from "./cron/scheduledTestGeneration";
 import { readAppConfig } from "./util/appConfig";
 import { serveStoredAvatarResponse } from "./util/avatarMedia";
+import { matchStudentEdgeCache, storeStudentEdgeCache } from "./util/edgeCache";
 import { authMiddleware } from "./middleware/authMiddleware";
 import { ipRateLimit, userRateLimit } from "./middleware/rateLimiter";
 import { adminRoutes } from "./routes/admin";
@@ -32,6 +33,8 @@ import { typographyRoutes } from "./routes/typographyPublished";
 import { emojiRoutes, emojiAdminRoutes } from "./routes/emoji";
 import { questionRoutes } from "./routes/questions";
 import { crashIngestRoutes } from "./routes/crashes";
+import { telegramWebhookRoutes } from "./routes/telegramWebhook";
+import { telegramMiniAppApi, telegramMiniAppPage } from "./routes/telegramMiniApp";
 import { AssetStorage } from "./storage";
 import { TelegramMediaVault, TelegramMediaVaultError } from "./telegramMediaVault";
 import { AuthUser, Env } from "./types";
@@ -58,6 +61,9 @@ app.use(
       "x-eve-client",
       "X-Diagnostic-Key",
       "x-diagnostic-key",
+      "X-Telegram-Init-Data",
+      "x-telegram-init-data",
+      "X-Telegram-Bot-Api-Secret-Token",
     ],
     maxAge: 86400,
   })
@@ -75,11 +81,19 @@ app.get("/api/health", (c) => {
 
 // Public App Config (Force Update, Maintenance Mode & Announcement Channel Metadata)
 app.get("/api/app-config", async (c) => {
-  c.header("Cache-Control", "no-store");
   try {
+    const cached = await matchStudentEdgeCache(c);
+    if (cached) {
+      return cached;
+    }
     const config = await readAppConfig(c.env.DB);
-    return c.json({ success: true, data: config });
+    if (config.maintenanceMode) {
+      c.header("Cache-Control", "no-store");
+      return c.json({ success: true, data: config });
+    }
+    return await storeStudentEdgeCache(c, c.json({ success: true, data: config }));
   } catch {
+    c.header("Cache-Control", "no-store");
     return c.json({ success: false, error: "App configuration unavailable" }, 503);
   }
 });
@@ -294,6 +308,9 @@ app.route("/api/admin/emoji", emojiAdminRoutes);
 app.route("/api/emoji", emojiRoutes);
 app.route("/api/crashes", crashIngestRoutes);
 app.route("/api/typography", typographyRoutes);
+app.route("/api/telegram/webhook", telegramWebhookRoutes);
+app.route("/api/telegram/miniapp", telegramMiniAppApi);
+app.route("/admin-miniapp", telegramMiniAppPage);
 
 // 6. Global Error Handling & 404
 app.notFound((c) => {

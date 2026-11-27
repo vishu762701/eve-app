@@ -133,6 +133,12 @@ public class EveAdminAuditLogFragment extends BaseFragment {
         destroyed = false;
         setHasOwnBackground(true);
 
+        List<EveAdminModels.AuditLogEntry> cachedEntries = repo.getCachedAuditLogs();
+        if (cachedEntries != null && !cachedEntries.isEmpty()) {
+            entries = cachedEntries;
+            loading = false;
+        }
+
         EveAdminUiChrome.Chrome chrome = EveAdminUiChrome.setup(
                 this,
                 context,
@@ -141,7 +147,7 @@ public class EveAdminAuditLogFragment extends BaseFragment {
                 glassEngine,
                 getResourceProvider(),
                 "Audit Log",
-                "Loading...",
+                entries.isEmpty() ? "Loading..." : entries.size() + " recent entries",
                 true,
                 true,
                 this::fillItems,
@@ -191,6 +197,9 @@ public class EveAdminAuditLogFragment extends BaseFragment {
             clearItem.setVisibility(isOwner ? View.VISIBLE : View.GONE);
         }
 
+        if (!entries.isEmpty()) {
+            applyFilter(searchQuery);
+        }
         fragmentView = chrome.rootView;
         reload();
         return chrome.rootView;

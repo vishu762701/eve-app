@@ -14,11 +14,16 @@ export interface Env {
   GEMINI_API_KEYS?: string;          // Comma-separated list of Cloudflare secrets
   GEMINI_MODEL?: string;
   GEMINI_FALLBACK_MODELS?: string;
+  OPENROUTER_API_KEY?: string;        // Cloudflare secret for OpenRouter frontier models
+  GROQ_API_KEY?: string;              // Cloudflare secret for Groq ultra-fast inference
+  OPENAI_API_KEY?: string;            // Cloudflare secret for OpenAI GPT models
   DIAGNOSTIC_KEY?: string;           // Cloudflare secret or environment variable
   PREMIUM_WEBHOOK_SECRET?: string;   // Cloudflare Worker secret; required to accept payments
   PREMIUM_SANDBOX_ENABLED?: string; // Explicit "true" only on isolated admin test environments
   TELEGRAM_BOT_TOKEN?: string;      // Cloudflare Worker secret for Telegram Media Vault & emoji import
   TELEGRAM_MEDIA_CHANNEL_ID?: string; // Cloudflare Worker secret: private Telegram storage channel ID
+  TELEGRAM_OWNER_ID?: string;        // Comma-separated Telegram numeric user IDs allowed to control Bot/Mini App
+  TELEGRAM_WEBHOOK_SECRET?: string;  // X-Telegram-Bot-Api-Secret-Token verification secret
 }
 
 export interface AuthUser {

@@ -48,6 +48,12 @@ public class EveAdminMaintenanceConfigFragment extends BaseFragment {
     private static final int ID_MODE_LIVE = 401;
     private static final int ID_MODE_PAUSED = 402;
     private static final int ID_MODE_DRAFT = 403;
+    private static final int ID_AI_AUTO = 420;
+    private static final int ID_AI_OPENROUTER = 421;
+    private static final int ID_AI_GROQ = 422;
+    private static final int ID_AI_OPENAI = 423;
+    private static final int ID_AI_GEMINI = 424;
+    private static final int ID_AI_MODEL_INPUT = 425;
     private static final int ID_TG_CHANNEL_INPUT = 451;
     private static final int ID_TG_SUPPORT_INPUT = 452;
     private static final int ID_SAVE_BUTTON = 501;
@@ -61,6 +67,8 @@ public class EveAdminMaintenanceConfigFragment extends BaseFragment {
     private LinearLayout messageCard;
     private EditTextBoldCursor messageInput;
     private TextView charCountView;
+    private LinearLayout aiModelCard;
+    private EditTextBoldCursor aiModelInput;
     private LinearLayout tgChannelCard;
     private EditTextBoldCursor tgChannelInput;
     private LinearLayout tgSupportCard;
@@ -70,6 +78,8 @@ public class EveAdminMaintenanceConfigFragment extends BaseFragment {
     private int minSupportedVersionCode;
     private String maintenanceMessage;
     private String defaultPublishMode;
+    private String aiProvider;
+    private String aiModel;
     private String officialTelegramChannelUsername;
     private String officialTelegramSupportUsername;
     private boolean saving = false;
@@ -89,6 +99,8 @@ public class EveAdminMaintenanceConfigFragment extends BaseFragment {
         this.minSupportedVersionCode = Math.max(1, cfg.minSupportedVersionCode);
         this.maintenanceMessage = !cfg.maintenanceMessage.isEmpty() ? cfg.maintenanceMessage : DEFAULT_MAINTENANCE_MSG;
         this.defaultPublishMode = normalizeMode(cfg.defaultPublishMode);
+        this.aiProvider = normalizeAiProvider(cfg.aiProvider);
+        this.aiModel = cfg.aiModel != null ? cfg.aiModel : "";
         this.officialTelegramChannelUsername = cfg.officialTelegramChannelUsername != null ? cfg.officialTelegramChannelUsername : "";
         this.officialTelegramSupportUsername = cfg.officialTelegramSupportUsername != null ? cfg.officialTelegramSupportUsername : "";
         this.onSaved = onSaved;
@@ -288,6 +300,29 @@ public class EveAdminMaintenanceConfigFragment extends BaseFragment {
         tgSupportInput.setBackground(null);
         tgSupportInput.setText(officialTelegramSupportUsername);
         tgSupportCard.addView(tgSupportInput, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+
+        aiModelCard = new LinearLayout(context);
+        aiModelCard.setOrientation(LinearLayout.VERTICAL);
+        aiModelCard.setPadding(dp(20), dp(12), dp(20), dp(12));
+
+        TextView aiModelLabel = new TextView(context);
+        aiModelLabel.setText("AI Model ID (Optional Override)");
+        aiModelLabel.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
+        aiModelLabel.setTypeface(AndroidUtilities.bold());
+        aiModelLabel.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueHeader, rp));
+        aiModelCard.addView(aiModelLabel, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 4));
+
+        aiModelInput = new EditTextBoldCursor(context);
+        aiModelInput.setHint("e.g. google/gemini-2.5-pro, llama-3.3-70b-versatile, gpt-4o-mini");
+        aiModelInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
+        aiModelInput.setSingleLine(true);
+        aiModelInput.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15.5f);
+        aiModelInput.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, rp));
+        aiModelInput.setHintTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteHintText, rp));
+        aiModelInput.setCursorColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText, rp));
+        aiModelInput.setBackground(null);
+        aiModelInput.setText(aiModel);
+        aiModelCard.addView(aiModelInput, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
     }
 
     private void updateCharCounter(int len) {
@@ -306,6 +341,8 @@ public class EveAdminMaintenanceConfigFragment extends BaseFragment {
                         minSupportedVersionCode = Math.max(1, data.minSupportedVersionCode);
                         maintenanceMessage = !data.maintenanceMessage.isEmpty() ? data.maintenanceMessage : DEFAULT_MAINTENANCE_MSG;
                         defaultPublishMode = normalizeMode(data.defaultPublishMode);
+                        aiProvider = normalizeAiProvider(data.aiProvider);
+                        aiModel = data.aiModel != null ? data.aiModel : "";
                         officialTelegramChannelUsername = data.officialTelegramChannelUsername != null ? data.officialTelegramChannelUsername : "";
                         officialTelegramSupportUsername = data.officialTelegramSupportUsername != null ? data.officialTelegramSupportUsername : "";
                         if (minVersionInput != null) {
@@ -313,6 +350,9 @@ public class EveAdminMaintenanceConfigFragment extends BaseFragment {
                         }
                         if (messageInput != null) {
                             messageInput.setText(maintenanceMessage);
+                        }
+                        if (aiModelInput != null) {
+                            aiModelInput.setText(aiModel);
                         }
                         if (tgChannelInput != null) {
                             tgChannelInput.setText(officialTelegramChannelUsername);
@@ -371,6 +411,25 @@ public class EveAdminMaintenanceConfigFragment extends BaseFragment {
         items.add(draftOpt);
         items.add(UItem.asShadow("Default visibility applied when an exam uses 'Inherit' publish mode."));
 
+        items.add(UItem.asHeader("AI Test Factory Provider & Model"));
+        UItem aiAuto = UItem.asRadio(ID_AI_AUTO, "Auto Failover (OpenRouter → Groq → OpenAI → Gemini)");
+        aiAuto.checked = "auto".equals(aiProvider);
+        UItem aiOr = UItem.asRadio(ID_AI_OPENROUTER, "OpenRouter");
+        aiOr.checked = "openrouter".equals(aiProvider);
+        UItem aiGroq = UItem.asRadio(ID_AI_GROQ, "Groq");
+        aiGroq.checked = "groq".equals(aiProvider);
+        UItem aiOpenAi = UItem.asRadio(ID_AI_OPENAI, "OpenAI");
+        aiOpenAi.checked = "openai".equals(aiProvider);
+        UItem aiGemini = UItem.asRadio(ID_AI_GEMINI, "Gemini");
+        aiGemini.checked = "gemini".equals(aiProvider);
+        items.add(aiAuto);
+        items.add(aiOr);
+        items.add(aiGroq);
+        items.add(aiOpenAi);
+        items.add(aiGemini);
+        items.add(UItem.asCustom(ID_AI_MODEL_INPUT, aiModelCard));
+        items.add(UItem.asShadow("Leave Model ID blank to use the selected provider's fast frontier default."));
+
         items.add(UItem.asHeader("Official Telegram Offload (Optional)"));
         items.add(UItem.asCustom(ID_TG_CHANNEL_INPUT, tgChannelCard));
         items.add(UItem.asCustom(ID_TG_SUPPORT_INPUT, tgSupportCard));
@@ -402,6 +461,26 @@ public class EveAdminMaintenanceConfigFragment extends BaseFragment {
                 break;
             case ID_MODE_DRAFT:
                 defaultPublishMode = "draft";
+                updateList();
+                break;
+            case ID_AI_AUTO:
+                aiProvider = "auto";
+                updateList();
+                break;
+            case ID_AI_OPENROUTER:
+                aiProvider = "openrouter";
+                updateList();
+                break;
+            case ID_AI_GROQ:
+                aiProvider = "groq";
+                updateList();
+                break;
+            case ID_AI_OPENAI:
+                aiProvider = "openai";
+                updateList();
+                break;
+            case ID_AI_GEMINI:
+                aiProvider = "gemini";
                 updateList();
                 break;
             case ID_SAVE_BUTTON:
@@ -440,6 +519,10 @@ public class EveAdminMaintenanceConfigFragment extends BaseFragment {
         final String finalTgSupport = tgSupportInput != null && tgSupportInput.getText() != null
                 ? tgSupportInput.getText().toString().trim()
                 : officialTelegramSupportUsername;
+        final String finalAiProvider = normalizeAiProvider(aiProvider);
+        final String finalAiModel = aiModelInput != null && aiModelInput.getText() != null
+                ? aiModelInput.getText().toString().trim()
+                : aiModel;
 
         EveAdminRepository.ResultCallback<EveAdminModels.AppConfigModel> cb =
                 new EveAdminRepository.ResultCallback<EveAdminModels.AppConfigModel>() {
@@ -465,10 +548,19 @@ public class EveAdminMaintenanceConfigFragment extends BaseFragment {
                 };
         repo.runWithAdminToken(cb, token -> {
             EveAdminModels.AppConfigModel updated = repo.updateAppConfig(
-                    token, finalMinVer, finalMaint, finalMsg, finalMode, finalTgChannel, finalTgSupport);
+                    token, finalMinVer, finalMaint, finalMsg, finalMode, finalTgChannel, finalTgSupport,
+                    finalAiProvider, finalAiModel);
             org.telegram.ui.eve.exams.EveExamRepository.getInstance().fetchAppConfig(null);
             repo.postSuccess(cb, updated);
         });
+    }
+
+    private static String normalizeAiProvider(String raw) {
+        String lower = raw != null ? raw.trim().toLowerCase(Locale.US) : "auto";
+        if ("openrouter".equals(lower) || "groq".equals(lower) || "openai".equals(lower) || "gemini".equals(lower)) {
+            return lower;
+        }
+        return "auto";
     }
 
     private static String normalizeMode(String raw) {

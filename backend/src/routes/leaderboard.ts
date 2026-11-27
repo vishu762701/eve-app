@@ -4,11 +4,14 @@
 
 import { Hono } from "hono";
 import { AuthUser, Env, LeaderboardRow, OverallLeaderboardRow } from "../types";
+import { matchStudentEdgeCache, storeStudentEdgeCache } from "../util/edgeCache";
 
 export const leaderboardRoutes = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
 
 // GET /api/leaderboard - Top scorers for an exam or overall
 leaderboardRoutes.get("/", async (c) => {
+  const cached = await matchStudentEdgeCache(c);
+  if (cached) return cached;
   const examId = c.req.query("examId") || "overall";
   const limit = Math.min(100, Math.max(1, parseInt(c.req.query("limit") || "50", 10)));
   const db = c.env.DB;
@@ -33,7 +36,7 @@ leaderboardRoutes.get("/", async (c) => {
       timeTakenSeconds: 0,
     }));
 
-    return c.json({ success: true, data: list });
+    return storeStudentEdgeCache(c, c.json({ success: true, data: list }));
   }
 
   const { results } = await db
@@ -54,7 +57,7 @@ leaderboardRoutes.get("/", async (c) => {
     timeTakenSeconds: r.time_taken_seconds || 0,
   }));
 
-  return c.json({ success: true, data: list });
+  return storeStudentEdgeCache(c, c.json({ success: true, data: list }));
 });
 
 // GET /api/leaderboard/rank - User rank for an exam or overall
@@ -64,10 +67,15 @@ leaderboardRoutes.get("/rank", async (c) => {
   const db = c.env.DB;
 
   if (examId === "overall") {
-    const myDoc = await db
+    const myStmt = db
       .prepare("SELECT score, total, accuracy, timestamp FROM overall_leaderboard WHERE user_id = ?")
-      .bind(user.uid)
-      .first<{ score: number; total: number; accuracy: number; timestamp: number }>();
+      .bind(user.uid);
+    const totalStmt = db.prepare("SELECT COUNT(*) as count FROM overall_leaderboard");
+    const [myRes, totalRes] = await Promise.all([
+      myStmt.first<{ score: number; total: number; accuracy: number; timestamp: number }>(),
+      totalStmt.first<{ count: number }>(),
+    ]);
+    const myDoc = myRes;
 
     if (!myDoc) {
       return c.json({ success: true, data: null });
@@ -84,12 +92,8 @@ leaderboardRoutes.get("/rank", async (c) => {
       .bind(myDoc.score, myDoc.score, myAccuracy, myDoc.score, myAccuracy, myDoc.timestamp)
       .first<{ count: number }>();
 
-    const total = await db
-      .prepare("SELECT COUNT(*) as count FROM overall_leaderboard")
-      .first<{ count: number }>();
-
     const rank = (higher?.count || 0) + 1;
-    const totalParticipants = total?.count || 1;
+    const totalParticipants = totalRes?.count || 1;
 
     return c.json({
       success: true,
@@ -102,10 +106,16 @@ leaderboardRoutes.get("/rank", async (c) => {
     });
   }
 
-  const myDoc = await db
-    .prepare("SELECT score, total, time_taken_seconds, timestamp FROM leaderboard WHERE exam_id = ? AND user_id = ?")
-    .bind(examId, user.uid)
-    .first<{ score: number; total: number; time_taken_seconds: number; timestamp: number }>();
+  const [myDoc, total] = await Promise.all([
+    db
+      .prepare("SELECT score, total, time_taken_seconds, timestamp FROM leaderboard WHERE exam_id = ? AND user_id = ?")
+      .bind(examId, user.uid)
+      .first<{ score: number; total: number; time_taken_seconds: number; timestamp: number }>(),
+    db
+      .prepare("SELECT COUNT(*) as count FROM leaderboard WHERE exam_id = ?")
+      .bind(examId)
+      .first<{ count: number }>(),
+  ]);
 
   if (!myDoc) {
     return c.json({ success: true, data: null });
@@ -121,11 +131,6 @@ leaderboardRoutes.get("/rank", async (c) => {
               OR (score = ? AND time_taken_seconds = ? AND timestamp < ?))`
     )
     .bind(examId, myDoc.score, myDoc.score, myTime, myDoc.score, myTime, myDoc.timestamp)
-    .first<{ count: number }>();
-
-  const total = await db
-    .prepare("SELECT COUNT(*) as count FROM leaderboard WHERE exam_id = ?")
-    .bind(examId)
     .first<{ count: number }>();
 
   const rank = (higher?.count || 0) + 1;
@@ -153,21 +158,23 @@ leaderboardRoutes.get("/stats", async (c) => {
 
   const db = c.env.DB;
 
-  const agg = await db
-    .prepare(
-      "SELECT COUNT(*) as participants, MAX(score) as topperScore, AVG(score) as avgScore FROM leaderboard WHERE exam_id = ?"
-    )
-    .bind(examId)
-    .first<{ participants: number; topperScore: number | null; avgScore: number | null }>();
+  const [agg, myDoc] = await Promise.all([
+    db
+      .prepare(
+        "SELECT COUNT(*) as participants, MAX(score) as topperScore, AVG(score) as avgScore FROM leaderboard WHERE exam_id = ?"
+      )
+      .bind(examId)
+      .first<{ participants: number; topperScore: number | null; avgScore: number | null }>(),
+    db
+      .prepare("SELECT score, time_taken_seconds, timestamp FROM leaderboard WHERE exam_id = ? AND user_id = ?")
+      .bind(examId, user.uid)
+      .first<{ score: number; time_taken_seconds: number; timestamp: number }>(),
+  ]);
 
-  const participants = agg?.participants || 0;
-  const topperScore = agg?.topperScore !== null && agg?.topperScore !== undefined ? agg.topperScore : 0;
-  const averageScore = agg?.avgScore !== null && agg?.avgScore !== undefined ? Math.round(agg.avgScore * 10) / 10 : 0;
-
-  const myDoc = await db
-    .prepare("SELECT score, time_taken_seconds, timestamp FROM leaderboard WHERE exam_id = ? AND user_id = ?")
-    .bind(examId, user.uid)
-    .first<{ score: number; time_taken_seconds: number; timestamp: number }>();
+  const participants = Number(agg?.participants || 0);
+  const topperScore = agg?.topperScore !== null && agg?.topperScore !== undefined ? Number(agg.topperScore) : 0;
+  const averageScore =
+    agg?.avgScore !== null && agg?.avgScore !== undefined ? Math.round(Number(agg.avgScore) * 10) / 10 : 0;
 
   if (!myDoc) {
     return c.json({

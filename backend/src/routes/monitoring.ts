@@ -49,11 +49,17 @@ monitoringRoutes.get('/health', async (c) => {
   };
   if (c.env.DB) {
     try {
-      await c.env.DB.prepare('SELECT 1 AS ok').first();
-      // Schema readiness is required as well as connectivity.
-      await c.env.DB.prepare('SELECT id FROM generation_jobs LIMIT 1').first();
-      await c.env.DB.prepare('SELECT id FROM operation_events LIMIT 1').first();
-      await c.env.DB.prepare('SELECT questions_json, negative_marking_value, session_instance_id FROM attempt_sessions LIMIT 1').first();
+      const checksToRun = [
+        c.env.DB.prepare('SELECT 1 AS ok'),
+        c.env.DB.prepare('SELECT id FROM generation_jobs LIMIT 1'),
+        c.env.DB.prepare('SELECT id FROM operation_events LIMIT 1'),
+        c.env.DB.prepare('SELECT questions_json, negative_marking_value, session_instance_id FROM attempt_sessions LIMIT 1'),
+      ];
+      if (typeof c.env.DB.batch === 'function') {
+        await c.env.DB.batch(checksToRun);
+      } else {
+        await Promise.all(checksToRun.map((s) => s.first()));
+      }
       checks.database = { status: 'verified', detail: 'D1 query and monitoring schema are available' };
     } catch { checks.database = { status: 'degraded', detail: 'D1 query or required migration failed' }; }
   }

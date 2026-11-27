@@ -12,7 +12,9 @@ import { isUserAdmin, HARDCODED_ADMIN_EMAILS, ALL_ADMIN_RIGHTS, AdminRight, isOw
 import { prepareAdminAuditLog, recordAdminAction, runBatch } from "../util/auditLog";
 import { getMonthlyApiUsage, trackGeminiCall } from "../util/usageTracker";
 import { validateReformatInput, reformatExplanationWithAi } from "../ai/explanationReformat";
-import { normalizeAppConfigObject, readAppConfig, sanitizeTelegramAtUsername } from "../util/appConfig";
+import { normalizeAppConfigObject, readAppConfig, sanitizeTelegramAtUsername, VALID_AI_PROVIDERS } from "../util/appConfig";
+import { purgeEdgeCache } from "../util/edgeCache";
+import { callTelegramBotApi } from "../services/telegramAdminAlerts";
 import { AssetStorage } from "../storage";
 import {
   buildAvatarProxyUrl,
@@ -136,9 +138,9 @@ adminRoutes.get("/dashboard", async (c) => {
           const row = await db
             .prepare(
               `SELECT COUNT(*) AS total,
-                      COALESCE(SUM(CASE WHEN status = 'PAID' THEN 1 ELSE 0 END), 0) AS paid_count,
-                      COALESCE(SUM(CASE WHEN status = 'PENDING' THEN 1 ELSE 0 END), 0) AS pending_count,
-                      COALESCE(SUM(CASE WHEN status = 'PAID' THEN amount ELSE 0 END), 0) AS revenue_inr
+                      COALESCE(SUM(CASE WHEN status IN ('PAID', 'SUCCESS') THEN 1 ELSE 0 END), 0) AS paid_count,
+                      COALESCE(SUM(CASE WHEN status IN ('PENDING', 'CREATED') THEN 1 ELSE 0 END), 0) AS pending_count,
+                      COALESCE(SUM(CASE WHEN status IN ('PAID', 'SUCCESS') THEN amount ELSE 0 END), 0) AS revenue_inr
                FROM premium_orders`
             )
             .first<{ total: number; paid_count: number; pending_count: number; revenue_inr: number }>();
@@ -1156,12 +1158,49 @@ adminRoutes.put("/config", requirePermission("manage_config_maintenance"), async
     officialTelegramSupportUsername = parsed.value;
   }
 
+  // 6. Validate AI Provider & Model settings
+  const rawAiProviderProvided =
+    body.ai_provider !== undefined ? body.ai_provider : body.aiProvider;
+  let aiProvider = String(prevConfig.ai_provider ?? prevConfig.aiProvider ?? "auto")
+    .trim()
+    .toLowerCase();
+  if (!(VALID_AI_PROVIDERS as readonly string[]).includes(aiProvider)) {
+    aiProvider = "auto";
+  }
+  if (rawAiProviderProvided !== undefined && rawAiProviderProvided !== null) {
+    if (typeof rawAiProviderProvided !== "string") {
+      return c.json({ success: false, error: "aiProvider must be a string" }, 400);
+    }
+    const candidate = rawAiProviderProvided.trim().toLowerCase();
+    if (!(VALID_AI_PROVIDERS as readonly string[]).includes(candidate)) {
+      return c.json(
+        { success: false, error: `aiProvider must be one of: ${VALID_AI_PROVIDERS.join(", ")}` },
+        400
+      );
+    }
+    aiProvider = candidate;
+  }
+
+  const rawAiModelProvided =
+    body.ai_model !== undefined ? body.ai_model : body.aiModel;
+  let aiModel = String(prevConfig.ai_model ?? prevConfig.aiModel ?? "").trim();
+  if (rawAiModelProvided !== undefined && rawAiModelProvided !== null) {
+    if (typeof rawAiModelProvided !== "string" || rawAiModelProvided.trim().length > 160) {
+      return c.json({ success: false, error: "aiModel must be a string up to 160 characters" }, 400);
+    }
+    aiModel = rawAiModelProvided.trim();
+  }
+
   const configObj: Record<string, any> = {
     ...prevConfig,
     minimum_supported_version_code: minVersion,
     maintenance_mode: maintenanceMode,
     maintenance_message: maintenanceMessage,
     default_publish_mode: defaultPublishMode,
+    ai_provider: aiProvider,
+    aiProvider,
+    ai_model: aiModel,
+    aiModel,
   };
   if (rawChNameProvided !== undefined || prevConfig.announcement_channel_name !== undefined) {
     configObj.announcement_channel_name = announcementChannelName;
@@ -1201,6 +1240,14 @@ adminRoutes.put("/config", requirePermission("manage_config_maintenance"), async
   if (rawTgSupportProvided !== undefined && rawTgSupportProvided !== null) {
     patch.official_telegram_support_username = officialTelegramSupportUsername;
   }
+  if (rawAiProviderProvided !== undefined && rawAiProviderProvided !== null) {
+    patch.ai_provider = aiProvider;
+    patch.aiProvider = aiProvider;
+  }
+  if (rawAiModelProvided !== undefined && rawAiModelProvided !== null) {
+    patch.ai_model = aiModel;
+    patch.aiModel = aiModel;
+  }
   try {
     const user = c.get("user");
     const saveStmt = db
@@ -1212,13 +1259,15 @@ adminRoutes.put("/config", requirePermission("manage_config_maintenance"), async
     const actionType = Boolean(prevConfig.maintenance_mode) !== maintenanceMode ? "MAINTENANCE_TOGGLED" : "CONFIG_UPDATED";
     const { stmt: auditStmt } = prepareAdminAuditLog(db, user, {
       actionType,
-      description: `Updated app configuration (maintenance=${maintenanceMode}, minVersion=${minVersion}, channel=${announcementChannelName})`,
+      description: `Updated app configuration (maintenance=${maintenanceMode}, minVersion=${minVersion}, aiProvider=${aiProvider}, channel=${announcementChannelName})`,
       targetType: "app_content",
       targetId: "app_config",
       metadata: {
         maintenanceMode,
         minVersion,
         defaultPublishMode,
+        aiProvider,
+        aiModel,
         announcementChannelName,
         officialTelegramChannelUsername,
         officialTelegramSupportUsername,
@@ -1226,6 +1275,7 @@ adminRoutes.put("/config", requirePermission("manage_config_maintenance"), async
     });
 
     await runBatch(db, [saveStmt, auditStmt]);
+    await purgeEdgeCache(c, ["/api/app-config"]);
 
     const saved = await db.prepare("SELECT body FROM app_content WHERE id = 'app_config'").first<{ body: string }>();
     if (!saved) throw new Error("Configuration readback unavailable");
@@ -1277,6 +1327,7 @@ adminRoutes.put("/announcement-channel", async (c) => {
     metadata: { announcementChannelName: name },
   });
   await runBatch(db, [saveStmt, auditStmt]);
+  await purgeEdgeCache(c, ["/api/app-config"]);
   return c.json({ success: true, data: updated });
 });
 
@@ -1334,6 +1385,7 @@ adminRoutes.post("/announcement-channel/avatar", async (c) => {
   if (oldKey && oldKey !== storagePath) {
     try { await storage.deleteFiles([oldKey]); } catch {}
   }
+  await purgeEdgeCache(c, ["/api/app-config"]);
   return c.json({ success: true, data: updated });
 });
 
@@ -1363,6 +1415,7 @@ adminRoutes.delete("/announcement-channel/avatar", async (c) => {
     targetId: "app_config",
   });
   await runBatch(db, [saveStmt, auditStmt]);
+  await purgeEdgeCache(c, ["/api/app-config"]);
   if (oldKey) {
     try { await new AssetStorage(c.env).deleteFiles([oldKey]); } catch {}
   }
@@ -2225,4 +2278,82 @@ adminRoutes.get("/export/exams", requirePermission("export_data"), async (c) => 
   } catch (err: any) {
     return c.json({ success: false, error: err.message || "Failed to assemble exam export" }, 500);
   }
+});
+
+// POST /api/admin/telegram/setup-webhook - One-time Owner registration of Telegram Bot webhook & Mini App menu button
+adminRoutes.post("/telegram/setup-webhook", async (c) => {
+  const user = c.get("user");
+  if (!isOwnerEmail(user?.email)) {
+    return c.json({ success: false, error: "Forbidden: Owner access required" }, 403);
+  }
+  const token = String(c.env.TELEGRAM_BOT_TOKEN || "").trim();
+  if (!token) {
+    return c.json({ success: false, error: "TELEGRAM_BOT_TOKEN is not configured" }, 400);
+  }
+
+  const body = await c.req.json().catch(() => ({}));
+  const reqOrigin = new URL(c.req.url).origin;
+  const customBaseUrl = typeof body?.baseUrl === "string" ? body.baseUrl.trim().replace(/\/+$/, "") : "";
+  const origin = customBaseUrl && customBaseUrl.startsWith("https://") ? customBaseUrl : reqOrigin;
+  const webhookUrl = `${origin}/api/telegram/webhook`;
+  const miniAppUrl = `${origin}/admin-miniapp`;
+  const secretToken = String(c.env.TELEGRAM_WEBHOOK_SECRET || "").trim();
+
+  const webhookResult = await callTelegramBotApi(c.env, "setWebhook", {
+    url: webhookUrl,
+    ...(secretToken ? { secret_token: secretToken } : {}),
+    allowed_updates: ["message", "callback_query"],
+  });
+
+  if (!webhookResult || webhookResult.ok !== true) {
+    return c.json(
+      {
+        success: false,
+        error: "Telegram setWebhook API call failed",
+        telegramResponse: webhookResult,
+      },
+      502
+    );
+  }
+
+  const [menuResult, commandsResult] = await Promise.all([
+    callTelegramBotApi(c.env, "setChatMenuButton", {
+      menu_button: {
+        type: "web_app",
+        text: "⚙️ Eve Admin",
+        web_app: { url: miniAppUrl },
+      },
+    }),
+    callTelegramBotApi(c.env, "setMyCommands", {
+      commands: [
+        { command: "admin", description: "Open Admin Control Center menu" },
+        { command: "status", description: "Live stats & AI provider status" },
+        { command: "generate", description: "AI generate draft test (/generate <exam>)" },
+        { command: "assemble", description: "0ms assemble bank test (/assemble <exam>)" },
+        { command: "model", description: "Set AI provider & model (/model <p> <m>)" },
+        { command: "maintenance", description: "Toggle maintenance (/maintenance on|off)" },
+        { command: "broadcast", description: "Send broadcast (/broadcast Title | Msg)" },
+      ],
+    }),
+  ]);
+
+  await recordAdminAction(c.env.DB, user, {
+    actionType: "TELEGRAM_WEBHOOK_CONFIGURED",
+    description: `Registered Telegram webhook (${webhookUrl}) and Mini App (${miniAppUrl})`,
+    targetType: "system",
+    targetId: "telegram_bot",
+    metadata: { webhookUrl, miniAppUrl, hasSecretToken: Boolean(secretToken) },
+  });
+
+  return c.json({
+    success: true,
+    data: {
+      webhookUrl,
+      miniAppUrl,
+      secretTokenConfigured: Boolean(secretToken),
+      webhookResult,
+      menuResult,
+      commandsResult,
+    },
+  });
 });

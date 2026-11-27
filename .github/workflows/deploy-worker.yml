@@ -96,6 +96,11 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: a50b9cf54c5e84de0183a5d3a4b38844
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_MEDIA_CHANNEL_ID: ${{ secrets.TELEGRAM_MEDIA_CHANNEL_ID }}
+          TELEGRAM_OWNER_ID: ${{ secrets.TELEGRAM_OWNER_ID }}
+          TELEGRAM_WEBHOOK_SECRET: ${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_API_KEY_1: ${{ secrets.GEMINI_API_KEY_1 }}
           GEMINI_API_KEY_2: ${{ secrets.GEMINI_API_KEY_2 }}
@@ -110,6 +115,21 @@ jobs:
           fi
           if [ -n "$TELEGRAM_MEDIA_CHANNEL_ID" ]; then
             printf %s "$TELEGRAM_MEDIA_CHANNEL_ID" | npx --no-install wrangler secret put TELEGRAM_MEDIA_CHANNEL_ID
+          fi
+          if [ -n "$TELEGRAM_OWNER_ID" ]; then
+            printf %s "$TELEGRAM_OWNER_ID" | npx --no-install wrangler secret put TELEGRAM_OWNER_ID
+          fi
+          if [ -n "$TELEGRAM_WEBHOOK_SECRET" ]; then
+            printf %s "$TELEGRAM_WEBHOOK_SECRET" | npx --no-install wrangler secret put TELEGRAM_WEBHOOK_SECRET
+          fi
+          if [ -n "$OPENROUTER_API_KEY" ]; then
+            printf %s "$OPENROUTER_API_KEY" | npx --no-install wrangler secret put OPENROUTER_API_KEY
+          fi
+          if [ -n "$GROQ_API_KEY" ]; then
+            printf %s "$GROQ_API_KEY" | npx --no-install wrangler secret put GROQ_API_KEY
+          fi
+          if [ -n "$OPENAI_API_KEY" ]; then
+            printf %s "$OPENAI_API_KEY" | npx --no-install wrangler secret put OPENAI_API_KEY
           fi
           if [ -n "$DIAGNOSTIC_KEY" ]; then
             echo "$DIAGNOSTIC_KEY" | npx --no-install wrangler secret put DIAGNOSTIC_KEY

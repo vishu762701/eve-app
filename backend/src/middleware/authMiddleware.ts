@@ -86,6 +86,9 @@ export async function authMiddleware(c: Context<{ Bindings: Env; Variables: { us
     path === "/api/floating-link" ||
     (path === "/api/premium/plan" && method === "GET") ||
     path === "/api/premium/webhook" ||
+    (path === "/api/telegram/webhook" && method === "POST") ||
+    (path === "/admin-miniapp" && method === "GET") ||
+    path.startsWith("/api/telegram/miniapp/") ||
     (path.startsWith("/api/app-content/") && method === "GET") ||
     (path === "/api/banners" && method === "GET") ||
     (path.startsWith("/api/banners/") && path.endsWith("/media") && method === "GET") ||

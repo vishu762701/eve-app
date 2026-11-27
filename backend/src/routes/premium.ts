@@ -4,6 +4,7 @@
 
 import { Hono } from "hono";
 import { getAdminPermissions, isOwnerEmail } from "../auth";
+import { alertNewUpiOrder } from "../services/telegramAdminAlerts";
 import { AuthUser, Env, PremiumConfigRow, PremiumEntitlementRow, PremiumOrderRow } from "../types";
 import { AuditActionOptions, prepareAdminAuditLog } from "../util/auditLog";
 
@@ -351,6 +352,15 @@ premiumRoutes.post("/orders/create", async (c) => {
       JSON.stringify({ vpa, merchantName: config.merchant_name })
     )
     .run();
+
+  alertNewUpiOrder(c, {
+    orderId,
+    userEmail: user.email || "",
+    userId: user.uid,
+    amount: config.price_inr,
+    planName: config.plan_name,
+    paymentMethod,
+  });
 
   return c.json({
     success: true,

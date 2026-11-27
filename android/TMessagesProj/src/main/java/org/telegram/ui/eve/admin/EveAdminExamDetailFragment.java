@@ -57,6 +57,7 @@ public class EveAdminExamDetailFragment extends BaseFragment {
 
     private static final int ID_EDIT_SETTINGS = 201;
     private static final int ID_GENERATE_TEST = 202;
+    private static final int ID_ASSEMBLE_FROM_BANK = 207;
     private static final int ID_PREVIEW_STUDENT = 203;
     private static final int ID_TOGGLE_PUBLISH = 204;
     private static final int ID_TOGGLE_ARCHIVE = 205;
@@ -361,6 +362,13 @@ public class EveAdminExamDetailFragment extends BaseFragment {
                 "Edit master prompt, language, difficulty & generate mock test",
                 null));
         items.add(SettingsActivity.SettingCell.Factory.of(
+                ID_ASSEMBLE_FROM_BANK,
+                IconBackgroundColors.GREEN.top, IconBackgroundColors.GREEN.bottom,
+                R.drawable.msg_list,
+                "Assemble Test from Question Bank",
+                "Instant ₹0 non-repeating test from verified bank questions",
+                null));
+        items.add(SettingsActivity.SettingCell.Factory.of(
                 ID_PREVIEW_STUDENT,
                 IconBackgroundColors.CYAN.top, IconBackgroundColors.CYAN.bottom,
                 R.drawable.msg_info,
@@ -459,6 +467,9 @@ public class EveAdminExamDetailFragment extends BaseFragment {
             case ID_GENERATE_TEST:
                 presentFragment(new EveAdminExamPromptFragment(exam, allExams, this::notifyParentAndReload));
                 break;
+            case ID_ASSEMBLE_FROM_BANK:
+                assembleTestFromBank();
+                break;
             case ID_PREVIEW_STUDENT:
                 EveExamModels.ExamSummary summary = new EveExamModels.ExamSummary(
                         exam.id, exam.examName, exam.timeLimitMinutes, exam.category,
@@ -492,6 +503,32 @@ public class EveAdminExamDetailFragment extends BaseFragment {
                 }
                 break;
         }
+    }
+
+    private void assembleTestFromBank() {
+        if (destroyed || exam == null) return;
+        BulletinFactory.of(this).createSimpleBulletin(R.raw.info, "Assembling test from Question Bank...").show();
+        EveAdminRepository.ResultCallback<JSONObject> cb = new EveAdminRepository.ResultCallback<JSONObject>() {
+            @Override
+            public void onSuccess(JSONObject root) {
+                if (destroyed) return;
+                JSONObject data = root != null ? root.optJSONObject("data") : null;
+                int count = data != null ? data.optInt("questionCount", exam.questionCount) : exam.questionCount;
+                String tNum = data != null ? data.optString("testNumber", exam.testNumber) : exam.testNumber;
+                BulletinFactory.of(EveAdminExamDetailFragment.this)
+                        .createSimpleBulletin(R.raw.contact_check, "Assembled " + tNum + " (" + count + " Qs)").show();
+                notifyParentAndReload();
+            }
+
+            @Override
+            public void onError(String message, int httpStatus) {
+                if (destroyed) return;
+                BulletinFactory.of(EveAdminExamDetailFragment.this)
+                        .createErrorBulletin(message != null ? message : "Could not assemble test from Question Bank.").show();
+            }
+        };
+        repo.runWithAdminToken(cb, token -> repo.postSuccess(cb,
+                repo.assembleTestFromBank(token, exam.id, exam.questionCount, exam.testNumber)));
     }
 
     private void updatePublishMode(String mode) {

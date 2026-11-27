@@ -899,6 +899,18 @@ public final class EveAuthManager {
 
     private void clearCachedProfile() {
         cachedProfile = null;
+        try {
+            EveLocalDiskCache.getInstance().clearAll();
+        } catch (Throwable ignored) {
+        }
+        try {
+            org.telegram.ui.eve.exams.EveExamRepository.getInstance().clearCacheOnSignOut();
+        } catch (Throwable ignored) {
+        }
+        try {
+            org.telegram.ui.eve.admin.EveAdminRepository.getInstance().invalidateCache();
+        } catch (Throwable ignored) {
+        }
         Context appContext = ApplicationLoader.applicationContext;
         if (appContext != null) {
             appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)

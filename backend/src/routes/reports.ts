@@ -7,6 +7,7 @@ import { parseAndValidateQuestions } from "../ai/generator";
 import { getAdminPermissions } from "../auth";
 import { requireAdmin, requirePermission } from "../middleware/authMiddleware";
 import { checkRateLimit } from "../middleware/rateLimiter";
+import { alertFlaggedQuestion } from "../services/telegramAdminAlerts";
 import { AuthUser, Env, GeneratedTestRow, QuestionReportRow, AdminAuditLogRow, QuestionRow } from "../types";
 import { prepareAdminAuditLog, recordAdminAction, runBatch } from "../util/auditLog";
 import { parseGeneratedQuestionId } from "./attempts";
@@ -120,6 +121,15 @@ reportRoutes.post("/", async (c) => {
       reportType
     )
     .run();
+
+  alertFlaggedQuestion(c, {
+    reportId: id,
+    examName,
+    reason,
+    studentEmail,
+    questionText,
+    comment,
+  });
 
   return c.json({ success: true, data: { id } }, 201);
 });

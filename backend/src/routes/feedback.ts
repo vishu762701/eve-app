@@ -4,6 +4,7 @@
 
 import { Hono } from "hono";
 import { requirePermission } from "../middleware/authMiddleware";
+import { alertNewFeedback } from "../services/telegramAdminAlerts";
 import {
   AuthUser,
   Env,
@@ -47,6 +48,13 @@ feedbackRoutes.post("/messages", async (c) => {
     )
     .bind(id, message, user.uid, userName, userEmail, now, postId, postTitle)
     .run();
+
+  alertNewFeedback(c, {
+    feedbackId: id,
+    userName,
+    userEmail,
+    message,
+  });
 
   return c.json({ success: true, data: { id } }, 201);
 });

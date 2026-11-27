@@ -123,6 +123,12 @@ public class EveLeaderboardFragment extends BaseFragment {
         destroyed = false;
         setHasOwnBackground(true);
 
+        EveExamModels.LeaderboardBundle cached = EveExamRepository.getInstance().getCachedLeaderboard(examIdOrOverall);
+        if (cached != null) {
+            bundle = cached;
+            loading = false;
+        }
+
         EveAdminUiChrome.Chrome chrome = EveAdminUiChrome.setup(
                 this,
                 context,
@@ -178,16 +184,43 @@ public class EveLeaderboardFragment extends BaseFragment {
         }
         EveExamRepository.getInstance().loadLeaderboard(examIdOrOverall, (loaded, err) -> {
             if (destroyed) return;
+            boolean wasNull = bundle == null;
             loading = false;
             autoSync.markSynced();
             if (loaded != null) {
+                boolean changed = wasNull || !leaderboardEquals(bundle, loaded);
                 bundle = loaded;
                 errorMessage = "";
+                if (changed) {
+                    updateList();
+                }
             } else {
                 errorMessage = err != null ? err : "Unable to load leaderboard.";
+                if (wasNull) {
+                    updateList();
+                }
             }
-            updateList();
         });
+    }
+
+    private static boolean leaderboardEquals(EveExamModels.LeaderboardBundle a, EveExamModels.LeaderboardBundle b) {
+        if (a == b) return true;
+        if (a == null || b == null) return false;
+        if (a.entries.size() != b.entries.size()) return false;
+        for (int i = 0; i < a.entries.size(); i++) {
+            EveExamModels.LeaderboardEntry ea = a.entries.get(i);
+            EveExamModels.LeaderboardEntry eb = b.entries.get(i);
+            if (!TextUtils.equals(ea.userId, eb.userId)
+                    || Double.compare(ea.score, eb.score) != 0
+                    || ea.timeTakenSeconds != eb.timeTakenSeconds) {
+                return false;
+            }
+        }
+        if (a.stats == null && b.stats == null) return true;
+        if (a.stats == null || b.stats == null) return false;
+        return a.stats.participants == b.stats.participants
+                && Objects.equals(a.stats.myRank, b.stats.myRank)
+                && Objects.equals(a.stats.myScore, b.stats.myScore);
     }
 
     private void updateList() {

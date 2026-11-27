@@ -3,7 +3,12 @@ import { deletionInfo, deleteUnused } from '../services/deletion';
 // AI Generated Tests Management Routes
 // ============================================================================
 
-import { runGeneration, GenerationBusyError } from "../services/generation";
+import {
+  assembleTestFromBank,
+  GenerationBusyError,
+  InsufficientBankQuestionsError,
+  runGeneration,
+} from "../services/generation";
 import { parseAndValidateQuestions } from "../ai/generator";
 import { hideAnswers } from "../util/clientProtocol";
 import { getAdminPermissions } from "../auth";
@@ -13,6 +18,7 @@ import { requireAdmin, requirePermission } from "../middleware/authMiddleware";
 import { AuthUser, Env, ExamRow, GeneratedTestRow } from "../types";
 import { prepareAdminAuditLog } from "../util/auditLog";
 import { AssetStorage } from "../storage";
+import { matchStudentEdgeCache, purgeEdgeCache, storeStudentEdgeCache } from "../util/edgeCache";
 import {
   buildAvatarProxyUrl,
   detectAvatarImage,
@@ -31,6 +37,11 @@ generatedTestRoutes.get("/", async (c) => {
   const db = c.env.DB;
   // Admin membership alone must not disclose drafts or answer keys.
   const canManage = user.isAdmin && (await getAdminPermissions(db, user.email))?.rights.includes("manage_generated_tests") === true;
+
+  if (!canManage) {
+    const cached = await matchStudentEdgeCache(c);
+    if (cached) return cached;
+  }
 
   let query = "SELECT * FROM generated_tests";
   const params: any[] = [];
@@ -86,6 +97,9 @@ generatedTestRoutes.get("/", async (c) => {
     };
   });
 
+  if (!canManage) {
+    return await storeStudentEdgeCache(c, c.json({ success: true, serverNow, data: list }));
+  }
   return c.json({ success: true, serverNow, data: list });
 });
 
@@ -333,6 +347,7 @@ generatedTestRoutes.put("/:id/schedule", requirePermission("manage_generated_tes
   if (results[0]?.meta?.changes !== 1 || results[1]?.meta?.changes !== 1) {
     return c.json({ success: false, error: "Schedule update was not confirmed; reload before retrying" }, 409);
   }
+  await purgeEdgeCache(c, ["/api/generated-tests", "/api/exams"]);
   return c.json({ success: true, data: { id, availableFrom } });
 });
 
@@ -372,6 +387,7 @@ generatedTestRoutes.put("/:id/status", requirePermission("manage_generated_tests
   if (results[0]?.meta?.changes !== 1 || results[1]?.meta?.changes !== 1) {
     return c.json({ success: false, error: "Status update was not confirmed; reload before retrying" }, 409);
   }
+  await purgeEdgeCache(c, ["/api/generated-tests", "/api/exams"]);
   // Keep the existing data-less status response compatible with ApiResponse<Unit>.
   return c.json({ success: true });
 });
@@ -396,7 +412,62 @@ generatedTestRoutes.delete("/:id", requirePermission("manage_generated_tests"), 
     return c.json({ success: false, error: current.message || 'Record changed. Refresh before retrying.', code: current.code || 'DELETE_RECORD_CHANGED', dependencies: current, requestId: c.res.headers.get('X-Request-ID') }, 409);
   }
 
+  await purgeEdgeCache(c, ["/api/generated-tests", "/api/exams"]);
   return c.json({ success: true });
+});
+
+// POST /api/generated-tests/assemble-from-bank - Zero-cost Question Bank Auto-Assembler (Admin)
+generatedTestRoutes.post("/assemble-from-bank", requirePermission("manage_generated_tests"), async (c) => {
+  const user = c.get("user");
+  const body = await c.req.json().catch(() => ({}));
+  const examId = String(body.examId || "").trim();
+  const db = c.env.DB;
+
+  if (!examId) {
+    return c.json({ success: false, error: "examId is required" }, 400);
+  }
+
+  const exam = await db.prepare("SELECT * FROM exams WHERE id = ?").bind(examId).first<ExamRow>();
+  if (!exam) {
+    return c.json({ success: false, error: "Exam not found" }, 404);
+  }
+
+  const targetCount = Number(body.questionCount ?? exam.question_count ?? 20);
+  if (!Number.isInteger(targetCount) || targetCount < 1 || targetCount > 200) {
+    return c.json({ success: false, error: "questionCount must be an integer between 1 and 200" }, 400);
+  }
+
+  const requestedStatusRaw = typeof body.status === "string" ? body.status.trim().toLowerCase() : "";
+  const forceStatus =
+    requestedStatusRaw === "draft" || requestedStatusRaw === "paused" || requestedStatusRaw === "live"
+      ? (requestedStatusRaw as "draft" | "paused" | "live")
+      : undefined;
+
+  try {
+    const data = await assembleTestFromBank(db, exam, targetCount, {
+      testNumber: body.testNumber ? String(body.testNumber).trim() : undefined,
+      title: body.title ? String(body.title).trim() : undefined,
+      forceStatus,
+      auditActor: user,
+      source: "admin_api",
+    });
+    await purgeEdgeCache(c, ["/api/generated-tests", "/api/exams"]);
+    return c.json({ success: true, data });
+  } catch (err: any) {
+    if (err instanceof InsufficientBankQuestionsError) {
+      return c.json(
+        {
+          success: false,
+          error: err.message,
+          code: "INSUFFICIENT_BANK_QUESTIONS",
+          availableCount: err.availableCount,
+          requestedCount: err.requestedCount,
+        },
+        400
+      );
+    }
+    return c.json({ success: false, error: err?.message || "Failed to assemble test from bank" }, 500);
+  }
 });
 
 // POST /api/generated-tests/generate-now - On-demand AI test generation (Admin)
@@ -443,6 +514,7 @@ generatedTestRoutes.post("/generate-now", requirePermission("manage_generated_te
     // Generation and its admin audit commit together before acknowledgment.
     const data = await runGeneration(c.env, effectiveExam, targetCount, testNumber, customPrompt,
       "manual", body.requestId ? String(body.requestId).slice(0, 100) : undefined, user);
+    await purgeEdgeCache(c, ["/api/generated-tests", "/api/exams"]);
     return c.json({ success: true, data });
   } catch (err: any) {
     if (err instanceof GenerationBusyError) return c.json({ success: false, error: err.message, code: "GENERATION_BUSY" }, 409);

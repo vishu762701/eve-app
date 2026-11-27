@@ -15,6 +15,7 @@ import org.json.JSONObject;
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.ui.eve.auth.EveAuthManager;
 import org.telegram.ui.eve.auth.EveBackendClient;
+import org.telegram.ui.eve.auth.EveLocalDiskCache;
 import org.telegram.ui.eve.auth.EveUserProfile;
 
 import java.io.UnsupportedEncodingException;
@@ -61,9 +62,7 @@ public final class EveAdminRepository {
         if (key == null || raw == null) return;
         swrMemory.put(key, raw);
         try {
-            Context ctx = ApplicationLoader.applicationContext;
-            if (ctx == null) return;
-            ctx.getSharedPreferences(PREFS_ADMIN_SWR, Context.MODE_PRIVATE).edit().putString(key, raw).apply();
+            EveLocalDiskCache.getInstance().put("admin_" + key, raw);
         } catch (Throwable ignored) {
         }
     }
@@ -73,16 +72,93 @@ public final class EveAdminRepository {
         String mem = swrMemory.get(key);
         if (mem != null && !mem.isEmpty()) return mem;
         try {
-            Context ctx = ApplicationLoader.applicationContext;
-            if (ctx == null) return "";
-            String disk = ctx.getSharedPreferences(PREFS_ADMIN_SWR, Context.MODE_PRIVATE).getString(key, "");
+            String disk = EveLocalDiskCache.getInstance().get("admin_" + key);
             if (disk != null && !disk.isEmpty()) {
                 swrMemory.put(key, disk);
                 return disk;
             }
+            Context ctx = ApplicationLoader.applicationContext;
+            if (ctx == null) return "";
+            String legacy = ctx.getSharedPreferences(PREFS_ADMIN_SWR, Context.MODE_PRIVATE).getString(key, "");
+            if (legacy != null && !legacy.isEmpty()) {
+                swrMemory.put(key, legacy);
+                EveLocalDiskCache.getInstance().put("admin_" + key, legacy);
+                return legacy;
+            }
         } catch (Throwable ignored) {
         }
         return "";
+    }
+
+    private void invalidateSwrKey(String key) {
+        if (key == null) return;
+        swrMemory.remove(key);
+        try {
+            EveLocalDiskCache.getInstance().invalidate("admin_" + key);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private void invalidateSwrPrefix(String prefix) {
+        if (prefix == null) return;
+        for (String k : swrMemory.keySet()) {
+            if (k.startsWith(prefix)) {
+                swrMemory.remove(k);
+            }
+        }
+        try {
+            EveLocalDiskCache.getInstance().invalidatePrefix("admin_" + prefix);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private void invalidateExamAndTestCaches(String examId) {
+        cachedSnapshot = null;
+        cachedSnapshotAtMs = 0L;
+        invalidateSwrKey("catalog_exams");
+        invalidateSwrKey("catalog_tests");
+        invalidateSwrKey("exam_analytics");
+        invalidateSwrKey("audit_log");
+        if (examId != null && !examId.trim().isEmpty()) {
+            invalidateSwrKey("tests_" + examId.trim());
+            EveLocalDiskCache.getInstance().invalidate("student_exam_tests_" + examId.trim());
+        } else {
+            invalidateSwrPrefix("tests_");
+            EveLocalDiskCache.getInstance().invalidatePrefix("student_exam_tests_");
+        }
+        EveLocalDiskCache.getInstance().invalidate("student_catalog_v1");
+        EveLocalDiskCache.getInstance().invalidatePrefix("admin_dashboard_");
+    }
+
+    private void invalidateStudentDirectoryCaches() {
+        cachedSnapshot = null;
+        cachedSnapshotAtMs = 0L;
+        invalidateSwrKey("students_all_p1");
+        invalidateSwrKey("audit_log");
+        EveLocalDiskCache.getInstance().invalidatePrefix("admin_dashboard_");
+    }
+
+    private void invalidateContentCaches() {
+        cachedSnapshot = null;
+        cachedSnapshotAtMs = 0L;
+        invalidateSwrKey("banners");
+        invalidateSwrKey("polls");
+        invalidateSwrKey("broadcasts");
+        invalidateSwrPrefix("reports_");
+        invalidateSwrKey("audit_log");
+        EveLocalDiskCache.getInstance().invalidate("student_banners_home");
+        EveLocalDiskCache.getInstance().invalidate("student_polls_active");
+        EveLocalDiskCache.getInstance().invalidate("student_broadcasts_all");
+        EveLocalDiskCache.getInstance().invalidatePrefix("admin_dashboard_");
+    }
+
+    private void invalidateConfigCaches() {
+        cachedSnapshot = null;
+        cachedSnapshotAtMs = 0L;
+        invalidateSwrKey("app_config");
+        invalidateSwrKey("audit_log");
+        EveLocalDiskCache.getInstance().invalidate("student_app_config");
+        EveLocalDiskCache.getInstance().invalidatePrefix("admin_dashboard_");
     }
 
     public static EveAdminRepository getInstance() {
@@ -124,7 +200,12 @@ public final class EveAdminRepository {
     public void invalidateCache() {
         cachedSnapshot = null;
         cachedSnapshotAtMs = 0L;
+        swrMemory.clear();
         clearPersistedSnapshot();
+        try {
+            EveLocalDiskCache.getInstance().invalidatePrefix("admin_");
+        } catch (Throwable ignored) {
+        }
     }
 
     public void cancelDashboardCallback(ResultCallback<EveAdminModels.DashboardSnapshot> callback) {
@@ -569,27 +650,43 @@ public final class EveAdminRepository {
         if (snapshot == null || snapshot.adminProfile == null) {
             return;
         }
-        SharedPreferences prefs = getCachePrefs();
-        if (prefs == null) {
-            return;
-        }
         String email = snapshot.adminProfile.email != null ? snapshot.adminProfile.email.trim().toLowerCase(Locale.US) : "";
         if (email.isEmpty()) {
             return;
         }
-        prefs.edit().putString(KEY_SNAPSHOT_PREFIX + email, snapshot.toCacheJson().toString()).apply();
+        String serialized = snapshot.toCacheJson().toString();
+        try {
+            EveLocalDiskCache.getInstance().put("admin_dashboard_" + email, serialized);
+        } catch (Throwable ignored) {
+        }
+        SharedPreferences prefs = getCachePrefs();
+        if (prefs != null) {
+            prefs.edit().putString(KEY_SNAPSHOT_PREFIX + email, serialized).apply();
+        }
     }
 
     private static EveAdminModels.DashboardSnapshot readPersistedSnapshot() {
-        SharedPreferences prefs = getCachePrefs();
-        if (prefs == null) {
-            return null;
-        }
         String email = resolveCurrentEmailScope();
         if (email.isEmpty()) {
             return null;
         }
-        String raw = prefs.getString(KEY_SNAPSHOT_PREFIX + email, null);
+        String raw = "";
+        try {
+            raw = EveLocalDiskCache.getInstance().get("admin_dashboard_" + email);
+        } catch (Throwable ignored) {
+        }
+        if (raw == null || raw.isEmpty()) {
+            SharedPreferences prefs = getCachePrefs();
+            if (prefs != null) {
+                raw = prefs.getString(KEY_SNAPSHOT_PREFIX + email, null);
+                if (raw != null && !raw.isEmpty()) {
+                    try {
+                        EveLocalDiskCache.getInstance().put("admin_dashboard_" + email, raw);
+                    } catch (Throwable ignored) {
+                    }
+                }
+            }
+        }
         if (raw == null || raw.isEmpty()) {
             return null;
         }
@@ -607,6 +704,10 @@ public final class EveAdminRepository {
     }
 
     private static void clearPersistedSnapshot() {
+        try {
+            EveLocalDiskCache.getInstance().invalidatePrefix("admin_dashboard_");
+        } catch (Throwable ignored) {
+        }
         SharedPreferences prefs = getCachePrefs();
         if (prefs == null) {
             return;
@@ -658,6 +759,7 @@ public final class EveAdminRepository {
         } catch (JSONException ignored) {
         }
         JSONObject root = client.postJsonRoot("/api/exams", token, payload);
+        invalidateExamAndTestCaches(null);
         JSONObject data = root != null ? root.optJSONObject("data") : null;
         return data != null ? data.optString("id", "") : "";
     }
@@ -685,6 +787,7 @@ public final class EveAdminRepository {
         } catch (JSONException ignored) {
         }
         JSONObject root = client.postJsonRoot("/api/exams", token, payload);
+        invalidateExamAndTestCaches(null);
         JSONObject data = root.optJSONObject("data");
         return data != null ? data.optString("id", "") : "";
     }
@@ -709,6 +812,7 @@ public final class EveAdminRepository {
         } catch (JSONException ignored) {
         }
         client.putJsonRoot("/api/exams/" + encode(examId), token, payload);
+        invalidateExamAndTestCaches(examId);
     }
 
     public JSONObject generateTestNow(
@@ -745,7 +849,30 @@ public final class EveAdminRepository {
             }
         } catch (JSONException ignored) {
         }
-        return client.postJsonRoot("/api/generated-tests/generate-now", token, payload);
+        JSONObject res = client.postJsonRoot("/api/generated-tests/generate-now", token, payload);
+        invalidateExamAndTestCaches(examId);
+        return res;
+    }
+
+    public JSONObject assembleTestFromBank(
+            String token,
+            String examId,
+            int questionCount,
+            String testNumber) throws EveBackendClient.BackendException {
+        JSONObject payload = new JSONObject();
+        try {
+            payload.put("examId", examId);
+            if (questionCount > 0) {
+                payload.put("questionCount", questionCount);
+            }
+            if (testNumber != null && !testNumber.trim().isEmpty()) {
+                payload.put("testNumber", testNumber.trim());
+            }
+        } catch (JSONException ignored) {
+        }
+        JSONObject res = client.postJsonRoot("/api/generated-tests/assemble-from-bank", token, payload);
+        invalidateExamAndTestCaches(examId);
+        return res;
     }
 
     public void saveExamAiSettings(
@@ -768,6 +895,7 @@ public final class EveAdminRepository {
         } catch (JSONException ignored) {
         }
         client.putJsonRoot("/api/exams/" + encode(examId), token, payload);
+        invalidateExamAndTestCaches(examId);
     }
 
     public JSONObject uploadGeneratedTestAvatarImage(String token, String testId, byte[] imageBytes, String mimeType) throws EveBackendClient.BackendException {
@@ -776,11 +904,13 @@ public final class EveAdminRepository {
         }
         String effectiveMime = mimeType != null && !mimeType.trim().isEmpty() ? mimeType.trim() : "image/jpeg";
         JSONObject root = client.postBinaryRoot("/api/generated-tests/" + encode(testId) + "/avatar", token, effectiveMime, imageBytes);
+        invalidateExamAndTestCaches(null);
         return root != null ? root.optJSONObject("data") : null;
     }
 
     public JSONObject deleteGeneratedTestAvatar(String token, String testId) throws EveBackendClient.BackendException {
         JSONObject root = client.deleteJsonRoot("/api/generated-tests/" + encode(testId) + "/avatar", token);
+        invalidateExamAndTestCaches(null);
         return root != null ? root.optJSONObject("data") : null;
     }
 
@@ -791,10 +921,12 @@ public final class EveAdminRepository {
         } catch (JSONException ignored) {
         }
         client.putJsonRoot("/api/generated-tests/" + encode(testId) + "/status", token, payload);
+        invalidateExamAndTestCaches(null);
     }
 
     public void deleteGeneratedTest(String token, String testId) throws EveBackendClient.BackendException {
         client.deleteJsonRoot("/api/generated-tests/" + encode(testId), token);
+        invalidateExamAndTestCaches(null);
     }
 
     public List<EveAdminModels.AdminQuestionItem> fetchQuestions(String token, String examId) throws EveBackendClient.BackendException {
@@ -815,12 +947,14 @@ public final class EveAdminRepository {
             String topic) throws EveBackendClient.BackendException {
         JSONObject payload = buildQuestionPayload(examId, questionText, optionA, optionB, optionC, optionD, correctAnswer, explanation, topic);
         JSONObject root = client.postJsonRoot("/api/questions", token, payload);
+        invalidateExamAndTestCaches(examId);
         JSONObject data = root.optJSONObject("data");
         return data != null ? data.optString("id", "") : "";
     }
 
     public void unpublishExamTests(String token, String examId) throws EveBackendClient.BackendException {
         client.postJsonRoot("/api/exams/" + encode(examId) + "/unpublish-tests", token, new JSONObject());
+        invalidateExamAndTestCaches(examId);
     }
 
     public void scheduleGeneratedTest(String token, String testId, long availableFromMs) throws EveBackendClient.BackendException {
@@ -830,6 +964,7 @@ public final class EveAdminRepository {
         } catch (JSONException ignored) {
         }
         client.putJsonRoot("/api/generated-tests/" + encode(testId) + "/schedule", token, payload);
+        invalidateExamAndTestCaches(null);
     }
 
     public List<EveAdminModels.AdminQuestionItem> fetchGeneratedTestQuestions(String token, String testId) throws EveBackendClient.BackendException {
@@ -845,6 +980,7 @@ public final class EveAdminRepository {
         } catch (JSONException ignored) {
         }
         JSONObject root = client.postJsonRoot("/api/questions/batch", token, payload);
+        invalidateExamAndTestCaches(null);
         return root.optInt("count", questionsArray != null ? questionsArray.length() : 0);
     }
 
@@ -862,10 +998,12 @@ public final class EveAdminRepository {
             String topic) throws EveBackendClient.BackendException {
         JSONObject payload = buildQuestionPayload(examId, questionText, optionA, optionB, optionC, optionD, correctAnswer, explanation, topic);
         client.putJsonRoot("/api/questions/" + encode(questionId), token, payload);
+        invalidateExamAndTestCaches(examId);
     }
 
     public void deleteQuestion(String token, String questionId) throws EveBackendClient.BackendException {
         client.deleteJsonRoot("/api/questions/" + encode(questionId), token);
+        invalidateExamAndTestCaches(null);
     }
 
     public static final class StudentsPageResult {
@@ -947,6 +1085,7 @@ public final class EveAdminRepository {
         } catch (JSONException ignored) {
         }
         client.postJsonRoot("/api/admin/users/" + encode(userId) + "/status", token, payload);
+        invalidateStudentDirectoryCaches();
     }
 
     public List<EveAdminModels.StudentAttemptItem> fetchStudentAttempts(String token, String userId) throws EveBackendClient.BackendException {
@@ -968,6 +1107,7 @@ public final class EveAdminRepository {
         } catch (JSONException ignored) {
         }
         client.postJsonRoot("/api/admin/premium/users/grant", token, payload);
+        invalidateStudentDirectoryCaches();
     }
 
     public void extendPremium(String token, String userId, int additionalDays) throws EveBackendClient.BackendException {
@@ -978,6 +1118,7 @@ public final class EveAdminRepository {
         } catch (JSONException ignored) {
         }
         client.postJsonRoot("/api/admin/premium/users/extend", token, payload);
+        invalidateStudentDirectoryCaches();
     }
 
     public void revokePremium(String token, String userId) throws EveBackendClient.BackendException {
@@ -987,6 +1128,7 @@ public final class EveAdminRepository {
         } catch (JSONException ignored) {
         }
         client.postJsonRoot("/api/admin/premium/users/revoke", token, payload);
+        invalidateStudentDirectoryCaches();
     }
 
     public EveAdminModels.PremiumConfigModel fetchPremiumConfig(String token) throws EveBackendClient.BackendException {
@@ -1051,9 +1193,21 @@ public final class EveAdminRepository {
         client.deleteJsonRoot("/api/admin/admins/" + encode(email.trim().toLowerCase(Locale.US)), token);
     }
 
+    public List<EveAdminModels.AuditLogEntry> getCachedAuditLogs() {
+        String raw = getSwrJson("audit_log");
+        if (raw.isEmpty()) return Collections.emptyList();
+        try {
+            return EveAdminModels.AuditLogEntry.parseList(new JSONArray(raw));
+        } catch (Throwable ignored) {
+            return Collections.emptyList();
+        }
+    }
+
     public List<EveAdminModels.AuditLogEntry> fetchAuditLogs(String token, int limit) throws EveBackendClient.BackendException {
         JSONObject root = client.getJsonRoot("/api/admin/audit-log?limit=" + Math.max(1, Math.min(limit, 100)), token);
-        return EveAdminModels.AuditLogEntry.parseList(root.optJSONArray("data"));
+        JSONArray arr = root.optJSONArray("data");
+        if (arr != null) putSwrJson("audit_log", arr.toString());
+        return EveAdminModels.AuditLogEntry.parseList(arr);
     }
 
     public int deleteAuditLogs(String token, String category) throws EveBackendClient.BackendException {
@@ -1062,6 +1216,7 @@ public final class EveAdminRepository {
             path += "?category=" + encode(category.trim().toLowerCase(Locale.US));
         }
         JSONObject root = client.deleteJsonRoot(path, token);
+        invalidateSwrKey("audit_log");
         return root != null ? root.optInt("deletedCount", 0) : 0;
     }
 
@@ -1113,6 +1268,7 @@ public final class EveAdminRepository {
 
     public void deleteExam(String token, String examId) throws EveBackendClient.BackendException {
         client.deleteJsonRoot("/api/exams/" + encode(examId), token);
+        invalidateExamAndTestCaches(examId);
     }
 
     public JSONObject uploadExamAvatarImage(String token, String examId, byte[] imageBytes, String mimeType) throws EveBackendClient.BackendException {
@@ -1121,6 +1277,7 @@ public final class EveAdminRepository {
         }
         String effectiveMime = mimeType != null && !mimeType.trim().isEmpty() ? mimeType.trim() : "image/jpeg";
         JSONObject root = client.postBinaryRoot("/api/exams/" + encode(examId) + "/avatar", token, effectiveMime, imageBytes);
+        invalidateExamAndTestCaches(examId);
         return root != null ? root.optJSONObject("data") : null;
     }
 
@@ -1136,11 +1293,13 @@ public final class EveAdminRepository {
         } catch (JSONException ignored) {
         }
         JSONObject root = client.postJsonRoot("/api/exams/" + encode(examId) + "/avatar", token, payload);
+        invalidateExamAndTestCaches(examId);
         return root != null ? root.optJSONObject("data") : null;
     }
 
     public JSONObject deleteExamAvatar(String token, String examId) throws EveBackendClient.BackendException {
         JSONObject root = client.deleteJsonRoot("/api/exams/" + encode(examId) + "/avatar", token);
+        invalidateExamAndTestCaches(examId);
         return root != null ? root.optJSONObject("data") : null;
     }
 
@@ -1155,11 +1314,13 @@ public final class EveAdminRepository {
         } catch (JSONException ignored) {
         }
         JSONObject root = client.postJsonRoot("/api/exams/" + encode(examId) + "/syllabus", token, payload);
+        invalidateExamAndTestCaches(examId);
         return root != null ? root.optJSONObject("data") : null;
     }
 
     public void removeSyllabus(String token, String examId) throws EveBackendClient.BackendException {
         client.deleteJsonRoot("/api/exams/" + encode(examId) + "/syllabus", token);
+        invalidateExamAndTestCaches(examId);
     }
 
     public void reassignSyllabus(String token, String sourceExamId, String targetExamId) throws EveBackendClient.BackendException {
@@ -1169,6 +1330,7 @@ public final class EveAdminRepository {
         } catch (JSONException ignored) {
         }
         client.postJsonRoot("/api/exams/" + encode(sourceExamId) + "/syllabus/reassign", token, payload);
+        invalidateExamAndTestCaches(null);
     }
 
     public List<EveAdminModels.PremiumUserItem> fetchPremiumUsers(String token) throws EveBackendClient.BackendException {
@@ -1219,6 +1381,7 @@ public final class EveAdminRepository {
         if (!id.isEmpty() && (!cleanLink.isEmpty() || !cleanLabel.isEmpty())) {
             updateBannerLink(token, id, cleanLink, cleanLabel);
         }
+        invalidateContentCaches();
         if (data == null) {
             return null;
         }
@@ -1241,6 +1404,7 @@ public final class EveAdminRepository {
         } catch (JSONException ignored) {
         }
         client.putJsonRoot("/api/banners/" + encode(bannerId) + "/status", token, payload);
+        invalidateContentCaches();
     }
 
     public void updateBannerLink(String token, String bannerId, String linkUrl, String linkLabel) throws EveBackendClient.BackendException {
@@ -1251,6 +1415,7 @@ public final class EveAdminRepository {
         } catch (JSONException ignored) {
         }
         client.putJsonRoot("/api/banners/" + encode(bannerId) + "/link", token, payload);
+        invalidateContentCaches();
     }
 
     public void reorderBanner(String token, String bannerId, boolean moveUp) throws EveBackendClient.BackendException {
@@ -1260,10 +1425,12 @@ public final class EveAdminRepository {
         } catch (JSONException ignored) {
         }
         client.putJsonRoot("/api/banners/" + encode(bannerId) + "/reorder", token, payload);
+        invalidateContentCaches();
     }
 
     public void deleteBanner(String token, String bannerId) throws EveBackendClient.BackendException {
         client.deleteJsonRoot("/api/banners/" + encode(bannerId), token);
+        invalidateContentCaches();
     }
 
     public JSONObject fetchFloatingLink(String token) throws EveBackendClient.BackendException {
@@ -1317,6 +1484,7 @@ public final class EveAdminRepository {
         } catch (JSONException ignored) {
         }
         client.postJsonRoot("/api/polls", token, payload);
+        invalidateContentCaches();
     }
 
     public void setPollActive(String token, String pollId, boolean active) throws EveBackendClient.BackendException {
@@ -1326,10 +1494,12 @@ public final class EveAdminRepository {
         } catch (JSONException ignored) {
         }
         client.putJsonRoot("/api/polls/" + encode(pollId) + "/status", token, payload);
+        invalidateContentCaches();
     }
 
     public void deletePoll(String token, String pollId) throws EveBackendClient.BackendException {
         client.deleteJsonRoot("/api/polls/" + encode(pollId), token);
+        invalidateContentCaches();
     }
 
     public List<EveAdminModels.BroadcastItem> getCachedBroadcasts() {
@@ -1357,10 +1527,12 @@ public final class EveAdminRepository {
         } catch (JSONException ignored) {
         }
         client.postJsonRoot("/api/broadcasts", token, payload);
+        invalidateContentCaches();
     }
 
     public void deleteBroadcast(String token, String id) throws EveBackendClient.BackendException {
         client.deleteJsonRoot("/api/broadcasts/" + encode(id), token);
+        invalidateContentCaches();
     }
 
     public List<EveAdminModels.QuestionReportItem> getCachedReports(String type) {
@@ -1404,18 +1576,24 @@ public final class EveAdminRepository {
             String topic) throws EveBackendClient.BackendException {
         JSONObject payload = buildQuestionPayload("", questionText, optionA, optionB, optionC, optionD, correctAnswer, explanation, topic);
         client.putJsonRoot("/api/admin/reports/" + encode(reportId) + "/fix-question", token, payload);
+        invalidateContentCaches();
+        invalidateExamAndTestCaches(null);
     }
 
     public void deleteFlaggedQuestion(String token, String reportId) throws EveBackendClient.BackendException {
         client.deleteJsonRoot("/api/admin/reports/" + encode(reportId) + "/question", token);
+        invalidateContentCaches();
+        invalidateExamAndTestCaches(null);
     }
 
     public void dismissReport(String token, String id) throws EveBackendClient.BackendException {
         client.putJsonRoot("/api/admin/reports/" + encode(id) + "/dismiss", token, new JSONObject());
+        invalidateContentCaches();
     }
 
     public void deleteReport(String token, String id) throws EveBackendClient.BackendException {
         client.deleteJsonRoot("/api/admin/reports/" + encode(id), token);
+        invalidateContentCaches();
     }
 
     public EveAdminModels.AppConfigModel updateAnnouncementChannelName(String token, String channelName) throws EveBackendClient.BackendException {
@@ -1426,6 +1604,7 @@ public final class EveAdminRepository {
         }
         JSONObject root = client.putJsonRoot("/api/admin/announcement-channel", token, payload);
         JSONObject data = root != null ? root.optJSONObject("data") : null;
+        invalidateConfigCaches();
         if (data != null) putSwrJson("app_config", data.toString());
         return EveAdminModels.AppConfigModel.fromJson(data);
     }
@@ -1437,6 +1616,7 @@ public final class EveAdminRepository {
         String effectiveMime = mimeType != null && !mimeType.trim().isEmpty() ? mimeType.trim() : "image/jpeg";
         JSONObject root = client.postBinaryRoot("/api/admin/announcement-channel/avatar", token, effectiveMime, imageBytes);
         JSONObject data = root != null ? root.optJSONObject("data") : null;
+        invalidateConfigCaches();
         if (data != null) putSwrJson("app_config", data.toString());
         return EveAdminModels.AppConfigModel.fromJson(data);
     }
@@ -1444,6 +1624,7 @@ public final class EveAdminRepository {
     public EveAdminModels.AppConfigModel deleteAnnouncementChannelAvatar(String token) throws EveBackendClient.BackendException {
         JSONObject root = client.deleteJsonRoot("/api/admin/announcement-channel/avatar", token);
         JSONObject data = root != null ? root.optJSONObject("data") : null;
+        invalidateConfigCaches();
         if (data != null) putSwrJson("app_config", data.toString());
         return EveAdminModels.AppConfigModel.fromJson(data);
     }
@@ -1537,6 +1718,28 @@ public final class EveAdminRepository {
             String defaultPublishMode,
             String officialTelegramChannelUsername,
             String officialTelegramSupportUsername) throws EveBackendClient.BackendException {
+        return updateAppConfig(
+                token,
+                minVersionCode,
+                maintenanceMode,
+                maintenanceMessage,
+                defaultPublishMode,
+                officialTelegramChannelUsername,
+                officialTelegramSupportUsername,
+                null,
+                null);
+    }
+
+    public EveAdminModels.AppConfigModel updateAppConfig(
+            String token,
+            int minVersionCode,
+            boolean maintenanceMode,
+            String maintenanceMessage,
+            String defaultPublishMode,
+            String officialTelegramChannelUsername,
+            String officialTelegramSupportUsername,
+            String aiProvider,
+            String aiModel) throws EveBackendClient.BackendException {
         JSONObject payload = new JSONObject();
         try {
             payload.put("minimum_supported_version_code", Math.max(1, minVersionCode));
@@ -1549,11 +1752,18 @@ public final class EveAdminRepository {
             if (officialTelegramSupportUsername != null) {
                 payload.put("officialTelegramSupportUsername", officialTelegramSupportUsername.trim());
             }
+            if (aiProvider != null) {
+                payload.put("aiProvider", aiProvider.trim());
+            }
+            if (aiModel != null) {
+                payload.put("aiModel", aiModel.trim());
+            }
         } catch (JSONException ignored) {
         }
         JSONObject root = client.putJsonRoot("/api/admin/config", token, payload);
         JSONObject data = root.optJSONObject("data");
         if (data != null) putSwrJson("app_config", data.toString());
+        invalidateConfigCaches();
         return EveAdminModels.AppConfigModel.fromJson(data);
     }
 

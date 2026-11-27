@@ -5,6 +5,7 @@
 
 import { Hono } from "hono";
 import { checkRateLimit } from "../middleware/rateLimiter";
+import { alertNewCrashSignature } from "../services/telegramAdminAlerts";
 import { AuthUser, Env } from "../types";
 
 export const crashIngestRoutes = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
@@ -86,6 +87,12 @@ crashIngestRoutes.post("/", async (c) => {
   const now = Date.now();
   const suggestedCause = classifyCause(rawClass, rawTopFrame);
 
+  const prevSig = await c.env.DB.prepare("SELECT status FROM crash_signatures WHERE signature = ?")
+    .bind(signature)
+    .first<{ status?: string }>()
+    .catch(() => null);
+  const isNewOrReopened = !prevSig || String(prevSig.status || "").toLowerCase() !== "open";
+
   // 6. Persist signature and incident in D1 (reopen if a previously resolved crash recurs)
   await c.env.DB.prepare(`
     INSERT INTO crash_signatures (signature, exception_class, top_frame, sanitized_message, first_seen, last_seen, occurrence_count, status, suggested_cause)
@@ -103,6 +110,17 @@ crashIngestRoutes.post("/", async (c) => {
     INSERT INTO crash_incidents (id, signature, app_version_name, app_version_code, android_sdk, device_model, anr_or_exit_reason, sanitized_frames_json, install_id_hash, timestamp, is_synthetic)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(incidentId, signature, appVersionName, appVersionCode, androidSdk, deviceModel, anrOrExitReason, rawFrames, installIdHash, now, isSynthetic).run();
+
+  if (isNewOrReopened) {
+    alertNewCrashSignature(c, {
+      signature,
+      exceptionClass: rawClass,
+      topFrame: rawTopFrame,
+      appVersionName,
+      deviceModel,
+      reopened: Boolean(prevSig),
+    });
+  }
 
   return c.json({ success: true, signature, incidentId, suggestedCause });
 });

@@ -1687,9 +1687,11 @@ public final class EveAdminModels {
         public final String announcementChannelAvatarUrl;
         public final String officialTelegramChannelUsername;
         public final String officialTelegramSupportUsername;
+        public final String aiProvider;
+        public final String aiModel;
 
         public AppConfigModel(int minSupportedVersionCode, boolean maintenanceMode, String maintenanceMessage, String defaultPublishMode) {
-            this(minSupportedVersionCode, maintenanceMode, maintenanceMessage, defaultPublishMode, "Announcements", "", "", "");
+            this(minSupportedVersionCode, maintenanceMode, maintenanceMessage, defaultPublishMode, "Announcements", "", "", "", "auto", "");
         }
 
         public AppConfigModel(
@@ -1700,7 +1702,7 @@ public final class EveAdminModels {
                 String announcementChannelName,
                 String announcementChannelAvatarUrl) {
             this(minSupportedVersionCode, maintenanceMode, maintenanceMessage, defaultPublishMode,
-                    announcementChannelName, announcementChannelAvatarUrl, "", "");
+                    announcementChannelName, announcementChannelAvatarUrl, "", "", "auto", "");
         }
 
         public AppConfigModel(
@@ -1712,6 +1714,22 @@ public final class EveAdminModels {
                 String announcementChannelAvatarUrl,
                 String officialTelegramChannelUsername,
                 String officialTelegramSupportUsername) {
+            this(minSupportedVersionCode, maintenanceMode, maintenanceMessage, defaultPublishMode,
+                    announcementChannelName, announcementChannelAvatarUrl,
+                    officialTelegramChannelUsername, officialTelegramSupportUsername, "auto", "");
+        }
+
+        public AppConfigModel(
+                int minSupportedVersionCode,
+                boolean maintenanceMode,
+                String maintenanceMessage,
+                String defaultPublishMode,
+                String announcementChannelName,
+                String announcementChannelAvatarUrl,
+                String officialTelegramChannelUsername,
+                String officialTelegramSupportUsername,
+                String aiProvider,
+                String aiModel) {
             this.minSupportedVersionCode = Math.max(1, minSupportedVersionCode);
             this.maintenanceMode = maintenanceMode;
             this.maintenanceMessage = maintenanceMessage != null ? maintenanceMessage : "";
@@ -1721,11 +1739,14 @@ public final class EveAdminModels {
             this.announcementChannelAvatarUrl = announcementChannelAvatarUrl != null ? announcementChannelAvatarUrl.trim() : "";
             this.officialTelegramChannelUsername = officialTelegramChannelUsername != null ? officialTelegramChannelUsername.trim() : "";
             this.officialTelegramSupportUsername = officialTelegramSupportUsername != null ? officialTelegramSupportUsername.trim() : "";
+            String cleanProvider = aiProvider != null ? aiProvider.trim().toLowerCase(Locale.US) : "auto";
+            this.aiProvider = cleanProvider.isEmpty() ? "auto" : cleanProvider;
+            this.aiModel = aiModel != null ? aiModel.trim() : "";
         }
 
         public static AppConfigModel fromJson(JSONObject data) {
             if (data == null) {
-                return new AppConfigModel(1, false, "", "paused", "Announcements", "", "", "");
+                return new AppConfigModel(1, false, "", "paused", "Announcements", "", "", "", "auto", "");
             }
             int minVer = data.has("minSupportedVersionCode")
                     ? data.optInt("minSupportedVersionCode", 1)
@@ -1739,7 +1760,9 @@ public final class EveAdminModels {
             String chAvatar = clean(data, "announcementChannelAvatarUrl", clean(data, "announcement_channel_avatar_url", ""));
             String tgChannel = clean(data, "officialTelegramChannelUsername", clean(data, "official_telegram_channel_username", ""));
             String tgSupport = clean(data, "officialTelegramSupportUsername", clean(data, "official_telegram_support_username", ""));
-            return new AppConfigModel(minVer, maint, msg, pub, chName, chAvatar, tgChannel, tgSupport);
+            String aiProvider = clean(data, "aiProvider", clean(data, "ai_provider", "auto"));
+            String aiModel = clean(data, "aiModel", clean(data, "ai_model", ""));
+            return new AppConfigModel(minVer, maint, msg, pub, chName, chAvatar, tgChannel, tgSupport, aiProvider, aiModel);
         }
     }
 

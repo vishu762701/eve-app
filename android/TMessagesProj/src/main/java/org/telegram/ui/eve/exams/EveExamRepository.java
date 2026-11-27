@@ -15,6 +15,7 @@ import org.telegram.messenger.FileLog;
 import org.telegram.ui.eve.admin.EveAdminModels;
 import org.telegram.ui.eve.auth.EveAuthManager;
 import org.telegram.ui.eve.auth.EveBackendClient;
+import org.telegram.ui.eve.auth.EveLocalDiskCache;
 import org.telegram.ui.eve.polls.EvePollModel;
 
 import java.net.URLEncoder;
@@ -116,9 +117,7 @@ public final class EveExamRepository {
         if (key == null || raw == null) return;
         swrMemoryCache.put(key, raw);
         try {
-            Context ctx = ApplicationLoader.applicationContext;
-            if (ctx == null) return;
-            ctx.getSharedPreferences(PREFS_SWR, Context.MODE_PRIVATE).edit().putString(key, raw).apply();
+            EveLocalDiskCache.getInstance().put("student_" + key, raw);
         } catch (Throwable ignored) {
         }
     }
@@ -128,16 +127,51 @@ public final class EveExamRepository {
         String mem = swrMemoryCache.get(key);
         if (mem != null && !mem.isEmpty()) return mem;
         try {
-            Context ctx = ApplicationLoader.applicationContext;
-            if (ctx == null) return "";
-            String disk = ctx.getSharedPreferences(PREFS_SWR, Context.MODE_PRIVATE).getString(key, "");
+            String disk = EveLocalDiskCache.getInstance().get("student_" + key);
             if (disk != null && !disk.isEmpty()) {
                 swrMemoryCache.put(key, disk);
                 return disk;
             }
+            Context ctx = ApplicationLoader.applicationContext;
+            if (ctx == null) return "";
+            String legacy = ctx.getSharedPreferences(PREFS_SWR, Context.MODE_PRIVATE).getString(key, "");
+            if (legacy != null && !legacy.isEmpty()) {
+                swrMemoryCache.put(key, legacy);
+                EveLocalDiskCache.getInstance().put("student_" + key, legacy);
+                return legacy;
+            }
         } catch (Throwable ignored) {
         }
         return "";
+    }
+
+    private void invalidateSwrKey(String key) {
+        if (key == null) return;
+        swrMemoryCache.remove(key);
+        try {
+            EveLocalDiskCache.getInstance().invalidate("student_" + key);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    public void clearCacheOnSignOut() {
+        swrMemoryCache.clear();
+        allExamSummaries = Collections.emptyList();
+        cachedBanners = Collections.emptyList();
+        cachedAppConfig = null;
+        cachedChannelSummary = null;
+        pinnedExamIds = Collections.emptySet();
+        lastSuccessLoadMs = 0L;
+        currentResult = new EveExamModels.ExamCatalogResult(EveExamModels.LoadState.LOADING, Collections.emptyList(), "");
+        try {
+            EveLocalDiskCache.getInstance().clearAll();
+            Context ctx = ApplicationLoader.applicationContext;
+            if (ctx != null) {
+                ctx.getSharedPreferences(PREFS_CACHE, Context.MODE_PRIVATE).edit().clear().apply();
+                ctx.getSharedPreferences(PREFS_SWR, Context.MODE_PRIVATE).edit().clear().apply();
+            }
+        } catch (Throwable ignored) {
+        }
     }
 
     private void hydrateFromDiskCache() {
@@ -163,6 +197,24 @@ public final class EveExamRepository {
         } catch (Throwable ignored) {
         }
         try {
+            String catalogRaw = EveLocalDiskCache.getInstance().get("student_catalog_v1");
+            if (!catalogRaw.isEmpty()) {
+                JSONObject cat = new JSONObject(catalogRaw);
+                JSONArray pinsArr = cat.optJSONArray("pins");
+                if (pinsArr != null) {
+                    pinnedExamIds = parsePinnedIds(pinsArr);
+                }
+                JSONArray examsArr = cat.optJSONArray("exams");
+                JSONArray testsArr = cat.optJSONArray("tests");
+                if (examsArr != null) {
+                    List<EveExamModels.ExamSummary> parsed = parseExamCatalog(examsArr, testsArr, pinnedExamIds);
+                    allExamSummaries = parseAllExamsCatalog(examsArr, testsArr, pinnedExamIds);
+                    if (!parsed.isEmpty()) {
+                        currentResult = new EveExamModels.ExamCatalogResult(EveExamModels.LoadState.LOADED, parsed, "");
+                    }
+                    return;
+                }
+            }
             Context ctx = ApplicationLoader.applicationContext;
             if (ctx == null) return;
             SharedPreferences prefs = ctx.getSharedPreferences(PREFS_CACHE, Context.MODE_PRIVATE);
@@ -186,6 +238,13 @@ public final class EveExamRepository {
 
     private void saveDiskCache(JSONArray examsJson, JSONArray testsJson, Set<String> pins) {
         try {
+            if (examsJson != null) {
+                JSONObject cat = new JSONObject();
+                cat.put("exams", examsJson);
+                cat.put("tests", testsJson != null ? testsJson : new JSONArray());
+                cat.put("pins", new JSONArray(pins != null ? pins : Collections.emptySet()));
+                EveLocalDiskCache.getInstance().put("student_catalog_v1", cat.toString());
+            }
             Context ctx = ApplicationLoader.applicationContext;
             if (ctx == null || examsJson == null) return;
             SharedPreferences.Editor editor = ctx.getSharedPreferences(PREFS_CACHE, Context.MODE_PRIVATE)
@@ -203,6 +262,12 @@ public final class EveExamRepository {
 
     private void savePinnedIdsCache(Set<String> pins) {
         try {
+            String catalogRaw = EveLocalDiskCache.getInstance().get("student_catalog_v1");
+            if (!catalogRaw.isEmpty()) {
+                JSONObject cat = new JSONObject(catalogRaw);
+                cat.put("pins", new JSONArray(pins != null ? pins : Collections.emptySet()));
+                EveLocalDiskCache.getInstance().put("student_catalog_v1", cat.toString());
+            }
             Context ctx = ApplicationLoader.applicationContext;
             if (ctx == null) return;
             ctx.getSharedPreferences(PREFS_CACHE, Context.MODE_PRIVATE)
@@ -505,6 +570,14 @@ public final class EveExamRepository {
             payload.put("clientAttemptId", clientAttemptId != null ? clientAttemptId : "");
             payload.put("answers", answersPayload != null ? answersPayload : new JSONArray());
             JSONObject root = backendClient.postJsonRoot("/api/attempts/submit", token, payload);
+            invalidateSwrKey("leaderboard_overall");
+            if (attemptKey != null && !attemptKey.trim().isEmpty()) {
+                invalidateSwrKey("leaderboard_" + attemptKey.trim());
+                int sep = attemptKey.indexOf("__");
+                if (sep > 0) {
+                    invalidateSwrKey("leaderboard_" + attemptKey.substring(0, sep));
+                }
+            }
             EveExamModels.AttemptResult result = parseAttemptResult(
                     root.optJSONObject("data"),
                     attemptKey,
@@ -551,6 +624,44 @@ public final class EveExamRepository {
         });
     }
 
+    public EveExamModels.LeaderboardBundle getCachedLeaderboard(String examIdOrOverall) {
+        final String target = (examIdOrOverall == null || examIdOrOverall.trim().isEmpty())
+                ? "overall"
+                : examIdOrOverall.trim();
+        String raw = getSwrJson("leaderboard_" + target);
+        if (raw.isEmpty()) {
+            return null;
+        }
+        try {
+            JSONObject bundleJson = new JSONObject(raw);
+            List<EveExamModels.LeaderboardEntry> entries = parseLeaderboardEntries(bundleJson.optJSONArray("entries"));
+            EveExamModels.LeaderboardStats stats = null;
+            JSONObject statsObj = bundleJson.optJSONObject("stats");
+            if (statsObj != null) {
+                if ("overall".equals(target) && statsObj.has("totalParticipants")) {
+                    int participants = statsObj.optInt("totalParticipants", entries.size());
+                    int myRank = statsObj.optInt("rank", 0);
+                    double myScore = statsObj.optDouble("score", 0.0);
+                    double topperScore = entries.isEmpty() ? myScore : entries.get(0).score;
+                    stats = new EveExamModels.LeaderboardStats(
+                            participants,
+                            topperScore,
+                            0.0,
+                            myRank > 0 ? myRank : null,
+                            myScore,
+                            null,
+                            null
+                    );
+                } else {
+                    stats = parseLeaderboardStats(statsObj);
+                }
+            }
+            return new EveExamModels.LeaderboardBundle(entries, stats);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
     public void loadLeaderboard(String examIdOrOverall, ApiCallback<EveExamModels.LeaderboardBundle> callback) {
         final String target = (examIdOrOverall == null || examIdOrOverall.trim().isEmpty())
                 ? "overall"
@@ -558,14 +669,17 @@ public final class EveExamRepository {
         withFreshToken(callback, token -> {
             String encoded = urlEncode(target);
             JSONObject lbRoot = backendClient.getJsonRoot("/api/leaderboard?examId=" + encoded + "&limit=50", token);
-            List<EveExamModels.LeaderboardEntry> entries = parseLeaderboardEntries(lbRoot.optJSONArray("data"));
+            JSONArray entriesArr = lbRoot.optJSONArray("data");
+            List<EveExamModels.LeaderboardEntry> entries = parseLeaderboardEntries(entriesArr);
 
             EveExamModels.LeaderboardStats stats = null;
+            JSONObject rawStatsObj = null;
             if ("overall".equals(target)) {
                 try {
                     JSONObject rankRoot = backendClient.getJsonRoot("/api/leaderboard/rank?examId=overall", token);
                     JSONObject rankData = rankRoot.optJSONObject("data");
                     if (rankData != null) {
+                        rawStatsObj = rankData;
                         int participants = rankData.optInt("totalParticipants", entries.size());
                         int myRank = rankData.optInt("rank", 0);
                         double myScore = rankData.optDouble("score", 0.0);
@@ -585,9 +699,19 @@ public final class EveExamRepository {
             } else {
                 try {
                     JSONObject statsRoot = backendClient.getJsonRoot("/api/leaderboard/stats?examId=" + encoded, token);
-                    stats = parseLeaderboardStats(statsRoot.optJSONObject("data"));
+                    rawStatsObj = statsRoot.optJSONObject("data");
+                    stats = parseLeaderboardStats(rawStatsObj);
                 } catch (Exception ignored) {
                 }
+            }
+            try {
+                JSONObject cacheObj = new JSONObject();
+                cacheObj.put("entries", entriesArr != null ? entriesArr : new JSONArray());
+                if (rawStatsObj != null) {
+                    cacheObj.put("stats", rawStatsObj);
+                }
+                putSwrJson("leaderboard_" + target, cacheObj.toString());
+            } catch (Throwable ignored) {
             }
             postComplete(callback, new EveExamModels.LeaderboardBundle(entries, stats), "");
         });
@@ -1015,6 +1139,7 @@ public final class EveExamRepository {
             JSONObject payload = new JSONObject();
             payload.put("optionIndex", optionIndex);
             backendClient.postJsonRoot("/api/polls/" + urlEncode(pollId.trim()) + "/vote", token, payload);
+            invalidateSwrKey("polls_active");
             postComplete(callback, true, "");
         });
     }

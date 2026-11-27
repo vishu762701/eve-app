@@ -18,6 +18,7 @@ import {
   serveStoredAvatarResponse,
 } from "../util/avatarMedia";
 import { serveCachedStorageMedia } from "../util/mediaCache";
+import { matchStudentEdgeCache, purgeEdgeCache, storeStudentEdgeCache } from "../util/edgeCache";
 import { getActiveEmojiPlacements } from "./emoji";
 
 const VALID_AI_LANGUAGES = new Set(["english", "hindi", "bilingual"]);
@@ -160,6 +161,8 @@ function mapExamRow(row: ExamRow, emojiPlacement?: EmojiPlacementPublic) {
 
 // GET /api/exams - List all exams
 examRoutes.get("/", async (c) => {
+  const cached = await matchStudentEdgeCache(c);
+  if (cached) return cached;
   const db = c.env.DB;
   const { results } = await db
     .prepare("SELECT * FROM exams ORDER BY exam_name ASC")
@@ -174,7 +177,7 @@ examRoutes.get("/", async (c) => {
   } catch {}
 
   const list = (results || []).map((r) => mapExamRow(r, examPlacements.get(r.id)));
-  return c.json({ success: true, data: list, categoryEmoji: categoryPlacements });
+  return storeStudentEdgeCache(c, c.json({ success: true, data: list, categoryEmoji: categoryPlacements }));
 });
 
 // GET /api/exams/:id - Single exam details
@@ -344,6 +347,7 @@ examRoutes.post("/", requirePermission("manage_exams"), async (c) => {
   });
 
   await db.batch([insertStmt, auditStmt]);
+  await purgeEdgeCache(c, ["/api/exams"]);
 
   return c.json({ success: true, data: { id } }, 201);
 });
@@ -522,6 +526,7 @@ examRoutes.put("/:id", requirePermission("manage_exams"), async (c) => {
     return c.json({ success: false, error: "An exam with this name already exists here" }, 409);
   }
   if (results[0]?.meta?.changes !== 1 || results[1]?.meta?.changes !== 1) throw new Error("Exam update confirmation unavailable");
+  await purgeEdgeCache(c, ["/api/exams", "/api/generated-tests"]);
   return c.json({ success: true });
 });
 
@@ -542,6 +547,7 @@ examRoutes.put("/:id/image", requirePermission("manage_exams"), async (c) => {
   });
 
   await db.batch([updateStmt, auditStmt]);
+  await purgeEdgeCache(c, ["/api/exams"]);
   return c.json({ success: true });
 });
 
@@ -584,6 +590,7 @@ examRoutes.put("/:id/rename", requirePermission("manage_exams"), async (c) => {
   if (results[0]?.meta?.changes !== 1 || results[1]?.meta?.changes !== 1) {
     throw new Error("Exam rename confirmation unavailable");
   }
+  await purgeEdgeCache(c, ["/api/exams", "/api/generated-tests"]);
 
   return c.json({ success: true });
 });
@@ -615,6 +622,7 @@ examRoutes.post('/:id/unpublish-tests', requirePermission("manage_exams"), async
   if (results[1]?.meta?.changes !== 1 || results[2]?.meta?.changes !== 1) {
     return c.json({ success: false, error: 'Exam changed during unpublication; reload and retry' }, 409);
   }
+  await purgeEdgeCache(c, ["/api/exams", "/api/generated-tests"]);
   return c.json({ success: true, message: 'Tests unpublished and automatic generation disabled. History and ongoing sessions preserved.' });
 });
 
@@ -639,6 +647,7 @@ examRoutes.delete("/:id", requirePermission("manage_exams"), async (c) => {
   }
 
   const path = extractSyllabusStorageRef(String(exam?.syllabus_url || ""));
+  await purgeEdgeCache(c, ["/api/exams", "/api/generated-tests"]);
   if (path && !await cleanupMedia(c.env, path, c.res.headers.get('X-Request-ID'))) {
     return c.json({ success: true, message: 'Exam deleted. Media cleanup was not completed; check System Monitor.' });
   }
@@ -828,6 +837,7 @@ examRoutes.post("/:id/syllabus", requirePermission("manage_syllabus"), async (c)
     return c.json({ success: false, error: "Syllabus not linked; verify exam state before retrying" }, 409);
   }
 
+  await purgeEdgeCache(c, ["/api/exams"]);
   return c.json({ success: true, data: { syllabusUrl: downloadUrl, syllabusFileName: fileName } });
 });
 
@@ -849,6 +859,7 @@ examRoutes.delete("/:id/syllabus", requirePermission("manage_syllabus"), async (
   });
 
   await db.batch([updateStmt, auditStmt]);
+  await purgeEdgeCache(c, ["/api/exams"]);
 
   const path = extractSyllabusStorageRef(String(exam.syllabus_url || ""));
   if (path && !await cleanupMedia(c.env, path, c.res.headers.get('X-Request-ID'))) {
@@ -954,6 +965,7 @@ examRoutes.post("/:id/avatar", requirePermission("manage_exams"), async (c) => {
       try { await storage.deleteFiles([oldKey]); } catch {}
     }
 
+    await purgeEdgeCache(c, ["/api/exams"]);
     return c.json({
       success: true,
       data: {
@@ -1008,6 +1020,7 @@ examRoutes.post("/:id/avatar", requirePermission("manage_exams"), async (c) => {
     metadata: { mode: "emoji", avatarEmoji: emojiRaw, avatarColor },
   });
   await db.batch([updateStmt, auditStmt]);
+  await purgeEdgeCache(c, ["/api/exams"]);
 
   if (oldKey) {
     try { await storage.deleteFiles([oldKey]); } catch {}
@@ -1049,6 +1062,7 @@ examRoutes.delete("/:id/avatar", requirePermission("manage_exams"), async (c) =>
     targetId: id,
   });
   await db.batch([updateStmt, auditStmt]);
+  await purgeEdgeCache(c, ["/api/exams"]);
 
   if (oldKey) {
     try { await new AssetStorage(c.env).deleteFiles([oldKey]); } catch {}

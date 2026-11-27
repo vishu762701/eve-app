@@ -35,36 +35,40 @@ async function getVoteCountsForPoll(db: D1Database, pollId: string, optionsCount
 pollRoutes.get("/", async (c) => {
   const db = c.env.DB;
   const user = c.get("user");
-  const { results: polls } = await db
+  const pollsPromise = db
     .prepare("SELECT * FROM polls ORDER BY created_at DESC")
     .all<PollRow>();
-
-  const countsByPoll = new Map<string, Record<number, number>>();
-  try {
-    const { results: allCounts } = await db
-      .prepare("SELECT poll_id, option_index, COUNT(*) as vote_count FROM poll_votes GROUP BY poll_id, option_index")
-      .all<{ poll_id: string; option_index: number; vote_count: number }>();
-    for (const r of allCounts || []) {
-      let map = countsByPoll.get(r.poll_id);
-      if (!map) {
-        map = {};
-        countsByPoll.set(r.poll_id, map);
-      }
-      map[Number(r.option_index)] = Number(r.vote_count || 0);
-    }
-  } catch {}
-
-  const userVoteByPoll = new Map<string, number>();
-  if (user?.uid) {
-    try {
-      const { results: myVotes } = await db
+  const countsPromise = db
+    .prepare("SELECT poll_id, option_index, COUNT(*) as vote_count FROM poll_votes GROUP BY poll_id, option_index")
+    .all<{ poll_id: string; option_index: number; vote_count: number }>()
+    .catch(() => ({ results: [] as Array<{ poll_id: string; option_index: number; vote_count: number }> }));
+  const myVotesPromise = user?.uid
+    ? db
         .prepare("SELECT poll_id, option_index FROM poll_votes WHERE user_id = ?")
         .bind(user.uid)
-        .all<{ poll_id: string; option_index: number }>();
-      for (const v of myVotes || []) {
-        userVoteByPoll.set(v.poll_id, Number(v.option_index));
-      }
-    } catch {}
+        .all<{ poll_id: string; option_index: number }>()
+        .catch(() => ({ results: [] as Array<{ poll_id: string; option_index: number }> }))
+    : Promise.resolve({ results: [] as Array<{ poll_id: string; option_index: number }> });
+
+  const [{ results: polls }, { results: allCounts }, { results: myVotes }] = await Promise.all([
+    pollsPromise,
+    countsPromise,
+    myVotesPromise,
+  ]);
+
+  const countsByPoll = new Map<string, Record<number, number>>();
+  for (const r of allCounts || []) {
+    let map = countsByPoll.get(r.poll_id);
+    if (!map) {
+      map = {};
+      countsByPoll.set(r.poll_id, map);
+    }
+    map[Number(r.option_index)] = Number(r.vote_count || 0);
+  }
+
+  const userVoteByPoll = new Map<string, number>();
+  for (const v of myVotes || []) {
+    userVoteByPoll.set(v.poll_id, Number(v.option_index));
   }
 
   const list: any[] = [];

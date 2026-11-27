@@ -8,6 +8,7 @@ import { requirePermission } from "../middleware/authMiddleware";
 import { AssetStorage } from "../storage";
 import { AuthUser, Env, HomeBannerRow } from "../types";
 import { prepareAdminAuditLog } from "../util/auditLog";
+import { matchStudentEdgeCache, purgeEdgeCache, storeStudentEdgeCache } from "../util/edgeCache";
 import { serveCachedStorageMedia } from "../util/mediaCache";
 
 export const bannerRoutes = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
@@ -121,11 +122,13 @@ function mapBannerRow(r: HomeBannerRow) {
 
 // GET /api/banners - List active banners for home carousel
 bannerRoutes.get("/", async (c) => {
+  const cached = await matchStudentEdgeCache(c);
+  if (cached) return cached;
   const db = c.env.DB;
   const { results } = await db
     .prepare("SELECT * FROM home_banners WHERE active = 1 ORDER BY order_index ASC")
     .all<HomeBannerRow>();
-  return c.json({ success: true, data: (results || []).map(mapBannerRow) });
+  return storeStudentEdgeCache(c, c.json({ success: true, data: (results || []).map(mapBannerRow) }));
 });
 
 // GET /api/banners/manage - List all banners (active & hidden) for Admin
@@ -279,6 +282,7 @@ bannerRoutes.post("/", requirePermission("manage_content"), async (c) => {
     try { await storage.deleteFiles([persistedStoragePath]); } catch {}
     throw err;
   }
+  await purgeEdgeCache(c, ["/api/banners"]);
 
   return c.json(
     {
@@ -324,6 +328,7 @@ bannerRoutes.put("/:id/link", requirePermission("manage_content"), async (c) => 
     metadata: { linkUrl: link.url, linkLabel: link.label },
   });
   await db.batch([updateStmt, auditStmt]);
+  await purgeEdgeCache(c, ["/api/banners"]);
 
   return c.json({ success: true, data: { linkUrl: link.url, linkLabel: link.label } });
 });
@@ -352,6 +357,7 @@ bannerRoutes.put("/:id/status", requirePermission("manage_content"), async (c) =
   if (results[0]?.meta?.changes !== 1) {
     return c.json({ success: false, error: "Banner not found" }, 404);
   }
+  await purgeEdgeCache(c, ["/api/banners"]);
   return c.json({ success: true, data: { id, active: Boolean(active) } });
 });
 
@@ -376,6 +382,7 @@ bannerRoutes.delete("/:id", requirePermission("manage_content"), async (c) => {
     targetId: id,
   });
   await db.batch([deleteStmt, auditStmt]);
+  await purgeEdgeCache(c, ["/api/banners"]);
 
   const storagePath = String(banner.storage_path || "").trim();
   if (storagePath && !await cleanupMedia(c.env, storagePath, c.res.headers.get('X-Request-ID'))) {
@@ -426,6 +433,7 @@ bannerRoutes.put("/:id/reorder", requirePermission("manage_content"), async (c) 
     db.prepare("UPDATE home_banners SET order_index = ? WHERE id = ?").bind(current.order_index, target.id),
     auditStmt,
   ]);
+  await purgeEdgeCache(c, ["/api/banners"]);
 
   return c.json({ success: true });
 });

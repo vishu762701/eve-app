@@ -24,6 +24,61 @@ export interface GeneratedQuestionItem {
 export interface PromptGenerationOptions {
   language?: string;
   difficulty?: string;
+  preferredModel?: string;
+  excludedNormalizedTexts?: Iterable<string>;
+}
+
+/**
+ * Normalizes a question stem for deterministic cross-bank deduplication.
+ * Strips whitespace, punctuation noise, and leading question numbers (e.g. "Q1.", "12)").
+ */
+export function normalizeQuestionText(text: string): string {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/^\s*(?:q\.?\s*)?\d+\s*[.):-]\s*/i, "")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export async function hashQuestionText(text: string): Promise<string> {
+  const normalized = normalizeQuestionText(text);
+  const bytes = new TextEncoder().encode(normalized);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+export async function filterDuplicateQuestions(
+  candidates: GeneratedQuestionItem[],
+  existingNormalizedOrHashes: Set<string>,
+  existingHashes?: Set<string>
+): Promise<{ unique: GeneratedQuestionItem[]; skippedCount: number }> {
+  const unique: GeneratedQuestionItem[] = [];
+  let skippedCount = 0;
+  const seenLocal = new Set<string>();
+  const hashSet = existingHashes || existingNormalizedOrHashes;
+
+  for (const item of candidates) {
+    const norm = normalizeQuestionText(item.questionText);
+    if (!norm) {
+      skippedCount++;
+      continue;
+    }
+    const hash = await hashQuestionText(item.questionText);
+    if (
+      existingNormalizedOrHashes.has(norm) ||
+      hashSet.has(hash) ||
+      seenLocal.has(hash)
+    ) {
+      skippedCount++;
+      continue;
+    }
+    seenLocal.add(hash);
+    unique.push(item);
+  }
+  return { unique, skippedCount };
 }
 
 export function incrementTestNumber(current: string): string {
@@ -160,19 +215,19 @@ export function buildPrompt(
       "Target Difficulty: HARD (analytical, multi-concept, statement/assertion-reason level).";
   }
 
-  return `You are an expert question-setter for ${examName}, a well-known Indian competitive/entrance exam.
-Generate exactly ${questionCount} unique, high-quality multiple-choice questions strictly adhering to this exam pattern and syllabus:
-${syllabusText || "General competitive exam topics including General Awareness, Reasoning, Quantitative Aptitude, and English Comprehension."}
+  return `You are a Senior Paper-Setter & Subject-Matter Expert for ${examName}, a high-stakes Indian competitive/entrance examination (UPSC/SSC/State PSC/Banking/Railway standard).
+Generate exactly ${questionCount} original, non-trivial, factually verified multiple-choice questions strictly aligned with this exam pattern and syllabus:
+Syllabus & Blueprint: ${syllabusText || "General competitive exam topics including General Awareness, Logical Reasoning, Quantitative Aptitude, and English Comprehension."}
 ${languageInstruction}
 ${difficultyInstruction}
-Admin instructions & focus areas: ${customPromptNotes || "Ensure standard exam difficulty and balanced topic coverage."}
+Admin Instructions & Focus Areas: ${customPromptNotes || "Maintain authentic Indian competitive exam rigor, negative-marking trap plausibility, and balanced topic spread."}
 
-Rules:
-1. Each question must match the real competitive exam format and target difficulty level.
-2. Factually verify each question and step-by-step solve before matching to options.
-3. Every question must have 4 distinct, plausible options (A, B, C, D).
-4. Provide a detailed, pedagogical explanation (3-4 sentences) for why the correct answer is right.
-5. Output ONLY a valid JSON array of objects with the exact schema below. No markdown fences, no surrounding prose.
+Paper-Setter Rubric (Mandatory):
+1. Question Quality: Match official ${examName} exam patterns (concept application, multi-statement I/II/III where suited, chronological/matching or numerical elimination—avoid trivial copybook definitions).
+2. Self-Verification Before Output: Solve every numerical/reasoning problem step-by-step and cross-check dates, Articles, Amendments, formulas, and units before assigning correctAnswer ("A" | "B" | "C" | "D"). Ensure ONLY ONE option is unambiguously correct.
+3. Distractor Design: Provide 4 distinct, mutually exclusive, plausible options (A, B, C, D) modeled on realistic student misconceptions. Never use "All of the above" / "None of the above" unless strictly required by an assertion pattern, and never duplicate option text.
+4. Pedagogical Explanation: Write a crisp 3–4 sentence solution explaining why the keyed option is right AND briefly eliminating the main trap distractors.
+5. Output Contract: Return ONLY a valid JSON array matching the exact schema below (with no markdown fences, comments, or extra prose).
 
 JSON Schema:
 ${schemaHint}`;
@@ -678,10 +733,14 @@ export async function generateQuestions(
     );
   }
 
-  const modelChain = getModelChain(env);
+  const baseChain = getModelChain(env);
+  const preferred = options.preferredModel?.trim();
+  const modelChain = preferred
+    ? [preferred, ...baseChain.filter((m) => m !== preferred)]
+    : baseChain;
   const CHUNK_SIZE = 10;
   const collected: GeneratedQuestionItem[] = [];
-  const seenTexts = new Set<string>();
+  const seenTexts = new Set<string>(options.excludedNormalizedTexts || []);
 
   const startTime = Date.now();
   const TIME_BUDGET_MS = 120_000; // 120 seconds
@@ -925,8 +984,8 @@ export async function generateQuestions(
 
     let addedFromChunk = 0;
     for (const q of chunkQuestions) {
-      const norm = q.questionText.trim().toLowerCase().replace(/\s+/g, " ");
-      if (!seenTexts.has(norm)) {
+      const norm = normalizeQuestionText(q.questionText);
+      if (norm && !seenTexts.has(norm)) {
         seenTexts.add(norm);
         collected.push(q);
         addedFromChunk++;
