@@ -464,3 +464,61 @@ test("GET /api/polls returns voteCounts and caller userVote without N+1 requests
   assert.equal(json.data[0].userVote, 1);
   assert.equal(json.data[0].voteCounts["1"], 1);
 });
+
+test("POST /api/exams supports cutoffs + draft publishMode and dashboard + question analytics expose extended fields", async () => {
+  const { sqlite, d1 } = isolatedD1();
+  seedAdminsAndCatalog(sqlite);
+
+  const ownerApp = buildTestWorker(d1, {
+    user: { uid: "o-1", email: "pronlike9@gmail.com", isAdmin: true },
+  });
+
+  const createRes = await ownerApp.request("http://localhost/api/exams", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      examName: "SSC CGL Tier 2 Draft",
+      category: "SSC",
+      timeLimitMinutes: 60,
+      questionCount: 30,
+      negativeMarkingText: "0.5",
+      publishMode: "draft",
+      cutoffs: { General: 142.5, OBC: 135, SC: 120, ST: 112.5, EWS: 138 },
+      autoGenerationEnabled: true,
+      autoGenTime: "07:30",
+    }),
+  });
+  assert.equal(createRes.status, 201);
+  const createJson = await createRes.json();
+  assert.equal(createJson.data.publishMode, "draft");
+  assert.deepEqual(createJson.data.cutoffs, {
+    General: 142.5,
+    OBC: 135,
+    SC: 120,
+    ST: 112.5,
+    EWS: 138,
+  });
+
+  const dashRes = await ownerApp.request("http://localhost/api/admin/dashboard");
+  assert.equal(dashRes.status, 200);
+  const dashJson = await dashRes.json();
+  const createdExam = dashJson.data.exams.find((e) => e.id === createJson.data.id);
+  assert.ok(createdExam);
+  assert.equal(createdExam.publishMode, "draft");
+  assert.equal(createdExam.autoGenerationEnabled, true);
+  assert.equal(createdExam.autoGenTime, "07:30");
+  assert.deepEqual(createdExam.cutoffs, {
+    General: 142.5,
+    OBC: 135,
+    SC: 120,
+    ST: 112.5,
+    EWS: 138,
+  });
+
+  const qaRes = await ownerApp.request("http://localhost/api/admin/analytics/questions");
+  assert.equal(qaRes.status, 200);
+  const qaJson = await qaRes.json();
+  assert.equal(qaJson.success, true);
+  assert.ok(Array.isArray(qaJson.data));
+});
+

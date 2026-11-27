@@ -49,6 +49,7 @@ public class EveExamTestsFragment extends BaseFragment {
     private static final int SUB_HISTORY = 102;
     private static final int SUB_ANNOUNCEMENTS = 103;
     private static final int SUB_EXAM_INFO = 104;
+    private static final int SUB_DOWNLOAD_SYLLABUS = 105;
 
     private static final int ID_RETRY = 200;
     private static final int BASE_TEST_ID = 1000;
@@ -141,6 +142,16 @@ public class EveExamTestsFragment extends BaseFragment {
                             org.telegram.ui.eve.auth.EveTelegramSessionManager.getInstance().openAnnouncementsDestination(EveExamTestsFragment.this);
                         } else if (id == SUB_EXAM_INFO) {
                             showExamInfoDialog();
+                        } else if (id == SUB_DOWNLOAD_SYLLABUS) {
+                            if (exam != null) {
+                                EvePdfHelper.downloadSyllabusPdf(
+                                        EveExamTestsFragment.this,
+                                        exam.id,
+                                        exam.examName,
+                                        exam.syllabusUrl,
+                                        exam.syllabusFileName
+                                );
+                            }
                         }
                     }
                 },
@@ -176,6 +187,9 @@ public class EveExamTestsFragment extends BaseFragment {
             moreItem.addSubItem(SUB_HISTORY, R.drawable.msg_recent, LocaleController.getString(R.string.EveResultHistory));
             moreItem.addSubItem(SUB_ANNOUNCEMENTS, R.drawable.msg_notifications, "Announcements & Polls");
             moreItem.addSubItem(SUB_EXAM_INFO, R.drawable.msg_info, "Exam Info");
+            if (exam != null && exam.hasSyllabus()) {
+                moreItem.addSubItem(SUB_DOWNLOAD_SYLLABUS, R.drawable.msg_view_file, "Download Syllabus PDF");
+            }
         }
 
         fragmentView = chrome.rootView;
@@ -472,7 +486,7 @@ public class EveExamTestsFragment extends BaseFragment {
 
     private void openTestLaunchDialog(EveExamModels.GeneratedTestSummary selected) {
         Activity activity = getParentActivity();
-        if (activity == null) return;
+        if (activity == null || selected == null) return;
         String attemptKey = EveExamModels.buildAttemptKey(exam != null ? exam.id : selected.examId, selected.id);
         int qCount = selected.questionCount > 0 ? selected.questionCount : (exam != null ? exam.questionCount : 20);
         int mins = exam != null ? exam.timeLimitMinutes : 30;

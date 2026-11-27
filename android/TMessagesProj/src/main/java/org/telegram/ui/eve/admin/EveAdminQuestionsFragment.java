@@ -47,8 +47,10 @@ public class EveAdminQuestionsFragment extends BaseFragment {
     private static final int MENU_ADD = 2;
     private static final int MENU_MORE = 3;
     private static final int MENU_IMPORT_JSON = 4;
+    private static final int REQ_PICK_IMPORT_FILE = 6403;
 
     private static final int ID_RETRY = 101;
+    private static final int ID_BULK_IMPORT_ROW = 102;
     private static final int BASE_QUESTION_ID = 1000;
 
     private final EveAdminRepository repo = EveAdminRepository.getInstance();
@@ -136,8 +138,7 @@ public class EveAdminQuestionsFragment extends BaseFragment {
                             EveAdminDialogs.showEditQuestionDialog(
                                     EveAdminQuestionsFragment.this, repo, exam, null, EveAdminQuestionsFragment.this::reload);
                         } else if (id == MENU_IMPORT_JSON) {
-                            EveAdminDialogs.showBulkImportQuestionsDialog(
-                                    EveAdminQuestionsFragment.this, repo, exam, EveAdminQuestionsFragment.this::reload);
+                            openBulkImportDialog("");
                         }
                     }
                 },
@@ -171,12 +172,59 @@ public class EveAdminQuestionsFragment extends BaseFragment {
             searchItem.setSearchFieldHint("Search question or topic");
             menu.addItem(MENU_ADD, R.drawable.msg_add, getResourceProvider());
             SimpleActionBarMenuItem moreItem = menu.addItem(MENU_MORE, R.drawable.ic_ab_other, getResourceProvider());
-            moreItem.addSubItem(MENU_IMPORT_JSON, R.drawable.msg_download, "Bulk Import JSON");
+            moreItem.addSubItem(MENU_IMPORT_JSON, R.drawable.msg_view_file, "Bulk Import (JSON / CSV)");
         }
 
         fragmentView = chrome.rootView;
         reload();
         return chrome.rootView;
+    }
+
+    private void openBulkImportDialog(String prefill) {
+        EveAdminDialogs.showBulkImportQuestionsDialog(
+                this,
+                repo,
+                exam,
+                prefill,
+                this::launchImportFilePicker,
+                this::reload
+        );
+    }
+
+    private void launchImportFilePicker() {
+        android.app.Activity act = getParentActivity();
+        if (act == null) return;
+        android.content.Intent intent = new android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(android.content.Intent.CATEGORY_OPENABLE);
+        intent.setType("*/*");
+        intent.putExtra(android.content.Intent.EXTRA_MIME_TYPES, new String[] { "application/json", "text/csv", "text/comma-separated-values", "text/plain" });
+        startActivityForResult(android.content.Intent.createChooser(intent, "Select .json or .csv File"), REQ_PICK_IMPORT_FILE);
+    }
+
+    @Override
+    public void onActivityResultFragment(int requestCode, int resultCode, android.content.Intent data) {
+        if (requestCode == REQ_PICK_IMPORT_FILE && resultCode == android.app.Activity.RESULT_OK && data != null && data.getData() != null) {
+            android.app.Activity act = getParentActivity();
+            if (act != null) {
+                try (java.io.InputStream is = act.getContentResolver().openInputStream(data.getData())) {
+                    if (is != null) {
+                        java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+                        byte[] buf = new byte[4096];
+                        int n;
+                        int total = 0;
+                        while ((n = is.read(buf)) != -1 && total < 2 * 1024 * 1024) {
+                            baos.write(buf, 0, n);
+                            total += n;
+                        }
+                        String content = new String(baos.toByteArray(), java.nio.charset.StandardCharsets.UTF_8);
+                        openBulkImportDialog(content);
+                        return;
+                    }
+                } catch (Throwable ignored) {
+                }
+            }
+        }
+        super.onActivityResultFragment(requestCode, resultCode, data);
     }
 
     @Override
@@ -274,9 +322,18 @@ public class EveAdminQuestionsFragment extends BaseFragment {
             return;
         }
 
+        items.add(SettingsActivity.SettingCell.Factory.of(
+                ID_BULK_IMPORT_ROW,
+                IconBackgroundColors.PURPLE.top, IconBackgroundColors.PURPLE.bottom,
+                R.drawable.msg_view_file,
+                "Bulk Import (JSON / CSV)",
+                "Paste JSON/CSV or pick a .json/.csv file with preview",
+                null));
+        items.add(UItem.asShadow(null));
+
         if (filteredQuestions.isEmpty()) {
             items.add(UItem.asShadow(searchQuery.trim().isEmpty()
-                    ? "No questions found for this exam. Tap + to add or import JSON."
+                    ? "No questions found for this exam. Tap + or Bulk Import above."
                     : "No questions matched \"" + searchQuery.trim() + "\"."));
             return;
         }
@@ -289,6 +346,8 @@ public class EveAdminQuestionsFragment extends BaseFragment {
     private void onClick(UItem item, View view, int position, float x, float y) {
         if (item.id == ID_RETRY) {
             reload();
+        } else if (item.id == ID_BULK_IMPORT_ROW) {
+            openBulkImportDialog("");
         } else if (item.id >= BASE_QUESTION_ID) {
             int idx = item.id - BASE_QUESTION_ID;
             if (idx >= 0 && idx < filteredQuestions.size()) {

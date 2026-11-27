@@ -6,8 +6,10 @@ import org.json.JSONObject;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -104,6 +106,13 @@ public final class EveAdminModels {
         public final String aiPrompt;
         public final String aiLanguage;
         public final String aiDifficulty;
+        public final Map<String, Double> cutoffs;
+        public final boolean autoGenerationEnabled;
+        public final String autoGenTime;
+        public final String lastGeneratedDate;
+        public final String lastGenerationStatus;
+        public final String lastGenerationError;
+        public final long lastGenerationTimeMs;
 
         public AdminExamItem(
                 String id,
@@ -117,7 +126,7 @@ public final class EveAdminModels {
                 String generationPrompt) {
             this(id, examName, category, timeLimitMinutes, questionCount, testNumber,
                     negativeMarkingText, publishMode, generationPrompt, "", "", "", "", "", "", -1,
-                    generationPrompt, "english", "mixed");
+                    generationPrompt, "english", "mixed", null, false, "00:00", "", "idle", "", 0L);
         }
 
         public AdminExamItem(
@@ -137,7 +146,7 @@ public final class EveAdminModels {
             this(id, examName, category, timeLimitMinutes, questionCount, testNumber,
                     negativeMarkingText, publishMode, generationPrompt, parentExamId,
                     syllabusFileName, syllabusUrl, imageUrl, imageUrl, "", -1,
-                    generationPrompt, "english", "mixed");
+                    generationPrompt, "english", "mixed", null, false, "00:00", "", "idle", "", 0L);
         }
 
         public AdminExamItem(
@@ -160,7 +169,7 @@ public final class EveAdminModels {
             this(id, examName, category, timeLimitMinutes, questionCount, testNumber,
                     negativeMarkingText, publishMode, generationPrompt, parentExamId,
                     syllabusFileName, syllabusUrl, imageUrl, avatarUrl, avatarEmoji, avatarColor,
-                    generationPrompt, "english", "mixed");
+                    generationPrompt, "english", "mixed", null, false, "00:00", "", "idle", "", 0L);
         }
 
         public AdminExamItem(
@@ -183,6 +192,39 @@ public final class EveAdminModels {
                 String aiPrompt,
                 String aiLanguage,
                 String aiDifficulty) {
+            this(id, examName, category, timeLimitMinutes, questionCount, testNumber,
+                    negativeMarkingText, publishMode, generationPrompt, parentExamId,
+                    syllabusFileName, syllabusUrl, imageUrl, avatarUrl, avatarEmoji, avatarColor,
+                    aiPrompt, aiLanguage, aiDifficulty, null, false, "00:00", "", "idle", "", 0L);
+        }
+
+        public AdminExamItem(
+                String id,
+                String examName,
+                String category,
+                int timeLimitMinutes,
+                int questionCount,
+                String testNumber,
+                String negativeMarkingText,
+                String publishMode,
+                String generationPrompt,
+                String parentExamId,
+                String syllabusFileName,
+                String syllabusUrl,
+                String imageUrl,
+                String avatarUrl,
+                String avatarEmoji,
+                int avatarColor,
+                String aiPrompt,
+                String aiLanguage,
+                String aiDifficulty,
+                Map<String, Double> cutoffs,
+                boolean autoGenerationEnabled,
+                String autoGenTime,
+                String lastGeneratedDate,
+                String lastGenerationStatus,
+                String lastGenerationError,
+                long lastGenerationTimeMs) {
             this.id = id != null ? id : "";
             this.examName = examName != null ? examName : "Untitled Exam";
             this.category = category != null && !category.isEmpty() ? category : "General";
@@ -206,6 +248,15 @@ public final class EveAdminModels {
             this.avatarUrl = resolvedAvatarUrl;
             this.avatarEmoji = avatarEmoji != null ? avatarEmoji.trim() : "";
             this.avatarColor = avatarColor;
+            this.cutoffs = cutoffs != null && !cutoffs.isEmpty()
+                    ? Collections.unmodifiableMap(new LinkedHashMap<>(cutoffs))
+                    : Collections.emptyMap();
+            this.autoGenerationEnabled = autoGenerationEnabled;
+            this.autoGenTime = autoGenTime != null && !autoGenTime.trim().isEmpty() ? autoGenTime.trim() : "00:00";
+            this.lastGeneratedDate = lastGeneratedDate != null ? lastGeneratedDate.trim() : "";
+            this.lastGenerationStatus = lastGenerationStatus != null && !lastGenerationStatus.trim().isEmpty() ? lastGenerationStatus.trim() : "idle";
+            this.lastGenerationError = lastGenerationError != null ? lastGenerationError.trim() : "";
+            this.lastGenerationTimeMs = Math.max(0L, lastGenerationTimeMs);
         }
 
         private static String normalizeLanguage(String raw) {
@@ -220,13 +271,24 @@ public final class EveAdminModels {
             return "mixed";
         }
 
+        public Double getCutoffForCategory(String cat) {
+            if (cutoffs.isEmpty()) return null;
+            for (Map.Entry<String, Double> e : cutoffs.entrySet()) {
+                if (e.getKey().equalsIgnoreCase(cat)) {
+                    return e.getValue();
+                }
+            }
+            return null;
+        }
+
         public AdminExamItem withAvatar(String nextAvatarUrl, String nextAvatarEmoji, int nextAvatarColor) {
             String cleanUrl = nextAvatarUrl != null ? nextAvatarUrl.trim() : "";
             return new AdminExamItem(
                     id, examName, category, timeLimitMinutes, questionCount, testNumber,
                     negativeMarkingText, publishMode, generationPrompt, parentExamId,
                     syllabusFileName, syllabusUrl, cleanUrl, cleanUrl, nextAvatarEmoji, nextAvatarColor,
-                    aiPrompt, aiLanguage, aiDifficulty);
+                    aiPrompt, aiLanguage, aiDifficulty, cutoffs, autoGenerationEnabled, autoGenTime,
+                    lastGeneratedDate, lastGenerationStatus, lastGenerationError, lastGenerationTimeMs);
         }
 
         public AdminExamItem withAiSettings(String nextPrompt, String nextLanguage, String nextDifficulty) {
@@ -235,7 +297,26 @@ public final class EveAdminModels {
                     id, examName, category, timeLimitMinutes, questionCount, testNumber,
                     negativeMarkingText, publishMode, p, parentExamId,
                     syllabusFileName, syllabusUrl, imageUrl, avatarUrl, avatarEmoji, avatarColor,
-                    p, nextLanguage, nextDifficulty);
+                    p, nextLanguage, nextDifficulty, cutoffs, autoGenerationEnabled, autoGenTime,
+                    lastGeneratedDate, lastGenerationStatus, lastGenerationError, lastGenerationTimeMs);
+        }
+
+        public AdminExamItem withExtendedSettings(
+                String nextName,
+                String nextCategory,
+                int nextTimeLimit,
+                int nextQuestionCount,
+                String nextNegMarking,
+                String nextPublishMode,
+                Map<String, Double> nextCutoffs,
+                boolean nextAutoGenEnabled,
+                String nextAutoGenTime) {
+            return new AdminExamItem(
+                    id, nextName, nextCategory, nextTimeLimit, nextQuestionCount, testNumber,
+                    nextNegMarking, nextPublishMode, generationPrompt, parentExamId,
+                    syllabusFileName, syllabusUrl, imageUrl, avatarUrl, avatarEmoji, avatarColor,
+                    aiPrompt, aiLanguage, aiDifficulty, nextCutoffs, nextAutoGenEnabled, nextAutoGenTime,
+                    lastGeneratedDate, lastGenerationStatus, lastGenerationError, lastGenerationTimeMs);
         }
 
         public boolean hasCustomAvatar() {
@@ -244,6 +325,10 @@ public final class EveAdminModels {
 
         public boolean isPaused() {
             return "paused".equalsIgnoreCase(publishMode);
+        }
+
+        public boolean isDraft() {
+            return "draft".equalsIgnoreCase(publishMode);
         }
 
         public boolean isArchived() {
@@ -262,6 +347,19 @@ public final class EveAdminModels {
                 int avColor = o.isNull("avatarColor") ? -1 : o.optInt("avatarColor", -1);
                 String genPrompt = clean(o, "generationPrompt", "");
                 String aiPromptVal = clean(o, "aiPrompt", genPrompt);
+                Map<String, Double> parsedCutoffs = new LinkedHashMap<>();
+                JSONObject cObj = o.optJSONObject("cutoffs");
+                if (cObj != null) {
+                    String[] keys = new String[] { "General", "OBC", "SC", "ST", "EWS" };
+                    for (String k : keys) {
+                        if (cObj.has(k) && !cObj.isNull(k)) {
+                            double v = cObj.optDouble(k, Double.NaN);
+                            if (!Double.isNaN(v) && !Double.isInfinite(v) && v >= 0.0) {
+                                parsedCutoffs.put(k, v);
+                            }
+                        }
+                    }
+                }
                 out.add(new AdminExamItem(
                         clean(o, "id", ""),
                         clean(o, "examName", "Untitled Exam"),
@@ -281,7 +379,14 @@ public final class EveAdminModels {
                         avColor,
                         aiPromptVal,
                         clean(o, "aiLanguage", "english"),
-                        clean(o, "aiDifficulty", "mixed")
+                        clean(o, "aiDifficulty", "mixed"),
+                        parsedCutoffs,
+                        o.optBoolean("autoGenerationEnabled", false),
+                        clean(o, "autoGenTime", "00:00"),
+                        clean(o, "lastGeneratedDate", ""),
+                        clean(o, "lastGenerationStatus", "idle"),
+                        clean(o, "lastGenerationError", ""),
+                        o.optLong("lastGenerationTime", 0L)
                 ));
             }
             return out;
@@ -1454,6 +1559,76 @@ public final class EveAdminModels {
                         o.optInt("attemptCount", 0),
                         o.optDouble("averageScore", 0.0),
                         o.optDouble("highestScore", 0.0)
+                ));
+            }
+            return out;
+        }
+    }
+
+    public static final class QuestionAnalyticsItem {
+        public final String id;
+        public final String examId;
+        public final String examName;
+        public final String questionId;
+        public final int questionNumber;
+        public final String questionText;
+        public final String topic;
+        public final int attempts;
+        public final int correct;
+        public final int wrong;
+        public final int unattempted;
+        public final double wrongRate;
+        public final double accuracy;
+
+        public QuestionAnalyticsItem(
+                String id,
+                String examId,
+                String examName,
+                String questionId,
+                int questionNumber,
+                String questionText,
+                String topic,
+                int attempts,
+                int correct,
+                int wrong,
+                int unattempted,
+                double wrongRate,
+                double accuracy) {
+            this.id = id != null ? id : "";
+            this.examId = examId != null ? examId : "";
+            this.examName = examName != null ? examName : "";
+            this.questionId = questionId != null ? questionId : "";
+            this.questionNumber = Math.max(0, questionNumber);
+            this.questionText = questionText != null ? questionText : "";
+            this.topic = topic != null ? topic : "";
+            this.attempts = Math.max(0, attempts);
+            this.correct = Math.max(0, correct);
+            this.wrong = Math.max(0, wrong);
+            this.unattempted = Math.max(0, unattempted);
+            this.wrongRate = wrongRate;
+            this.accuracy = accuracy;
+        }
+
+        public static List<QuestionAnalyticsItem> parseList(JSONArray arr) {
+            List<QuestionAnalyticsItem> out = new ArrayList<>();
+            if (arr == null) return out;
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject o = arr.optJSONObject(i);
+                if (o == null) continue;
+                out.add(new QuestionAnalyticsItem(
+                        clean(o, "id", ""),
+                        clean(o, "examId", ""),
+                        clean(o, "examName", ""),
+                        clean(o, "questionId", ""),
+                        o.optInt("questionNumber", i + 1),
+                        clean(o, "questionText", ""),
+                        clean(o, "topic", ""),
+                        o.optInt("attempts", 0),
+                        o.optInt("correct", 0),
+                        o.optInt("wrong", 0),
+                        o.optInt("unattempted", 0),
+                        o.optDouble("wrongRate", 0.0),
+                        o.optDouble("accuracy", 0.0)
                 ));
             }
             return out;

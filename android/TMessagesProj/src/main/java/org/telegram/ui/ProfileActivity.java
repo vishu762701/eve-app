@@ -591,6 +591,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
     private int numberSectionRow;
     private int numberRow;
     public int birthdayRow;
+    private int examCategoryRow;
     private int setUsernameRow;
     private int bioRow;
     private int phoneSuggestionSectionRow;
@@ -4531,6 +4532,12 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 }
             } else if (position == noteRow) {
                 editNotes(view, position);
+            } else if (position == examCategoryRow) {
+                UserInfoActivity.showExamCategoryPicker(ProfileActivity.this, () -> {
+                    if (listAdapter != null) {
+                        listAdapter.notifyDataSetChanged();
+                    }
+                });
             } else {
                 processOnClickOrPress(position, view, x, y);
             }
@@ -10473,6 +10480,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         numberSectionRow = -1;
         numberRow = -1;
         birthdayRow = -1;
+        examCategoryRow = -1;
         setUsernameRow = -1;
         bioRow = -1;
         channelRow = -1;
@@ -10642,6 +10650,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 numberRow = rowCount++;
                 setUsernameRow = rowCount++;
                 bioRow = rowCount++;
+                examCategoryRow = rowCount++;
 
                 settingsSectionRow = rowCount++;
 
@@ -10729,6 +10738,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                     if (userInfo.note != null) {
                         noteRow = rowCount++;
                     }
+                }
+                if (UserObject.isUserSelf(user)) {
+                    examCategoryRow = rowCount++;
                 }
                 if (actionsView == null && userId != getUserConfig().getClientUserId()) {
                     notificationsRow = rowCount++;
@@ -13349,6 +13361,11 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                         }
                         detailCell.setTextAndValue(value, LocaleController.getString(R.string.Phone), true);
                         detailCell.setContentDescriptionValueFirst(false);
+                    } else if (position == examCategoryRow) {
+                        org.telegram.ui.eve.auth.EveUserProfile eveCached = org.telegram.ui.eve.auth.EveAuthManager.getInstance().getCachedProfile();
+                        String categoryVal = eveCached != null && !TextUtils.isEmpty(eveCached.category) ? eveCached.category : "General";
+                        detailCell.setTextAndValue(categoryVal, "Exam Category", true);
+                        detailCell.setContentDescriptionValueFirst(false);
                     } else if (position == setUsernameRow) {
                         TLRPC.User user = UserConfig.getInstance(currentAccount).getCurrentUser();
                         String text = "";
@@ -13971,7 +13988,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                         position == faqRow || position == policyRow || position == sendLogsRow || position == sendLastLogsRow ||
                         position == clearLogsRow || position == switchBackendRow || position == setAvatarRow ||
                         position == addToGroupButtonRow || position == premiumRow || position == premiumGiftingRow ||
-                        position == businessRow || position == liteModeRow || position == birthdayRow || position == channelRow ||
+                        position == businessRow || position == liteModeRow || position == birthdayRow || position == examCategoryRow || position == channelRow ||
                         position == starsRow || position == tonRow || position == linkedCommunityRow;
             }
             if (holder.itemView instanceof UserCell) {
@@ -14000,7 +14017,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             if (position == infoHeaderRow || position == membersHeaderRow || position == settingsSectionRow2 ||
                     position == numberSectionRow || position == helpHeaderRow || position == debugHeaderRow || position == botPermissionsHeader) {
                 return VIEW_TYPE_HEADER;
-            } else if (position == phoneRow || position == locationRow || position == numberRow || position == birthdayRow) {
+            } else if (position == phoneRow || position == locationRow || position == numberRow || position == birthdayRow || position == examCategoryRow) {
                 return VIEW_TYPE_TEXT_DETAIL;
             } else if (position == usernameRow || position == setUsernameRow) {
                 return VIEW_TYPE_TEXT_DETAIL_MULTILINE;
@@ -15320,6 +15337,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             put(++pointer, bizHoursRow, sparseIntArray);
             put(++pointer, bizLocationRow, sparseIntArray);
             put(++pointer, birthdayRow, sparseIntArray);
+            put(++pointer, examCategoryRow, sparseIntArray);
             put(++pointer, channelRow, sparseIntArray);
             put(++pointer, botStarsBalanceRow, sparseIntArray);
             put(++pointer, botTonBalanceRow, sparseIntArray);

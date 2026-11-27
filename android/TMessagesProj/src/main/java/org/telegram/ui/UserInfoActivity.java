@@ -39,6 +39,7 @@ import org.telegram.tgnet.TLObject;
 import org.telegram.tgnet.TLRPC;
 import org.telegram.tgnet.tl.TL_account;
 import org.telegram.ui.ActionBar.ActionBar;
+import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.SimpleActionBarDoneButton;
 import org.telegram.ui.ActionBar.ActionBarMenuItem;
 import org.telegram.ui.ActionBar.AlertDialog;
@@ -47,6 +48,7 @@ import org.telegram.ui.ActionBar.ThemeBind;
 import org.telegram.ui.Cells.EditTextCell;
 import org.telegram.ui.Components.AlertsCreator;
 import org.telegram.ui.Components.BulletinFactory;
+import org.telegram.ui.Components.CheckBox2;
 import org.telegram.ui.Components.IconBackgroundColors;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.RecyclerListView;
@@ -292,6 +294,9 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
     private static final int INFO_BIRTHDAY = 9;
     private static final int BUTTON_ADD_ACCOUNT = 10;
     private static final int BUTTON_LOGOUT = 11;
+    private static final int INFO_CATEGORY = 12;
+
+    public static final String[] EXAM_CATEGORIES = new String[] { "General", "OBC", "SC", "ST", "EWS" };
 
     public static final int ACCOUNT_OPTION_PHONE = INFO_PHONE;
     public static final int ACCOUNT_OPTION_USERNAME = INFO_USERNAME;
@@ -321,6 +326,8 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
     public int bioRow;
     @Keep
     public int birthdayRow;
+    @Keep
+    public int categoryRow;
     @Keep
     public int numberRow;
     @Keep
@@ -376,6 +383,9 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
         } else {
             items.add(SettingsActivity.SettingCell.Factory.of(INFO_BIRTHDAY, IconBackgroundColors.BLUE.top, IconBackgroundColors.BLUE.bottom, R.drawable.filled_birthday, getString(R.string.AddBirthday), null));
         }
+        categoryRow = items.size();
+        String currentCat = eveCached != null && !TextUtils.isEmpty(eveCached.category) ? eveCached.category : "General";
+        items.add(SettingsActivity.SettingCell.Factory.of(INFO_CATEGORY, IconBackgroundColors.PURPLE.top, IconBackgroundColors.PURPLE.bottom, R.drawable.msg_folders, currentCat, "Exam Category"));
         if (!getContactsController().getLoadingPrivacyInfo(ContactsController.PRIVACY_RULES_TYPE_BIRTHDAY)) {
             ArrayList<TLRPC.PrivacyRule> rules = getContactsController().getPrivacyRules(ContactsController.PRIVACY_RULES_TYPE_BIRTHDAY);
             if (rules != null && birthdayInfo == null) {
@@ -480,9 +490,94 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
                     org.telegram.ui.eve.auth.EveAuthManager.getInstance().getCachedProfile() != null
                             ? org.telegram.ui.eve.auth.EveAuthManager.getInstance().getCachedProfile().username : "",
                     "student_handle");
+        } else if (item.id == INFO_CATEGORY) {
+            showExamCategoryPicker(this, () -> {
+                if (listView != null && listView.adapter != null) {
+                    listView.adapter.update(true);
+                }
+            });
         } else if (item.id == BUTTON_LOGOUT) {
             presentFragment(new LogoutActivity());
         }
+    }
+
+    public static void showExamCategoryPicker(BaseFragment fragment, Runnable onUpdated) {
+        if (fragment == null || fragment.getParentActivity() == null) {
+            return;
+        }
+        Context context = fragment.getParentActivity();
+        Theme.ResourcesProvider rp = fragment.getResourceProvider();
+        org.telegram.ui.eve.auth.EveUserProfile cached = org.telegram.ui.eve.auth.EveAuthManager.getInstance().getCachedProfile();
+        String currentCat = cached != null && !TextUtils.isEmpty(cached.category) ? cached.category : "General";
+
+        LinearLayout container = new LinearLayout(context);
+        container.setOrientation(LinearLayout.VERTICAL);
+        container.setPadding(dp(12), dp(8), dp(12), dp(8));
+
+        final AlertDialog[] dialogHolder = new AlertDialog[1];
+        final CheckBox2[] boxes = new CheckBox2[EXAM_CATEGORIES.length];
+        for (int i = 0; i < EXAM_CATEGORIES.length; i++) {
+            final String category = EXAM_CATEGORIES[i];
+            LinearLayout row = new LinearLayout(context);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(dp(12), dp(12), dp(12), dp(12));
+            row.setBackground(Theme.getSelectorDrawable(false));
+
+            CheckBox2 radio = new CheckBox2(context, 21, rp);
+            radio.setDrawUnchecked(true);
+            radio.setDrawBackgroundAsArc(10);
+            radio.setColor(Theme.key_radioBackgroundChecked, Theme.key_radioBackground, Theme.key_checkboxCheck);
+            radio.setChecked(category.equalsIgnoreCase(currentCat), false);
+            boxes[i] = radio;
+            row.addView(radio, LayoutHelper.createLinear(24, 24, 0, 0, 14, 0));
+
+            TextView label = new TextView(context);
+            label.setText(category);
+            label.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16);
+            label.setTextColor(Theme.getColor(Theme.key_dialogTextBlack, rp));
+            row.addView(label, LayoutHelper.createLinear(0, LayoutHelper.WRAP_CONTENT, 1f));
+
+            final int pickedIndex = i;
+            row.setOnClickListener(v -> {
+                for (int j = 0; j < boxes.length; j++) {
+                    boxes[j].setChecked(j == pickedIndex, true);
+                }
+                if (dialogHolder[0] != null) {
+                    dialogHolder[0].dismiss();
+                }
+                try {
+                    JSONObject updates = new JSONObject();
+                    updates.put("category", category);
+                    org.telegram.ui.eve.auth.EveAuthManager.getInstance().updateEveProfileFields(updates, new org.telegram.ui.eve.auth.EveAuthManager.SimpleCallback() {
+                        @Override
+                        public void onSuccess(String message) {
+                            if (fragment.getParentActivity() == null) return;
+                            BulletinFactory.of(fragment).createSuccessBulletin("Exam Category updated to " + category).show();
+                            if (onUpdated != null) {
+                                onUpdated.run();
+                            }
+                        }
+
+                        @Override
+                        public void onError(String message) {
+                            if (fragment.getParentActivity() == null) return;
+                            BulletinFactory.of(fragment).createErrorBulletin(!TextUtils.isEmpty(message) ? message : "Unable to update category.").show();
+                        }
+                    });
+                } catch (Throwable ignored) {
+                }
+            });
+            container.addView(row, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+        }
+
+        AlertDialog dialog = new AlertDialog.Builder(context, rp)
+                .setTitle("Exam Category")
+                .setView(container)
+                .setNegativeButton(LocaleController.getString(R.string.Cancel), null)
+                .create();
+        dialogHolder[0] = dialog;
+        fragment.showDialog(dialog);
     }
 
     private void showEveFieldEditDialog(String title, String fieldKey, String currentVal, String hint) {

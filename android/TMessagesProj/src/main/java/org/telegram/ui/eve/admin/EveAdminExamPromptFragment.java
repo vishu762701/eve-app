@@ -475,7 +475,7 @@ public class EveAdminExamPromptFragment extends BaseFragment {
         }
     }
 
-    private static byte[] readUriBytes(Context context, Uri uri, int maxBytes) throws Exception {
+    static byte[] readUriBytes(Context context, Uri uri, int maxBytes) throws Exception {
         try (InputStream is = context.getContentResolver().openInputStream(uri)) {
             if (is == null) return null;
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -493,7 +493,7 @@ public class EveAdminExamPromptFragment extends BaseFragment {
         }
     }
 
-    private static String resolveFileName(Context context, Uri uri) {
+    static String resolveFileName(Context context, Uri uri) {
         String name = "syllabus.pdf";
         try (Cursor cursor = context.getContentResolver().query(uri, null, null, null, null)) {
             if (cursor != null && cursor.moveToFirst()) {

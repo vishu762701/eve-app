@@ -624,4 +624,91 @@ public class EveAdminControlCenterTest {
         assertEquals("DELETE https://eve-backend.anyqueairdrop.workers.dev/api/admin/announcement-channel/avatar",
                 requests.get(requests.size() - 1));
     }
+
+    @Test
+    public void adminUpgrades_cutoffsBulkCsvAnalyticsAndPremiumHub() throws Exception {
+        ClassLoader cl = EveAdminControlCenterTest.class.getClassLoader();
+        assertNotNull(Class.forName("org.telegram.ui.eve.admin.EveAdminPremiumHubFragment", false, cl));
+        assertNotNull(Class.forName("org.telegram.ui.eve.admin.EveAdminAttemptsBarChartView", false, cl));
+        assertNotNull(Class.forName("org.telegram.ui.eve.admin.EveAdminModels$QuestionAnalyticsItem", false, cl));
+
+        // 1. AdminExamItem cutoffs, draft publishMode, and daily auto-gen fields
+        org.json.JSONArray arr = new org.json.JSONArray("[{"
+                + "\"id\":\"ex-77\",\"examName\":\"SSC CGL Tier 2\",\"category\":\"SSC\","
+                + "\"publishMode\":\"draft\",\"autoGenerationEnabled\":true,\"autoGenTime\":\"07:15\","
+                + "\"lastGeneratedDate\":\"2026-11-27\",\"lastGenerationStatus\":\"success\","
+                + "\"cutoffs\":{\"General\":140,\"OBC\":132.5,\"SC\":118,\"ST\":110,\"EWS\":136}"
+                + "}]");
+        java.util.List<EveAdminModels.AdminExamItem> exams = EveAdminModels.AdminExamItem.parseList(arr);
+        assertEquals(1, exams.size());
+        EveAdminModels.AdminExamItem ex = exams.get(0);
+        assertTrue(ex.isDraft());
+        assertTrue(ex.autoGenerationEnabled);
+        assertEquals("07:15", ex.autoGenTime);
+        assertEquals("success", ex.lastGenerationStatus);
+        assertEquals(Double.valueOf(132.5), ex.getCutoffForCategory("OBC"));
+
+        // 2. Bulk import parser: JSON + CSV with quoted commas + invalid row detection
+        EveAdminDialogs.BulkImportParseResult jsonRes = EveAdminDialogs.parseBulkQuestionsInput(
+                "[{\"questionText\":\"Capital of France?\",\"optionA\":\"Rome\",\"optionB\":\"Paris\",\"optionC\":\"Berlin\",\"optionD\":\"Madrid\",\"correctAnswer\":\"B\"}]",
+                "ex-77");
+        assertEquals("JSON", jsonRes.format);
+        assertEquals(1, jsonRes.validQuestions.length());
+        assertEquals("ex-77", jsonRes.validQuestions.getJSONObject(0).getString("examId"));
+
+        String csvSample = "questionText,optionA,optionB,optionC,optionD,correctAnswer,explanation,topic\n"
+                + "\"2, 4, 6, ?\",7,8,9,10,B,Even sequence,Quant\n"
+                + "\"Bad row missing options\",A,B\n";
+        EveAdminDialogs.BulkImportParseResult csvRes = EveAdminDialogs.parseBulkQuestionsInput(csvSample, "ex-77");
+        assertEquals("CSV", csvRes.format);
+        assertEquals(1, csvRes.validQuestions.length());
+        assertEquals("2, 4, 6, ?", csvRes.validQuestions.getJSONObject(0).getString("questionText"));
+        assertEquals(1, csvRes.errors.size());
+
+        // 3. Admin repository analytics ?days=7, question analytics, reassignSyllabus & updateExamSettings
+        final java.util.List<String> urls = new java.util.ArrayList<>();
+        final Map<String, String> bodies = new HashMap<>();
+        EveBackendClient client = new EveBackendClient("https://eve-backend.anyqueairdrop.workers.dev", (method, url, token, body) -> {
+            urls.add(method + " " + url);
+            bodies.put(method + " " + url, body != null ? body : "");
+            if (url.contains("/api/admin/analytics/questions")) {
+                return new EveBackendClient.HttpResponse(200, "{\"success\":true,\"data\":[{"
+                        + "\"id\":\"qa-1\",\"examId\":\"ex-77\",\"examName\":\"SSC CGL Tier 2\","
+                        + "\"questionId\":\"q-1\",\"questionNumber\":3,\"questionText\":\"Hard Q?\","
+                        + "\"topic\":\"Quant\",\"attempts\":20,\"correct\":4,\"wrong\":14,\"unattempted\":2,"
+                        + "\"wrongRate\":70.0,\"accuracy\":20.0}]}");
+            }
+            if (url.contains("/api/admin/analytics/exams")) {
+                return new EveBackendClient.HttpResponse(200, "{\"success\":true,\"data\":[{"
+                        + "\"examId\":\"ex-77\",\"examName\":\"SSC CGL Tier 2\",\"category\":\"SSC\","
+                        + "\"attemptCount\":18,\"averageScore\":112.5,\"highestScore\":145.0}]}");
+            }
+            return new EveBackendClient.HttpResponse(200, "{\"success\":true,\"data\":{}}");
+        });
+
+        EveAdminRepository repo = new EveAdminRepository(client);
+        java.util.List<EveAdminModels.ExamAnalyticsItem> analytics7 = repo.fetchExamAnalytics("tok", 7);
+        assertEquals(1, analytics7.size());
+        assertTrue(urls.get(urls.size() - 1).endsWith("/api/admin/analytics/exams?days=7"));
+
+        java.util.List<EveAdminModels.QuestionAnalyticsItem> qAnalytics = repo.fetchQuestionAnalytics("tok", "ex-77");
+        assertEquals(1, qAnalytics.size());
+        assertEquals(70.0, qAnalytics.get(0).wrongRate, 0.01);
+        assertEquals("Hard Q?", qAnalytics.get(0).questionText);
+
+        repo.reassignSyllabus("tok", "ex-77", "ex-88", "/api/exams/ex-77/syllabus", "syllabus.pdf");
+        JSONObject reassignPayload = new JSONObject(bodies.get("POST https://eve-backend.anyqueairdrop.workers.dev/api/exams/ex-77/syllabus/reassign"));
+        assertEquals("ex-88", reassignPayload.getString("targetExamId"));
+        assertEquals("/api/exams/ex-77/syllabus", reassignPayload.getString("expectedSyllabusUrl"));
+        assertEquals("syllabus.pdf", reassignPayload.getString("expectedSyllabusFileName"));
+
+        java.util.Map<String, Double> nextCutoffs = new java.util.LinkedHashMap<>();
+        nextCutoffs.put("General", 145.0);
+        repo.updateExamSettings("tok", "ex-77", "SSC CGL Tier 2", "SSC", 60, 30, "0.5", "draft", nextCutoffs, true, "08:00");
+        JSONObject updatePayload = new JSONObject(bodies.get("PUT https://eve-backend.anyqueairdrop.workers.dev/api/exams/ex-77"));
+        assertEquals("draft", updatePayload.getString("publishMode"));
+        assertEquals(true, updatePayload.getBoolean("autoGenEnabled"));
+        assertEquals("08:00", updatePayload.getString("autoGenTime"));
+        assertEquals(145.0, updatePayload.getJSONObject("cutoffs").getDouble("General"), 0.01);
+    }
 }

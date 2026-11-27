@@ -5,6 +5,7 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.net.Uri;
 import android.text.InputType;
+import android.text.TextUtils;
 import android.view.Gravity;
 import android.widget.EditText;
 import android.widget.ImageView;
@@ -25,6 +26,7 @@ import org.telegram.ui.eve.premium.EvePremiumRepository;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
@@ -112,8 +114,8 @@ public final class EveAdminDialogs {
         container.addView(customNegInput);
 
         // Publish Mode clickable picker row
-        final String[] modeLabels = new String[] { "Inherit", "Live", "Paused", "Archived" };
-        final String[] modeValues = new String[] { "inherit", "live", "paused", "archived" };
+        final String[] modeLabels = new String[] { "Inherit", "Live", "Paused", "Draft", "Archived" };
+        final String[] modeValues = new String[] { "inherit", "live", "paused", "draft", "archived" };
         final String[] selectedMode = new String[] { normalizePublishMode(existing != null ? existing.publishMode : "live") };
         addFieldLabel(activity, container, "Publish Mode", rp);
         TextView publishPicker = new TextView(activity);
@@ -140,6 +142,53 @@ public final class EveAdminDialogs {
         });
         container.addView(publishPicker, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 4, 0, 8));
 
+        // Category Cutoffs (General, OBC, SC, ST, EWS)
+        addFieldLabel(activity, container, "Category Cutoffs (optional)", rp);
+        final String[] cutoffCats = new String[] { "General", "OBC", "SC", "ST", "EWS" };
+        final EditText[] cutoffInputs = new EditText[cutoffCats.length];
+        for (int i = 0; i < cutoffCats.length; i++) {
+            Double existingVal = existing != null ? existing.getCutoffForCategory(cutoffCats[i]) : null;
+            String valStr = existingVal != null ? String.valueOf(existingVal) : "";
+            cutoffInputs[i] = addField(activity, container, cutoffCats[i] + " Cutoff", valStr,
+                    InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL, rp);
+        }
+
+        // Daily Auto-Generation Toggle + Native Time Picker
+        TextCheckCell autoGenCheck = new TextCheckCell(activity);
+        boolean initialAutoGen = existing != null && existing.autoGenerationEnabled;
+        autoGenCheck.setTextAndCheck("Daily Auto-Generation", initialAutoGen, true);
+        autoGenCheck.setOnClickListener(v -> autoGenCheck.setChecked(!autoGenCheck.isChecked()));
+        container.addView(autoGenCheck);
+
+        final String[] selectedTime = new String[] {
+                existing != null && !TextUtils.isEmpty(existing.autoGenTime) ? existing.autoGenTime : "06:00"
+        };
+        TextView timePickerBtn = new TextView(activity);
+        timePickerBtn.setTextSize(15);
+        timePickerBtn.setPadding(AndroidUtilities.dp(12), AndroidUtilities.dp(10), AndroidUtilities.dp(12), AndroidUtilities.dp(10));
+        timePickerBtn.setTextColor(Theme.getColor(Theme.key_dialogTextBlack, rp));
+        timePickerBtn.setBackground(Theme.createRoundRectDrawable(
+                AndroidUtilities.dp(8),
+                Theme.multAlpha(Theme.getColor(Theme.key_dialogTextGray3, rp), 0.10f)));
+        timePickerBtn.setText("Daily Generation Time: " + selectedTime[0] + " IST  ▾");
+        timePickerBtn.setOnClickListener(v -> {
+            int hour = 6;
+            int min = 0;
+            try {
+                String[] parts = selectedTime[0].split(":");
+                if (parts.length >= 2) {
+                    hour = Math.max(0, Math.min(23, Integer.parseInt(parts[0].trim())));
+                    min = Math.max(0, Math.min(59, Integer.parseInt(parts[1].trim())));
+                }
+            } catch (Throwable ignored) {
+            }
+            new android.app.TimePickerDialog(activity, (view, h, m) -> {
+                selectedTime[0] = String.format(Locale.US, "%02d:%02d", h, m);
+                timePickerBtn.setText("Daily Generation Time: " + selectedTime[0] + " IST  ▾");
+            }, hour, min, true).show();
+        });
+        container.addView(timePickerBtn, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 4, 0, 8));
+
         EditText promptInput = existing == null
                 ? addField(activity, container, "AI Generation Prompt Notes (optional)", "", InputType.TYPE_CLASS_TEXT, rp)
                 : null;
@@ -147,7 +196,7 @@ public final class EveAdminDialogs {
         AlertDialog.Builder builder = new AlertDialog.Builder(activity, rp)
                 .setTitle(existing == null ? "Create Exam" : "Edit Exam: " + existing.examName)
                 .setView(wrapScroll(activity, container))
-                .setPositiveButton(existing == null ? "Create" : "Save", (d, w) -> {
+                .setPositiveButton(existing == null ? "Create" : "Save Settings", (d, w) -> {
                     String name = text(nameInput);
                     String category = textOr(categoryInput, "General");
                     int minutes = parseIntBounded(minutesInput, 60, 1, 600);
@@ -157,6 +206,21 @@ public final class EveAdminDialogs {
                             : selectedNeg[0];
                     String mode = selectedMode[0];
                     String prompt = promptInput != null ? text(promptInput) : "";
+                    java.util.Map<String, Double> cutoffsMap = new java.util.LinkedHashMap<>();
+                    for (int i = 0; i < cutoffCats.length; i++) {
+                        String rawCut = text(cutoffInputs[i]);
+                        if (!rawCut.isEmpty()) {
+                            try {
+                                double v = Double.parseDouble(rawCut);
+                                if (!Double.isNaN(v) && !Double.isInfinite(v) && v >= 0.0) {
+                                    cutoffsMap.put(cutoffCats[i], v);
+                                }
+                            } catch (NumberFormatException ignored) {
+                            }
+                        }
+                    }
+                    boolean autoGenOn = autoGenCheck.isChecked();
+                    String autoGenTimeVal = selectedTime[0];
                     if (name.isEmpty()) {
                         showError(fragment, "Exam name cannot be empty.");
                         return;
@@ -168,10 +232,13 @@ public final class EveAdminDialogs {
                     repo.runWithAdminToken(cb, token -> {
                         if (existing == null) {
                             String id = repo.createExam(token, name, category, minutes, qCount, "Mock 1", neg, mode, prompt);
+                            if (!cutoffsMap.isEmpty() || !autoGenOn || !"00:00".equals(autoGenTimeVal)) {
+                                repo.updateExamSettings(token, id, name, category, minutes, qCount, neg, mode, cutoffsMap, autoGenOn, autoGenTimeVal);
+                            }
                             repo.postSuccess(cb, "Exam created (" + id + ").");
                         } else {
-                            repo.updateExam(token, existing.id, name, category, minutes, qCount, neg, mode);
-                            repo.postSuccess(cb, "Exam updated and logged.");
+                            repo.updateExamSettings(token, existing.id, name, category, minutes, qCount, neg, mode, cutoffsMap, autoGenOn, autoGenTimeVal);
+                            repo.postSuccess(cb, "Exam settings & cutoffs saved.");
                         }
                     });
                 })
@@ -420,40 +487,232 @@ public final class EveAdminDialogs {
         repo.runWithAdminToken(cb, token -> repo.postSuccess(cb, repo.fetchQuestions(token, exam.id)));
     }
 
+    public static final class BulkImportParseResult {
+        public final org.json.JSONArray validQuestions;
+        public final List<String> errors;
+        public final String format;
+
+        public BulkImportParseResult(org.json.JSONArray validQuestions, List<String> errors, String format) {
+            this.validQuestions = validQuestions != null ? validQuestions : new org.json.JSONArray();
+            this.errors = errors != null ? errors : Collections.emptyList();
+            this.format = format != null ? format : "unknown";
+        }
+    }
+
+    public static BulkImportParseResult parseBulkQuestionsInput(String rawInput, String examId) {
+        String raw = rawInput != null ? rawInput.trim() : "";
+        List<String> errors = new ArrayList<>();
+        org.json.JSONArray out = new org.json.JSONArray();
+        if (raw.isEmpty()) {
+            errors.add("Input is empty.");
+            return new BulkImportParseResult(out, errors, "empty");
+        }
+        if (raw.startsWith("[")) {
+            try {
+                org.json.JSONArray arr = new org.json.JSONArray(raw);
+                for (int i = 0; i < arr.length(); i++) {
+                    JSONObject q = arr.optJSONObject(i);
+                    if (q == null) {
+                        errors.add("Item #" + (i + 1) + " is not an object.");
+                        continue;
+                    }
+                    String qText = q.optString("questionText", "").trim();
+                    String optA = q.optString("optionA", "").trim();
+                    String optB = q.optString("optionB", "").trim();
+                    String optC = q.optString("optionC", "").trim();
+                    String optD = q.optString("optionD", "").trim();
+                    String ans = q.optString("correctAnswer", "A").trim().toUpperCase(Locale.US);
+                    if (qText.isEmpty() || optA.isEmpty() || optB.isEmpty() || optC.isEmpty() || optD.isEmpty()) {
+                        errors.add("Item #" + (i + 1) + " missing questionText or options.");
+                        continue;
+                    }
+                    if (!"A".equals(ans) && !"B".equals(ans) && !"C".equals(ans) && !"D".equals(ans)) {
+                        errors.add("Item #" + (i + 1) + " invalid correctAnswer (" + ans + ").");
+                        continue;
+                    }
+                    JSONObject copy = new JSONObject(q.toString());
+                    if (!copy.has("examId") || copy.optString("examId").trim().isEmpty()) {
+                        copy.put("examId", examId != null ? examId : "");
+                    }
+                    copy.put("correctAnswer", ans);
+                    out.put(copy);
+                }
+                return new BulkImportParseResult(out, errors, "JSON");
+            } catch (Exception e) {
+                errors.add("Invalid JSON array: " + e.getMessage());
+                return new BulkImportParseResult(out, errors, "JSON");
+            }
+        }
+
+        // CSV parser (supports header row + quoted fields with commas)
+        List<List<String>> rows = parseCsvRows(raw);
+        if (rows.isEmpty()) {
+            errors.add("No CSV rows found.");
+            return new BulkImportParseResult(out, errors, "CSV");
+        }
+        int startIdx = 0;
+        List<String> first = rows.get(0);
+        if (!first.isEmpty() && first.get(0).toLowerCase(Locale.US).contains("question")) {
+            startIdx = 1;
+        }
+        for (int r = startIdx; r < rows.size(); r++) {
+            List<String> cols = rows.get(r);
+            if (cols.size() < 6) {
+                errors.add("CSV row " + (r + 1) + " has fewer than 6 columns.");
+                continue;
+            }
+            String qText = cols.get(0).trim();
+            String optA = cols.get(1).trim();
+            String optB = cols.get(2).trim();
+            String optC = cols.get(3).trim();
+            String optD = cols.get(4).trim();
+            String ans = cols.get(5).trim().toUpperCase(Locale.US);
+            String explanation = cols.size() > 6 ? cols.get(6).trim() : "";
+            String topic = cols.size() > 7 ? cols.get(7).trim() : "";
+            if (qText.isEmpty() || optA.isEmpty() || optB.isEmpty() || optC.isEmpty() || optD.isEmpty()) {
+                errors.add("CSV row " + (r + 1) + " missing question or options.");
+                continue;
+            }
+            if (!"A".equals(ans) && !"B".equals(ans) && !"C".equals(ans) && !"D".equals(ans)) {
+                errors.add("CSV row " + (r + 1) + " invalid correctAnswer (" + ans + ").");
+                continue;
+            }
+            try {
+                JSONObject obj = new JSONObject();
+                obj.put("examId", examId != null ? examId : "");
+                obj.put("questionText", qText);
+                obj.put("optionA", optA);
+                obj.put("optionB", optB);
+                obj.put("optionC", optC);
+                obj.put("optionD", optD);
+                obj.put("correctAnswer", ans);
+                obj.put("explanation", explanation);
+                obj.put("topic", topic);
+                out.put(obj);
+            } catch (Exception ignored) {
+            }
+        }
+        return new BulkImportParseResult(out, errors, "CSV");
+    }
+
+    private static List<List<String>> parseCsvRows(String input) {
+        List<List<String>> rows = new ArrayList<>();
+        List<String> currentRow = new ArrayList<>();
+        StringBuilder field = new StringBuilder();
+        boolean inQuotes = false;
+        for (int i = 0; i < input.length(); i++) {
+            char ch = input.charAt(i);
+            if (inQuotes) {
+                if (ch == '"') {
+                    if (i + 1 < input.length() && input.charAt(i + 1) == '"') {
+                        field.append('"');
+                        i++;
+                    } else {
+                        inQuotes = false;
+                    }
+                } else {
+                    field.append(ch);
+                }
+            } else if (ch == '"') {
+                inQuotes = true;
+            } else if (ch == ',') {
+                currentRow.add(field.toString());
+                field.setLength(0);
+            } else if (ch == '\n' || ch == '\r') {
+                if (ch == '\r' && i + 1 < input.length() && input.charAt(i + 1) == '\n') {
+                    i++;
+                }
+                currentRow.add(field.toString());
+                field.setLength(0);
+                boolean anyNonEmpty = false;
+                for (String c : currentRow) {
+                    if (!c.trim().isEmpty()) {
+                        anyNonEmpty = true;
+                        break;
+                    }
+                }
+                if (anyNonEmpty) {
+                    rows.add(currentRow);
+                }
+                currentRow = new ArrayList<>();
+            } else {
+                field.append(ch);
+            }
+        }
+        currentRow.add(field.toString());
+        boolean anyNonEmpty = false;
+        for (String c : currentRow) {
+            if (!c.trim().isEmpty()) {
+                anyNonEmpty = true;
+                break;
+            }
+        }
+        if (anyNonEmpty) {
+            rows.add(currentRow);
+        }
+        return rows;
+    }
+
     public static void showBulkImportQuestionsDialog(
             BaseFragment fragment,
             EveAdminRepository repo,
             EveAdminModels.AdminExamItem exam,
             Runnable onImported) {
+        showBulkImportQuestionsDialog(fragment, repo, exam, "", null, onImported);
+    }
+
+    public static void showBulkImportQuestionsDialog(
+            BaseFragment fragment,
+            EveAdminRepository repo,
+            EveAdminModels.AdminExamItem exam,
+            String prefillText,
+            Runnable onPickFile,
+            Runnable onImported) {
         Activity activity = fragment.getParentActivity();
         if (activity == null) return;
+        Theme.ResourcesProvider rp = fragment.getResourceProvider();
         LinearLayout container = makeFormContainer(activity);
-        EditText jsonInput = addField(activity, container,
-                "Paste JSON array of questions ([{\"questionText\",\"optionA\",\"optionB\",\"optionC\",\"optionD\",\"correctAnswer\",\"explanation\",\"topic\"}])",
-                "",
-                InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
-        new AlertDialog.Builder(activity)
-                .setTitle("Bulk Import: " + exam.examName)
+        TextView previewBanner = new TextView(activity);
+        previewBanner.setTextSize(13);
+        previewBanner.setTextColor(Theme.getColor(Theme.key_dialogTextGray3, rp));
+        previewBanner.setPadding(0, AndroidUtilities.dp(4), 0, AndroidUtilities.dp(6));
+        previewBanner.setText("Paste JSON array or CSV (questionText,optionA,optionB,optionC,optionD,correctAnswer,explanation,topic).");
+        container.addView(previewBanner);
+
+        EditText input = addField(activity, container,
+                "JSON array [...] or CSV rows",
+                prefillText != null ? prefillText : "",
+                InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE,
+                rp);
+
+        Runnable refreshPreview = () -> {
+            BulkImportParseResult res = parseBulkQuestionsInput(text(input), exam.id);
+            previewBanner.setText(String.format(Locale.US,
+                    "%s Preview: %d valid question(s), %d warning(s)%s",
+                    res.format,
+                    res.validQuestions.length(),
+                    res.errors.size(),
+                    res.errors.isEmpty() ? "" : (" — " + res.errors.get(0))));
+        };
+        if (prefillText != null && !prefillText.trim().isEmpty()) {
+            refreshPreview.run();
+        }
+        input.addTextChangedListener(new android.text.TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
+            @Override public void afterTextChanged(android.text.Editable s) { refreshPreview.run(); }
+        });
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(activity, rp)
+                .setTitle("Bulk Import (JSON / CSV): " + exam.examName)
                 .setView(wrapScroll(activity, container))
-                .setPositiveButton("Import", (d, w) -> {
-                    String raw = text(jsonInput);
-                    if (raw.isEmpty()) {
-                        showError(fragment, "Paste a JSON array of questions.");
+                .setPositiveButton("Validate & Upload", (d, w) -> {
+                    BulkImportParseResult parsedRes = parseBulkQuestionsInput(text(input), exam.id);
+                    if (parsedRes.validQuestions.length() == 0) {
+                        showError(fragment, parsedRes.errors.isEmpty() ? "No valid questions found." : parsedRes.errors.get(0));
                         return;
                     }
-                    org.json.JSONArray parsed;
-                    try {
-                        parsed = new org.json.JSONArray(raw);
-                        for (int i = 0; i < parsed.length(); i++) {
-                            JSONObject q = parsed.getJSONObject(i);
-                            if (!q.has("examId") || q.optString("examId").isEmpty()) {
-                                q.put("examId", exam.id);
-                            }
-                        }
-                    } catch (Exception e) {
-                        showError(fragment, "Invalid JSON array: " + e.getMessage());
-                        return;
-                    }
+                    org.json.JSONArray parsed = parsedRes.validQuestions;
                     EveAdminRepository.ResultCallback<String> cb = callback(fragment, msg -> {
                         showInfo(fragment, msg);
                         if (onImported != null) onImported.run();
@@ -482,11 +741,14 @@ public final class EveAdminDialogs {
                             return;
                         }
                         int count = repo.batchImportQuestions(token, deduped);
-                        repo.postSuccess(cb, "Imported " + count + " questions" + (skipped > 0 ? " (" + skipped + " duplicates skipped)." : "."));
+                        repo.postSuccess(cb, "Uploaded " + count + " " + parsedRes.format + " questions" + (skipped > 0 ? " (" + skipped + " duplicates skipped)." : "."));
                     });
                 })
-                .setNegativeButton("Cancel", null)
-                .show();
+                .setNegativeButton("Cancel", null);
+        if (onPickFile != null) {
+            builder.setNeutralButton("Pick .json / .csv", (d, w) -> onPickFile.run());
+        }
+        builder.show();
     }
 
     public static void showQuestionActions(

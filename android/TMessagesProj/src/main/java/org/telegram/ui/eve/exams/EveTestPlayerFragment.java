@@ -7,14 +7,17 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
+import android.graphics.RectF;
 import android.graphics.drawable.ClipDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.LayerDrawable;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.text.TextPaint;
 import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -35,6 +38,7 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.recyclerview.widget.GridLayoutManager;
+import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import org.json.JSONArray;
@@ -76,6 +80,52 @@ public class EveTestPlayerFragment extends BaseFragment {
     private static final int ID_PALETTE_MENU = 2;
     private static final int ID_SUBMIT_MENU = 3;
 
+    public enum PaletteState {
+        UNVISITED,
+        ANSWERED,
+        MARKED,
+        ANSWERED_AND_MARKED
+    }
+
+    public static PaletteState resolvePaletteState(boolean answered, boolean marked) {
+        if (answered && marked) {
+            return PaletteState.ANSWERED_AND_MARKED;
+        }
+        if (marked) {
+            return PaletteState.MARKED;
+        }
+        if (answered) {
+            return PaletteState.ANSWERED;
+        }
+        return PaletteState.UNVISITED;
+    }
+
+    public static boolean isLowTimeWarning(int secondsLeft, int timeLimitSeconds) {
+        return timeLimitSeconds > 0 && secondsLeft <= 120;
+    }
+
+    public static String validateStartupSession(String attemptKey, EveExamModels.StartAttemptResult res, String error) {
+        if (attemptKey == null || attemptKey.trim().isEmpty()) {
+            return "Invalid mock test identifier. Please go back and try again.";
+        }
+        if (error != null && !error.trim().isEmpty()) {
+            return error.trim();
+        }
+        if (res == null) {
+            return "Could not initialize test session.";
+        }
+        if (res.alreadySubmitted) {
+            if (res.completedAttemptId != null && !res.completedAttemptId.trim().isEmpty()) {
+                return "ALREADY_SUBMITTED";
+            }
+            return "This attempt was already submitted, but the result reference is missing.";
+        }
+        if (res.questions == null || res.questions.isEmpty()) {
+            return "No questions are available in this test yet.";
+        }
+        return "";
+    }
+
     private final EveExamModels.ExamSummary exam;
     private final EveExamModels.GeneratedTestSummary test;
     private final String attemptKey;
@@ -83,6 +133,7 @@ public class EveTestPlayerFragment extends BaseFragment {
     private final Handler timerHandler = new Handler(Looper.getMainLooper());
     private final Map<String, String> selectedAnswers = new HashMap<>();
     private final Set<String> markedForReview = new HashSet<>();
+    private final Set<String> bookmarkedIds = new HashSet<>();
     private final Map<String, Integer> perQuestionSeconds = new HashMap<>();
 
     private List<EveExamModels.TestQuestion> allQuestions = new ArrayList<>();
@@ -99,17 +150,25 @@ public class EveTestPlayerFragment extends BaseFragment {
     private boolean preferHindi = LocaleController.isHindiSelected();
     private boolean submitting = false;
     private boolean finishedAttempt = false;
+    private volatile boolean destroyed = false;
     private int navBarHeight = 0;
 
     private LinearLayout mainColumn;
     private View actionBarFadeView;
     private ProgressBar loadingBar;
     private TextView statusMessageView;
+    private LinearLayout errorCard;
+    private TextView errorTitleView;
+    private TextView errorBodyView;
+    private TextView errorRetryBtn;
+    private TextView errorBackBtn;
     private LinearLayout contentContainer;
     private LinearLayout statusHeaderStrip;
     private TextView statusStripText;
-    private TextView timerPillView;
+    private CircularTimerView circularTimerView;
     private ProgressBar questionProgressBar;
+    private RecyclerView inlinePaletteView;
+    private PaletteAdapter inlinePaletteAdapter;
     private View statusDivider;
     private HorizontalScrollView sectionStripScroll;
     private LinearLayout sectionStripLayout;
@@ -125,6 +184,7 @@ public class EveTestPlayerFragment extends BaseFragment {
     private TextView prevBtn;
     private TextView reviewBtn;
     private TextView clearBtn;
+    private ImageView bookmarkBtn;
     private ImageView reportBtn;
     private TextView nextBtn;
     private SimpleActionBarMenuItem langMenuItem;
@@ -132,6 +192,9 @@ public class EveTestPlayerFragment extends BaseFragment {
     private final Runnable timerRunnable = new Runnable() {
         @Override
         public void run() {
+            if (destroyed) {
+                return;
+            }
             if (!finishedAttempt && !submitting && timeLimitSeconds > 0 && timerAnchorElapsedMs > 0L) {
                 long elapsedSec = (SystemClock.elapsedRealtime() - timerAnchorElapsedMs) / 1000L;
                 int left = Math.max(0, remainingSeconds - (int) elapsedSec);
@@ -176,6 +239,7 @@ public class EveTestPlayerFragment extends BaseFragment {
 
     @Override
     public View createView(Context context) {
+        destroyed = false;
         setHasOwnBackground(true);
         String title = test != null ? test.getDisplayTitle() : (exam != null ? exam.examName : "Mock Test");
         Theme.ResourcesProvider rp = getResourceProvider();
@@ -224,12 +288,44 @@ public class EveTestPlayerFragment extends BaseFragment {
         statusMessageView.setPadding(dp(24), dp(12), dp(24), dp(12));
         mainColumn.addView(statusMessageView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
 
+        errorCard = new LinearLayout(context);
+        errorCard.setOrientation(LinearLayout.VERTICAL);
+        errorCard.setGravity(Gravity.CENTER_HORIZONTAL);
+        errorCard.setPadding(dp(20), dp(22), dp(20), dp(22));
+        errorCard.setVisibility(View.GONE);
+        mainColumn.addView(errorCard, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 16, 20, 16, 0));
+
+        errorTitleView = new TextView(context);
+        errorTitleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 17);
+        errorTitleView.setTypeface(AndroidUtilities.bold());
+        errorTitleView.setGravity(Gravity.CENTER);
+        errorCard.addView(errorTitleView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 8));
+
+        errorBodyView = new TextView(context);
+        errorBodyView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
+        errorBodyView.setGravity(Gravity.CENTER);
+        errorBodyView.setLineSpacing(dp(3), 1f);
+        errorCard.addView(errorBodyView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 18));
+
+        LinearLayout errorActions = new LinearLayout(context);
+        errorActions.setOrientation(LinearLayout.HORIZONTAL);
+        errorActions.setGravity(Gravity.CENTER);
+        errorCard.addView(errorActions, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+
+        errorRetryBtn = createActionButton(context, "Retry", true);
+        errorRetryBtn.setOnClickListener(v -> startTestSession());
+        errorActions.addView(errorRetryBtn, LayoutHelper.createLinear(0, 42, 1f, 0, 0, 8, 0));
+
+        errorBackBtn = createActionButton(context, "Go Back", false);
+        errorBackBtn.setOnClickListener(v -> finishFragment());
+        errorActions.addView(errorBackBtn, LayoutHelper.createLinear(0, 42, 1f, 8, 0, 0, 0));
+
         contentContainer = new LinearLayout(context);
         contentContainer.setOrientation(LinearLayout.VERTICAL);
         contentContainer.setVisibility(View.GONE);
         mainColumn.addView(contentContainer, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 0, 1f));
 
-        // Status strip + Timer pill + thin smooth ProgressBar
+        // Status strip + Circular Timer + thin smooth ProgressBar + inline interactive Palette
         statusHeaderStrip = new LinearLayout(context);
         statusHeaderStrip.setOrientation(LinearLayout.VERTICAL);
         statusHeaderStrip.setPadding(dp(14), dp(10), dp(14), dp(8));
@@ -247,15 +343,20 @@ public class EveTestPlayerFragment extends BaseFragment {
         statusStripText.setEllipsize(TextUtils.TruncateAt.END);
         topStatusRow.addView(statusStripText, LayoutHelper.createLinear(0, LayoutHelper.WRAP_CONTENT, 1f, 0, 0, 8, 0));
 
-        timerPillView = new TextView(context);
-        timerPillView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12.5f);
-        timerPillView.setTypeface(AndroidUtilities.bold());
-        timerPillView.setPadding(dp(10), dp(4), dp(10), dp(4));
-        topStatusRow.addView(timerPillView, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT));
+        circularTimerView = new CircularTimerView(context, rp);
+        circularTimerView.setOnClickListener(v -> showQuestionPaletteSheet());
+        topStatusRow.addView(circularTimerView, LayoutHelper.createLinear(52, 52));
 
         questionProgressBar = new ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal);
         questionProgressBar.setMax(1000);
-        statusHeaderStrip.addView(questionProgressBar, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 4));
+        statusHeaderStrip.addView(questionProgressBar, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 4, 0, 0, 0, 8));
+
+        inlinePaletteView = new RecyclerView(context);
+        inlinePaletteView.setLayoutManager(new LinearLayoutManager(context, LinearLayoutManager.HORIZONTAL, false));
+        inlinePaletteView.setClipToPadding(false);
+        inlinePaletteAdapter = new PaletteAdapter(true, null);
+        inlinePaletteView.setAdapter(inlinePaletteAdapter);
+        statusHeaderStrip.addView(inlinePaletteView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 44));
 
         statusDivider = new View(context);
         contentContainer.addView(statusDivider, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 1));
@@ -342,7 +443,14 @@ public class EveTestPlayerFragment extends BaseFragment {
         reportBtn.setImageResource(R.drawable.msg_report);
         reportBtn.setContentDescription(LocaleController.getString(R.string.EveReportQuestion));
         reportBtn.setOnClickListener(v -> showReportCurrentQuestionDialog());
-        footerBar.addView(reportBtn, LayoutHelper.createLinear(40, 40, 3, 0, 3, 0));
+        footerBar.addView(reportBtn, LayoutHelper.createLinear(38, 40, 2, 0, 2, 0));
+
+        bookmarkBtn = new ImageView(context);
+        bookmarkBtn.setScaleType(ImageView.ScaleType.CENTER);
+        bookmarkBtn.setImageResource(R.drawable.outline_saved_24);
+        bookmarkBtn.setContentDescription(LocaleController.getString(R.string.EveBookmark));
+        bookmarkBtn.setOnClickListener(v -> toggleBookmarkForCurrent());
+        footerBar.addView(bookmarkBtn, LayoutHelper.createLinear(38, 40, 2, 0, 2, 0));
 
         nextBtn = createActionButton(context, LocaleController.getString(R.string.EveSaveAndNext), true);
         nextBtn.setOnClickListener(v -> {
@@ -446,6 +554,29 @@ public class EveTestPlayerFragment extends BaseFragment {
         reportBtn.setBackground(reportBg);
         reportBtn.setColorFilter(new PorterDuffColorFilter(grayText, PorterDuff.Mode.MULTIPLY));
 
+        if (bookmarkBtn != null) {
+            bookmarkBtn.setBackground(reportBg);
+        }
+
+        if (errorCard != null) {
+            GradientDrawable errBg = new GradientDrawable();
+            errBg.setCornerRadius(dp(16));
+            errBg.setColor(white);
+            errBg.setStroke(Math.max(1, dp(0.6f)), Theme.multAlpha(divider, 0.8f));
+            errorCard.setBackground(errBg);
+            errorTitleView.setTextColor(black);
+            errorBodyView.setTextColor(grayText);
+            styleActionButton(errorRetryBtn, true, false);
+            styleActionButton(errorBackBtn, false, false);
+        }
+
+        if (circularTimerView != null) {
+            circularTimerView.updateColors();
+        }
+        if (inlinePaletteAdapter != null) {
+            inlinePaletteAdapter.notifyDataSetChanged();
+        }
+
         if (!allQuestions.isEmpty()) {
             renderCurrentQuestion();
         }
@@ -489,38 +620,69 @@ public class EveTestPlayerFragment extends BaseFragment {
         tv.setBackground(bg);
     }
 
+    private void showErrorCard(String title, String message, boolean showRetry) {
+        if (loadingBar != null) loadingBar.setVisibility(View.GONE);
+        if (statusMessageView != null) statusMessageView.setVisibility(View.GONE);
+        if (contentContainer != null) contentContainer.setVisibility(View.GONE);
+        if (errorCard != null) {
+            errorCard.setVisibility(View.VISIBLE);
+            errorTitleView.setText(!TextUtils.isEmpty(title) ? title : "Unable to Load Test");
+            errorBodyView.setText(!TextUtils.isEmpty(message) ? message : "Please try again or return to the test list.");
+            errorRetryBtn.setVisibility(showRetry ? View.VISIBLE : View.GONE);
+        }
+    }
+
     private void startTestSession() {
+        if (destroyed || getParentActivity() == null) {
+            return;
+        }
+        if (TextUtils.isEmpty(attemptKey)) {
+            showErrorCard("Test Unavailable", "Invalid mock test identifier. Please go back and try again.", false);
+            return;
+        }
         String draftAttemptId = loadSavedClientAttemptId();
         String sourceExamId = exam != null ? exam.id : (test != null ? test.examId : "");
         String testId = test != null ? test.id : "";
+        if (errorCard != null) errorCard.setVisibility(View.GONE);
+        if (contentContainer != null) contentContainer.setVisibility(View.GONE);
         loadingBar.setVisibility(View.VISIBLE);
         statusMessageView.setVisibility(View.VISIBLE);
         statusMessageView.setText("Preparing live test session...");
 
         EveExamRepository.getInstance().startOrResumeAttempt(attemptKey, sourceExamId, testId, draftAttemptId, (res, err) -> {
-            if (getParentActivity() == null) {
+            if (destroyed || getParentActivity() == null) {
                 return;
             }
-            if (!err.isEmpty() || res == null) {
-                loadingBar.setVisibility(View.GONE);
-                statusMessageView.setText(!err.isEmpty() ? err : "Could not start test.");
-                return;
-            }
-            if (res.alreadySubmitted && !res.completedAttemptId.isEmpty()) {
+            String guard = validateStartupSession(attemptKey, res, err);
+            if ("ALREADY_SUBMITTED".equals(guard)) {
                 clearSavedDraft();
                 openExistingSubmittedAttempt(res.completedAttemptId);
                 return;
             }
-            if (res.questions.isEmpty()) {
-                loadingBar.setVisibility(View.GONE);
-                statusMessageView.setText("No questions available for this test.");
+            if (!guard.isEmpty()) {
+                boolean canRetry = res == null || !res.alreadySubmitted;
+                String title = (res != null && res.questions != null && res.questions.isEmpty())
+                        ? "No Questions Available"
+                        : "Could Not Start Test";
+                showErrorCard(title, guard, canRetry);
                 return;
             }
 
-            clientAttemptId = res.clientAttemptId;
-            allQuestions = new ArrayList<>(res.questions);
-            timeLimitSeconds = res.timeLimitSeconds;
-            remainingSeconds = res.remainingSeconds > 0 ? res.remainingSeconds : res.timeLimitSeconds;
+            List<EveExamModels.TestQuestion> cleanQuestions = new ArrayList<>();
+            for (EveExamModels.TestQuestion q : res.questions) {
+                if (q != null) {
+                    cleanQuestions.add(q);
+                }
+            }
+            if (cleanQuestions.isEmpty()) {
+                showErrorCard("No Questions Available", "No valid questions were found for this test.", false);
+                return;
+            }
+
+            clientAttemptId = res.clientAttemptId != null ? res.clientAttemptId : "";
+            allQuestions = cleanQuestions;
+            timeLimitSeconds = Math.max(0, res.timeLimitSeconds);
+            remainingSeconds = res.remainingSeconds > 0 ? res.remainingSeconds : timeLimitSeconds;
             timerAnchorElapsedMs = SystemClock.elapsedRealtime();
 
             restoreDraftAnswers();
@@ -540,6 +702,7 @@ public class EveTestPlayerFragment extends BaseFragment {
 
             loadingBar.setVisibility(View.GONE);
             statusMessageView.setVisibility(View.GONE);
+            if (errorCard != null) errorCard.setVisibility(View.GONE);
             contentContainer.setVisibility(View.VISIBLE);
             questionShownElapsedMs = SystemClock.elapsedRealtime();
             renderCurrentQuestion();
@@ -550,12 +713,13 @@ public class EveTestPlayerFragment extends BaseFragment {
     }
 
     private void openExistingSubmittedAttempt(String attemptId) {
+        if (destroyed || getParentActivity() == null) return;
         statusMessageView.setText("Loading submitted test result...");
         EveExamRepository.getInstance().loadAttemptById(attemptId, (attemptResult, err) -> {
-            if (getParentActivity() == null) return;
-            loadingBar.setVisibility(View.GONE);
+            if (destroyed || getParentActivity() == null) return;
             if (attemptResult == null) {
-                statusMessageView.setText(!err.isEmpty() ? err : "Attempt already submitted.");
+                String msg = !TextUtils.isEmpty(err) ? err : "Attempt already submitted, unable to load saved result.";
+                showErrorCard("Already Submitted", msg, true);
                 return;
             }
             finishedAttempt = true;
@@ -632,7 +796,16 @@ public class EveTestPlayerFragment extends BaseFragment {
 
     private void recordCurrentQuestionTime() {
         if (allQuestions.isEmpty() || questionShownElapsedMs <= 0L) return;
-        EveExamModels.TestQuestion q = allQuestions.get(currentQuestionIdx);
+    private EveExamModels.TestQuestion currentQuestion() {
+        if (allQuestions == null || currentQuestionIdx < 0 || currentQuestionIdx >= allQuestions.size()) {
+            return null;
+        }
+        return allQuestions.get(currentQuestionIdx);
+    }
+
+    private void recordCurrentQuestionTime() {
+        EveExamModels.TestQuestion q = currentQuestion();
+        if (q == null) return;
         int deltaSec = (int) Math.max(0L, (SystemClock.elapsedRealtime() - questionShownElapsedMs) / 1000L);
         if (deltaSec > 0) {
             int prev = perQuestionSeconds.containsKey(q.id) ? perQuestionSeconds.get(q.id) : 0;
@@ -642,17 +815,17 @@ public class EveTestPlayerFragment extends BaseFragment {
     }
 
     private void renderCurrentQuestion() {
-        if (allQuestions.isEmpty() || currentQuestionIdx < 0 || currentQuestionIdx >= allQuestions.size()) {
+        EveExamModels.TestQuestion q = currentQuestion();
+        if (q == null || getParentActivity() == null) {
             return;
         }
         Theme.ResourcesProvider rp = getResourceProvider();
-        EveExamModels.TestQuestion q = allQuestions.get(currentQuestionIdx);
 
         int fPos = filteredPosOf(currentQuestionIdx);
         int totalFiltered = Math.max(1, filteredIndices.size());
         statusStripText.setText(String.format(
                 Locale.US,
-                "Question %d of %d • Answered %d • Marked %d",
+                "Q %d / %d • Answered %d • Marked %d",
                 Math.max(1, fPos + 1),
                 totalFiltered,
                 selectedAnswers.size(),
@@ -661,7 +834,7 @@ public class EveTestPlayerFragment extends BaseFragment {
         questionProgressBar.setProgress(Math.round(((fPos + 1) * 1000f) / totalFiltered));
 
         String meta = "Q" + q.number + " / " + allQuestions.size();
-        if (!q.topic.isEmpty()) {
+        if (!TextUtils.isEmpty(q.topic)) {
             meta += "  •  " + q.topic;
         }
         questionMetaView.setText(meta);
@@ -700,6 +873,19 @@ public class EveTestPlayerFragment extends BaseFragment {
         nextBtn.setText(LocaleController.getString(isLastFilteredQuestion() ? R.string.EveSubmitTest : R.string.EveSaveAndNext));
         styleActionButton(nextBtn, true, false);
 
+        if (bookmarkBtn != null) {
+            boolean bookmarked = bookmarkedIds.contains(q.id);
+            int tint = bookmarked ? accent : Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, rp);
+            bookmarkBtn.setColorFilter(new PorterDuffColorFilter(tint, PorterDuff.Mode.MULTIPLY));
+        }
+
+        if (inlinePaletteAdapter != null) {
+            inlinePaletteAdapter.notifyDataSetChanged();
+            if (fPos >= 0 && inlinePaletteView != null) {
+                inlinePaletteView.scrollToPosition(fPos);
+            }
+        }
+
         prevBtn.setEnabled(fPos > 0);
         prevBtn.setAlpha(prevBtn.isEnabled() ? 1f : 0.45f);
 
@@ -707,16 +893,16 @@ public class EveTestPlayerFragment extends BaseFragment {
     }
 
     private void selectOption(String letter) {
-        if (allQuestions.isEmpty()) return;
-        EveExamModels.TestQuestion q = allQuestions.get(currentQuestionIdx);
+        EveExamModels.TestQuestion q = currentQuestion();
+        if (q == null) return;
         selectedAnswers.put(q.id, letter);
         saveDraftAnswers();
         renderCurrentQuestion();
     }
 
     private void toggleReviewForCurrent() {
-        if (allQuestions.isEmpty()) return;
-        EveExamModels.TestQuestion q = allQuestions.get(currentQuestionIdx);
+        EveExamModels.TestQuestion q = currentQuestion();
+        if (q == null) return;
         if (markedForReview.contains(q.id)) {
             markedForReview.remove(q.id);
         } else {
@@ -726,9 +912,28 @@ public class EveTestPlayerFragment extends BaseFragment {
         renderCurrentQuestion();
     }
 
+    private void toggleBookmarkForCurrent() {
+        EveExamModels.TestQuestion q = currentQuestion();
+        if (q == null) return;
+        boolean next;
+        if (bookmarkedIds.contains(q.id)) {
+            bookmarkedIds.remove(q.id);
+            next = false;
+        } else {
+            bookmarkedIds.add(q.id);
+            next = true;
+        }
+        saveDraftAnswers();
+        renderCurrentQuestion();
+        if (getParentActivity() != null) {
+            BulletinFactory.of(this).createSimpleBulletin(
+                    R.raw.info, next ? "Question bookmarked" : "Bookmark removed").show();
+        }
+    }
+
     private void clearCurrentAnswer() {
-        if (allQuestions.isEmpty()) return;
-        EveExamModels.TestQuestion q = allQuestions.get(currentQuestionIdx);
+        EveExamModels.TestQuestion q = currentQuestion();
+        if (q == null) return;
         selectedAnswers.remove(q.id);
         saveDraftAnswers();
         renderCurrentQuestion();
@@ -756,27 +961,13 @@ public class EveTestPlayerFragment extends BaseFragment {
     }
 
     private void updateTimerPill(int secondsLeft) {
-        if (timerPillView == null) return;
-        Theme.ResourcesProvider rp = getResourceProvider();
+        if (circularTimerView == null) return;
         if (timeLimitSeconds <= 0) {
-            timerPillView.setVisibility(View.GONE);
+            circularTimerView.setVisibility(View.GONE);
             return;
         }
-        timerPillView.setVisibility(View.VISIBLE);
-        int hrs = secondsLeft / 3600;
-        int mins = (secondsLeft % 3600) / 60;
-        int secs = secondsLeft % 60;
-        String formatted = hrs > 0
-                ? String.format(Locale.US, "%d:%02d:%02d", hrs, mins, secs)
-                : String.format(Locale.US, "%02d:%02d", mins, secs);
-        timerPillView.setText("⏱ " + formatted);
-
-        boolean lowTime = secondsLeft < 300;
-        int pillColor = lowTime
-                ? Theme.getColor(Theme.key_text_RedRegular, rp)
-                : Theme.getColor(Theme.key_featuredStickers_addButton, rp);
-        timerPillView.setTextColor(pillColor);
-        timerPillView.setBackground(Theme.createRoundRectDrawable(dp(12), Theme.multAlpha(pillColor, 0.14f)));
+        circularTimerView.setVisibility(View.VISIBLE);
+        circularTimerView.setTime(secondsLeft, timeLimitSeconds);
     }
 
     private void showQuestionPaletteSheet() {
@@ -795,19 +986,22 @@ public class EveTestPlayerFragment extends BaseFragment {
         title.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, rp));
         container.addView(title, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 10));
 
+        HorizontalScrollView legendScroll = new HorizontalScrollView(activity);
+        legendScroll.setHorizontalScrollBarEnabled(false);
         LinearLayout legendRow = new LinearLayout(activity);
         legendRow.setOrientation(LinearLayout.HORIZONTAL);
         legendRow.setGravity(Gravity.CENTER_VERTICAL);
         addLegendPill(activity, legendRow, "Answered", 0xFF2E9E5B);
-        addLegendPill(activity, legendRow, "Marked", 0xFF8E55EA);
-        addLegendPill(activity, legendRow, "Current", Theme.getColor(Theme.key_featuredStickers_addButton, rp));
+        addLegendPill(activity, legendRow, "Marked", 0xFFF59E0B);
+        addLegendPill(activity, legendRow, "Ans + Marked", 0xFF6C4CEB);
         addLegendPill(activity, legendRow, "Unvisited", Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, rp));
-        container.addView(legendRow, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 12));
+        legendScroll.addView(legendRow);
+        container.addView(legendScroll, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 12));
 
         RecyclerView grid = new RecyclerView(activity);
         grid.setLayoutManager(new GridLayoutManager(activity, 5));
         BottomSheet[] sheetHolder = new BottomSheet[1];
-        grid.setAdapter(new PaletteAdapter(() -> {
+        grid.setAdapter(new PaletteAdapter(false, () -> {
             if (sheetHolder[0] != null) {
                 sheetHolder[0].dismiss();
             }
@@ -833,8 +1027,8 @@ public class EveTestPlayerFragment extends BaseFragment {
 
     private void showReportCurrentQuestionDialog() {
         Activity activity = getParentActivity();
-        if (activity == null || allQuestions.isEmpty()) return;
-        EveExamModels.TestQuestion q = allQuestions.get(currentQuestionIdx);
+        EveExamModels.TestQuestion q = currentQuestion();
+        if (activity == null || q == null) return;
         Theme.ResourcesProvider rp = getResourceProvider();
 
         final int[] pickedIdx = { 0 };
@@ -875,8 +1069,8 @@ public class EveTestPlayerFragment extends BaseFragment {
                     reason,
                     comment,
                     (msg, err) -> {
-                        if (getParentActivity() == null) return;
-                        if (!err.isEmpty()) {
+                        if (destroyed || getParentActivity() == null) return;
+                        if (!TextUtils.isEmpty(err)) {
                             BulletinFactory.of(this).createErrorBulletin(err).show();
                         } else {
                             BulletinFactory.of(this).createSuccessBulletin(msg).show();
@@ -922,7 +1116,7 @@ public class EveTestPlayerFragment extends BaseFragment {
                 obj.put("questionId", q.id);
                 obj.put("number", q.number);
                 obj.put("selected", selectedAnswers.containsKey(q.id) ? selectedAnswers.get(q.id) : "");
-                obj.put("isBookmarked", false);
+                obj.put("isBookmarked", bookmarkedIds.contains(q.id));
                 obj.put("markedForReview", markedForReview.contains(q.id));
                 obj.put("timeTakenSeconds", perQuestionSeconds.containsKey(q.id) ? perQuestionSeconds.get(q.id) : 0);
                 answersArr.put(obj);
@@ -935,9 +1129,9 @@ public class EveTestPlayerFragment extends BaseFragment {
 
         EveExamRepository.getInstance().submitAttempt(attemptKey, examName, category, clientAttemptId, answersArr, (result, err) -> {
             submitting = false;
-            if (getParentActivity() == null) return;
-            if (result == null || !err.isEmpty()) {
-                BulletinFactory.of(this).createErrorBulletin(!err.isEmpty() ? err : "Submission failed. Please retry.").show();
+            if (destroyed || getParentActivity() == null) return;
+            if (result == null || !TextUtils.isEmpty(err)) {
+                BulletinFactory.of(this).createErrorBulletin(!TextUtils.isEmpty(err) ? err : "Submission failed. Please retry.").show();
                 if (simpleActionBar != null) {
                     simpleActionBar.setSubtitle(null);
                 }
@@ -980,13 +1174,14 @@ public class EveTestPlayerFragment extends BaseFragment {
 
     @Override
     public void onFragmentDestroy() {
-        super.onFragmentDestroy();
+        destroyed = true;
         timerHandler.removeCallbacks(timerRunnable);
         if (!finishedAttempt && !allQuestions.isEmpty()) {
             recordCurrentQuestionTime();
             saveDraftAnswers();
             EveExamRepository.getInstance().pauseAttempt(attemptKey);
         }
+        super.onFragmentDestroy();
     }
 
     private String draftKey() {
@@ -1020,6 +1215,11 @@ public class EveTestPlayerFragment extends BaseFragment {
                 reviewArr.put(qId);
             }
             root.put("review", reviewArr);
+            JSONArray bookmarkArr = new JSONArray();
+            for (String qId : bookmarkedIds) {
+                bookmarkArr.put(qId);
+            }
+            root.put("bookmarks", bookmarkArr);
             JSONObject times = new JSONObject();
             for (Map.Entry<String, Integer> entry : perQuestionSeconds.entrySet()) {
                 times.put(entry.getKey(), entry.getValue());
@@ -1058,6 +1258,12 @@ public class EveTestPlayerFragment extends BaseFragment {
                     markedForReview.add(reviewArr.getString(i));
                 }
             }
+            JSONArray bookmarkArr = root.optJSONArray("bookmarks");
+            if (bookmarkArr != null) {
+                for (int i = 0; i < bookmarkArr.length(); i++) {
+                    bookmarkedIds.add(bookmarkArr.getString(i));
+                }
+            }
             JSONObject times = root.optJSONObject("times");
             if (times != null && times.names() != null) {
                 JSONArray names = times.names();
@@ -1085,9 +1291,11 @@ public class EveTestPlayerFragment extends BaseFragment {
     }
 
     private final class PaletteAdapter extends RecyclerView.Adapter<PaletteAdapter.Holder> {
+        private final boolean inlineStrip;
         private final Runnable onPick;
 
-        PaletteAdapter(Runnable onPick) {
+        PaletteAdapter(boolean inlineStrip, Runnable onPick) {
+            this.inlineStrip = inlineStrip;
             this.onPick = onPick;
         }
 
@@ -1096,32 +1304,44 @@ public class EveTestPlayerFragment extends BaseFragment {
         public Holder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
             TextView tv = new TextView(parent.getContext());
             tv.setGravity(Gravity.CENTER);
-            tv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
+            tv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, inlineStrip ? 12.5f : 14);
             tv.setTypeface(AndroidUtilities.bold());
-            RecyclerView.LayoutParams lp = new RecyclerView.LayoutParams(dp(44), dp(44));
-            lp.setMargins(dp(5), dp(5), dp(5), dp(5));
+            int size = dp(inlineStrip ? 34 : 44);
+            int margin = dp(inlineStrip ? 4 : 5);
+            RecyclerView.LayoutParams lp = new RecyclerView.LayoutParams(size, size);
+            lp.setMargins(margin, margin, margin, margin);
             tv.setLayoutParams(lp);
             return new Holder(tv);
         }
 
         @Override
         public void onBindViewHolder(@NonNull Holder holder, int position) {
+            if (position < 0 || position >= filteredIndices.size()) {
+                return;
+            }
             Theme.ResourcesProvider rp = getResourceProvider();
             int globalIdx = filteredIndices.get(position);
+            if (globalIdx < 0 || globalIdx >= allQuestions.size()) {
+                return;
+            }
             EveExamModels.TestQuestion q = allQuestions.get(globalIdx);
             TextView tv = (TextView) holder.itemView;
             tv.setText(String.valueOf(q.number));
 
             boolean current = globalIdx == currentQuestionIdx;
-            boolean answered = selectedAnswers.containsKey(q.id) && !selectedAnswers.get(q.id).isEmpty();
+            boolean answered = !TextUtils.isEmpty(selectedAnswers.get(q.id));
             boolean review = markedForReview.contains(q.id);
+            PaletteState state = resolvePaletteState(answered, review);
 
             GradientDrawable bg = new GradientDrawable();
-            bg.setCornerRadius(dp(22));
-            if (review) {
-                bg.setColor(0xFF8E55EA);
+            bg.setCornerRadius(dp(inlineStrip ? 17 : 22));
+            if (state == PaletteState.ANSWERED_AND_MARKED) {
+                bg.setColor(0xFF6C4CEB);
                 tv.setTextColor(Color.WHITE);
-            } else if (answered) {
+            } else if (state == PaletteState.MARKED) {
+                bg.setColor(0xFFF59E0B);
+                tv.setTextColor(Color.WHITE);
+            } else if (state == PaletteState.ANSWERED) {
                 bg.setColor(0xFF2E9E5B);
                 tv.setTextColor(Color.WHITE);
             } else {
@@ -1153,6 +1373,70 @@ public class EveTestPlayerFragment extends BaseFragment {
             Holder(@NonNull View itemView) {
                 super(itemView);
             }
+        }
+    }
+
+    private static final class CircularTimerView extends View {
+        private final Theme.ResourcesProvider resourcesProvider;
+        private final Paint trackPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint progressPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final TextPaint textPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
+        private final RectF arcRect = new RectF();
+        private int secondsLeft = 0;
+        private int totalSeconds = 1;
+        private String formattedTime = "00:00";
+
+        CircularTimerView(Context context, Theme.ResourcesProvider rp) {
+            super(context);
+            this.resourcesProvider = rp;
+            trackPaint.setStyle(Paint.Style.STROKE);
+            trackPaint.setStrokeWidth(dp(3.5f));
+            progressPaint.setStyle(Paint.Style.STROKE);
+            progressPaint.setStrokeCap(Paint.Cap.ROUND);
+            progressPaint.setStrokeWidth(dp(3.5f));
+            textPaint.setTypeface(AndroidUtilities.bold());
+            textPaint.setTextSize(dp(10.5f));
+            textPaint.setTextAlign(Paint.Align.CENTER);
+            updateColors();
+        }
+
+        void updateColors() {
+            boolean low = isLowTimeWarning(secondsLeft, totalSeconds);
+            int color = low
+                    ? Theme.getColor(Theme.key_text_RedRegular, resourcesProvider)
+                    : Theme.getColor(Theme.key_featuredStickers_addButton, resourcesProvider);
+            progressPaint.setColor(color);
+            trackPaint.setColor(Theme.multAlpha(color, 0.18f));
+            textPaint.setColor(low ? color : Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
+            invalidate();
+        }
+
+        void setTime(int leftSec, int totalSec) {
+            this.secondsLeft = Math.max(0, leftSec);
+            this.totalSeconds = Math.max(1, totalSec);
+            int hrs = secondsLeft / 3600;
+            int mins = (secondsLeft % 3600) / 60;
+            int secs = secondsLeft % 60;
+            this.formattedTime = hrs > 0
+                    ? String.format(Locale.US, "%d:%02d", hrs, mins)
+                    : String.format(Locale.US, "%02d:%02d", mins, secs);
+            updateColors();
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            super.onDraw(canvas);
+            float w = getWidth();
+            float h = getHeight();
+            float size = Math.min(w, h);
+            float pad = dp(4);
+            arcRect.set((w - size) * 0.5f + pad, (h - size) * 0.5f + pad, (w + size) * 0.5f - pad, (h + size) * 0.5f - pad);
+            canvas.drawArc(arcRect, 0f, 360f, false, trackPaint);
+            float sweep = Math.max(0f, Math.min(360f, (secondsLeft * 360f) / totalSeconds));
+            canvas.drawArc(arcRect, -90f, sweep, false, progressPaint);
+            Paint.FontMetrics fm = textPaint.getFontMetrics();
+            float cy = h * 0.5f - (fm.ascent + fm.descent) * 0.5f;
+            canvas.drawText(formattedTime, w * 0.5f, cy, textPaint);
         }
     }
 }

@@ -37,12 +37,15 @@ import org.telegram.ui.Components.UniversalAdapter;
 import org.telegram.ui.Components.UniversalRecyclerView;
 import org.telegram.ui.SettingsActivity;
 import org.telegram.ui.eve.admin.EveAdminUiChrome;
+import org.telegram.ui.eve.auth.EveAuthManager;
+import org.telegram.ui.eve.auth.EveUserProfile;
 
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Telegram-native Card Mode Performance & Answer Review screen.
@@ -58,13 +61,44 @@ public class EveTestResultFragment extends BaseFragment {
 
     private static final int MENU_TOGGLE_LANG = 1;
     private static final int MENU_LEADERBOARD = 2;
+    private static final int MENU_MORE = 3;
+    private static final int SUB_DOWNLOAD_PDF = 101;
 
     private static final int ID_HERO_CARD = 100;
+    private static final int ID_TIME_CHART = 150;
     private static final int ID_ACTION_LEADERBOARD = 201;
     private static final int ID_ACTION_RETAKE = 202;
     private static final int ID_ACTION_BACK = 203;
     private static final int ID_FILTER_BAR = 300;
     private static final int BASE_ANSWER_ID = 1000;
+
+    public static final class CutoffEvaluation {
+        public final boolean hasCutoff;
+        public final boolean cleared;
+        public final String category;
+        public final String label;
+
+        public CutoffEvaluation(boolean hasCutoff, boolean cleared, String category, String label) {
+            this.hasCutoff = hasCutoff;
+            this.cleared = cleared;
+            this.category = category != null && !category.trim().isEmpty() ? category.trim() : "General";
+            this.label = label != null ? label : "";
+        }
+    }
+
+    public static CutoffEvaluation evaluateCutoffStatus(double score, String studentCategory, Double cutoff) {
+        String cat = studentCategory != null && !studentCategory.trim().isEmpty() ? studentCategory.trim() : "General";
+        if (cutoff == null || Double.isNaN(cutoff) || Double.isInfinite(cutoff) || cutoff < 0) {
+            return new CutoffEvaluation(false, false, cat, "");
+        }
+        double diff = score - cutoff;
+        boolean cleared = diff >= -1e-6;
+        String diffStr = formatScore(Math.abs(diff));
+        String label = cleared
+                ? ("Cleared " + cat + " Cutoff (+" + diffStr + ")")
+                : ("Below " + cat + " Cutoff (-" + diffStr + ")");
+        return new CutoffEvaluation(true, cleared, cat, label);
+    }
 
     private final EveExamModels.ExamSummary exam;
     private final EveExamModels.GeneratedTestSummary test;
@@ -76,6 +110,7 @@ public class EveTestResultFragment extends BaseFragment {
     private int currentFilter = FILTER_ALL;
     private String rankText = "";
     private boolean destroyed = false;
+    private final Set<String> expandedExplanations = new HashSet<>();
 
     public EveTestResultFragment(
             EveExamModels.ExamSummary exam,
@@ -148,6 +183,8 @@ public class EveTestResultFragment extends BaseFragment {
                             updateList();
                         } else if (id == MENU_LEADERBOARD) {
                             openLeaderboard();
+                        } else if (id == SUB_DOWNLOAD_PDF) {
+                            exportResultPdf();
                         }
                     }
                 },
@@ -169,6 +206,8 @@ public class EveTestResultFragment extends BaseFragment {
             }
             langItem.setVisibility(hasHindi ? View.VISIBLE : View.GONE);
             menu.addItem(MENU_LEADERBOARD, R.drawable.msg_stats, getResourceProvider());
+            SimpleActionBarMenuItem moreItem = menu.addItem(MENU_MORE, R.drawable.ic_ab_other, getResourceProvider());
+            moreItem.addSubItem(SUB_DOWNLOAD_PDF, R.drawable.msg_view_file, "Download Result & Solutions PDF");
         }
 
         fragmentView = chrome.rootView;
@@ -211,6 +250,30 @@ public class EveTestResultFragment extends BaseFragment {
         }
     }
 
+    private CutoffEvaluation resolveCutoffEvaluation() {
+        if (result == null) {
+            return new CutoffEvaluation(false, false, "General", "");
+        }
+        EveUserProfile profile = EveAuthManager.getInstance().getCachedProfile();
+        String studentCat = profile != null && !TextUtils.isEmpty(profile.category) ? profile.category : "General";
+        EveExamModels.ExamSummary resolvedExam = exam != null ? exam : EveExamRepository.getInstance().findExamSummary(attemptKey);
+        if (resolvedExam == null && !TextUtils.isEmpty(result.examId)) {
+            resolvedExam = EveExamRepository.getInstance().findExamSummary(result.examId);
+        }
+        Double cutoff = resolvedExam != null ? resolvedExam.getCutoffForCategory(studentCat) : null;
+        return evaluateCutoffStatus(result.score, studentCat, cutoff);
+    }
+
+    private void exportResultPdf() {
+        if (result == null) return;
+        EveUserProfile profile = EveAuthManager.getInstance().getCachedProfile();
+        String studentName = profile != null && !TextUtils.isEmpty(profile.displayName)
+                ? profile.displayName
+                : (!TextUtils.isEmpty(result.displayName) ? result.displayName : "Student");
+        CutoffEvaluation eval = resolveCutoffEvaluation();
+        EvePdfHelper.generateAndExportResultPdf(this, result, studentName, eval.category, eval.label, preferHindi);
+    }
+
     private void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
         EveAdminUiChrome.addTopSpace(items);
 
@@ -219,8 +282,15 @@ public class EveTestResultFragment extends BaseFragment {
             return;
         }
 
-        items.add(HeroSummaryView.Factory.of(ID_HERO_CARD, result, rankText));
+        CutoffEvaluation cutoffEval = resolveCutoffEvaluation();
+        items.add(HeroSummaryView.Factory.of(ID_HERO_CARD, result, rankText, cutoffEval));
         items.add(UItem.asShadow(null));
+
+        if (result.answers != null && !result.answers.isEmpty()) {
+            items.add(UItem.asHeader("Time Analysis"));
+            items.add(EveQuestionTimeChartView.Factory.of(ID_TIME_CHART, result.answers));
+            items.add(UItem.asShadow(null));
+        }
 
         items.add(UItem.asHeader("Actions"));
         items.add(SettingsActivity.SettingCell.Factory.of(
@@ -262,10 +332,21 @@ public class EveTestResultFragment extends BaseFragment {
             if (currentFilter == FILTER_WRONG && (ans.isUnattempted() || ans.isCorrect())) continue;
             if (currentFilter == FILTER_SKIPPED && !ans.isUnattempted()) continue;
             addedCount++;
+            String expKey = !TextUtils.isEmpty(ans.questionId) ? ans.questionId : ("q_" + i);
+            boolean expExpanded = expandedExplanations.contains(expKey);
             items.add(AnswerReviewView.Factory.of(
                     BASE_ANSWER_ID + i,
                     ans,
                     preferHindi,
+                    expExpanded,
+                    v -> {
+                        if (expandedExplanations.contains(expKey)) {
+                            expandedExplanations.remove(expKey);
+                        } else {
+                            expandedExplanations.add(expKey);
+                        }
+                        updateList();
+                    },
                     this::toggleBookmark,
                     this::showReportDialog));
         }
@@ -429,6 +510,7 @@ public class EveTestResultFragment extends BaseFragment {
         private final Theme.ResourcesProvider resourcesProvider;
         private final TextView scoreText;
         private final TextView accuracyBadge;
+        private final TextView cutoffBadge;
         private final TextView correctVal;
         private final TextView wrongVal;
         private final TextView skippedVal;
@@ -444,7 +526,7 @@ public class EveTestResultFragment extends BaseFragment {
             LinearLayout topRow = new LinearLayout(context);
             topRow.setOrientation(HORIZONTAL);
             topRow.setGravity(Gravity.CENTER_VERTICAL);
-            addView(topRow, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 14));
+            addView(topRow, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 10));
 
             scoreText = new TextView(context);
             scoreText.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 26);
@@ -456,6 +538,13 @@ public class EveTestResultFragment extends BaseFragment {
             accuracyBadge.setTypeface(AndroidUtilities.bold());
             accuracyBadge.setPadding(dp(10), dp(5), dp(10), dp(5));
             topRow.addView(accuracyBadge, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT));
+
+            cutoffBadge = new TextView(context);
+            cutoffBadge.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12.5f);
+            cutoffBadge.setTypeface(AndroidUtilities.bold());
+            cutoffBadge.setPadding(dp(10), dp(5), dp(10), dp(5));
+            cutoffBadge.setVisibility(GONE);
+            addView(cutoffBadge, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 12));
 
             LinearLayout metricsRow = new LinearLayout(context);
             metricsRow.setOrientation(HORIZONTAL);
@@ -502,9 +591,18 @@ public class EveTestResultFragment extends BaseFragment {
             return val;
         }
 
-        void bind(EveExamModels.AttemptResult r, String rank) {
+        void bind(EveExamModels.AttemptResult r, String rank, CutoffEvaluation cutoffEval) {
             scoreText.setText(formatScore(r.score) + " / " + r.total);
             accuracyBadge.setText(r.getAccuracyPercent() + "% Accuracy");
+            if (cutoffEval != null && cutoffEval.hasCutoff && !TextUtils.isEmpty(cutoffEval.label)) {
+                cutoffBadge.setVisibility(VISIBLE);
+                cutoffBadge.setText(cutoffEval.label);
+                int cColor = cutoffEval.cleared ? 0xFF2E9E5B : 0xFFE68A00;
+                cutoffBadge.setTextColor(cColor);
+                cutoffBadge.setBackground(Theme.createRoundRectDrawable(dp(10), Theme.multAlpha(cColor, 0.14f)));
+            } else {
+                cutoffBadge.setVisibility(GONE);
+            }
             correctVal.setText(String.valueOf(r.correct));
             wrongVal.setText(String.valueOf(r.wrong));
             skippedVal.setText(String.valueOf(r.unattempted));
@@ -540,10 +638,12 @@ public class EveTestResultFragment extends BaseFragment {
         static final class Payload {
             final EveExamModels.AttemptResult result;
             final String rankText;
+            final CutoffEvaluation cutoffEval;
 
-            Payload(EveExamModels.AttemptResult result, String rankText) {
+            Payload(EveExamModels.AttemptResult result, String rankText, CutoffEvaluation cutoffEval) {
                 this.result = result;
                 this.rankText = rankText != null ? rankText : "";
+                this.cutoffEval = cutoffEval;
             }
         }
 
@@ -559,7 +659,7 @@ public class EveTestResultFragment extends BaseFragment {
             public void bindView(View view, UItem item, boolean divider, UniversalAdapter adapter, UniversalRecyclerView listView) {
                 if (item.object instanceof Payload) {
                     Payload p = (Payload) item.object;
-                    ((HeroSummaryView) view).bind(p.result, p.rankText);
+                    ((HeroSummaryView) view).bind(p.result, p.rankText, p.cutoffEval);
                 }
             }
 
@@ -568,10 +668,22 @@ public class EveTestResultFragment extends BaseFragment {
                 return a.id == b.id;
             }
 
-            static UItem of(int id, EveExamModels.AttemptResult result, String rankText) {
+            @Override
+            public boolean contentsEquals(UItem a, UItem b) {
+                if (!(a.object instanceof Payload) || !(b.object instanceof Payload)) {
+                    return Objects.equals(a.object, b.object);
+                }
+                Payload pa = (Payload) a.object;
+                Payload pb = (Payload) b.object;
+                String la = pa.cutoffEval != null ? pa.cutoffEval.label : "";
+                String lb = pb.cutoffEval != null ? pb.cutoffEval.label : "";
+                return pa.result == pb.result && TextUtils.equals(pa.rankText, pb.rankText) && TextUtils.equals(la, lb);
+            }
+
+            static UItem of(int id, EveExamModels.AttemptResult result, String rankText, CutoffEvaluation cutoffEval) {
                 UItem item = UItem.ofFactory(Factory.class);
                 item.id = id;
-                item.object = new Payload(result, rankText);
+                item.object = new Payload(result, rankText, cutoffEval);
                 return item;
             }
         }
@@ -693,6 +805,7 @@ public class EveTestResultFragment extends BaseFragment {
         private final TextView qText;
         private final TextView yourAns;
         private final TextView correctAns;
+        private final TextView expToggleBtn;
         private final TextView expView;
         private final TextView bookmarkBtn;
         private final TextView reportBtn;
@@ -735,6 +848,12 @@ public class EveTestResultFragment extends BaseFragment {
             correctAns.setTextColor(0xFF2E9E5B);
             addView(correctAns, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 8));
 
+            expToggleBtn = new TextView(context);
+            expToggleBtn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12.5f);
+            expToggleBtn.setTypeface(AndroidUtilities.bold());
+            expToggleBtn.setPadding(0, dp(2), 0, dp(6));
+            addView(expToggleBtn, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT));
+
             expView = new TextView(context);
             expView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
             expView.setLineSpacing(dp(2), 1f);
@@ -758,7 +877,7 @@ public class EveTestResultFragment extends BaseFragment {
             qActions.addView(reportBtn, LayoutHelper.createLinear(0, 36, 1f));
         }
 
-        void bind(EveExamModels.AttemptAnswerReview ans, boolean hi, ReviewCallback onBookmark, ReviewCallback onReport) {
+        void bind(EveExamModels.AttemptAnswerReview ans, boolean hi, boolean expanded, View.OnClickListener onToggleExp, ReviewCallback onBookmark, ReviewCallback onReport) {
             this.bookmarked = ans.isBookmarked;
             String statusText;
             if (ans.isUnattempted()) {
@@ -771,7 +890,8 @@ public class EveTestResultFragment extends BaseFragment {
                 statusText = LocaleController.getString(R.string.EveWrong);
                 statusColor = 0xFFD93025;
             }
-            qHeader.setText("Question " + ans.number + (ans.topic.isEmpty() ? "" : " • " + ans.topic));
+            String timeMeta = ans.timeTakenSeconds > 0 ? (" • " + ans.timeTakenSeconds + "s") : "";
+            qHeader.setText("Question " + ans.number + (ans.topic.isEmpty() ? "" : " • " + ans.topic) + timeMeta);
             statusPill.setText(statusText);
             qText.setText(ans.getLocalizedQuestion(hi));
 
@@ -787,9 +907,13 @@ public class EveTestResultFragment extends BaseFragment {
 
             String explanation = ans.getLocalizedExplanation(hi);
             if (!explanation.trim().isEmpty()) {
-                expView.setVisibility(VISIBLE);
+                expToggleBtn.setVisibility(VISIBLE);
+                expToggleBtn.setText(expanded ? "Hide Explanation ▲" : "Show Explanation ▼");
+                expToggleBtn.setOnClickListener(onToggleExp);
+                expView.setVisibility(expanded ? VISIBLE : GONE);
                 expView.setText(LocaleController.getString(R.string.EveExplanation) + ":\n" + explanation);
             } else {
+                expToggleBtn.setVisibility(GONE);
                 expView.setVisibility(GONE);
             }
 
@@ -810,6 +934,7 @@ public class EveTestResultFragment extends BaseFragment {
             statusPill.setTextColor(statusColor);
             statusPill.setBackground(Theme.createRoundRectDrawable(dp(8), Theme.multAlpha(statusColor, 0.14f)));
             qText.setTextColor(black);
+            expToggleBtn.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText4, resourcesProvider));
             expView.setTextColor(grayText);
 
             bookmarkBtn.setBackground(Theme.createRoundRectDrawable(dp(8), bookmarked ? accent : grayBg));
@@ -830,12 +955,16 @@ public class EveTestResultFragment extends BaseFragment {
         static final class Payload {
             final EveExamModels.AttemptAnswerReview ans;
             final boolean hi;
+            final boolean expanded;
+            final View.OnClickListener onToggleExp;
             final ReviewCallback onBookmark;
             final ReviewCallback onReport;
 
-            Payload(EveExamModels.AttemptAnswerReview ans, boolean hi, ReviewCallback onBookmark, ReviewCallback onReport) {
+            Payload(EveExamModels.AttemptAnswerReview ans, boolean hi, boolean expanded, View.OnClickListener onToggleExp, ReviewCallback onBookmark, ReviewCallback onReport) {
                 this.ans = ans;
                 this.hi = hi;
+                this.expanded = expanded;
+                this.onToggleExp = onToggleExp;
                 this.onBookmark = onBookmark;
                 this.onReport = onReport;
             }
@@ -853,7 +982,7 @@ public class EveTestResultFragment extends BaseFragment {
             public void bindView(View view, UItem item, boolean divider, UniversalAdapter adapter, UniversalRecyclerView listView) {
                 if (item.object instanceof Payload) {
                     Payload p = (Payload) item.object;
-                    ((AnswerReviewView) view).bind(p.ans, p.hi, p.onBookmark, p.onReport);
+                    ((AnswerReviewView) view).bind(p.ans, p.hi, p.expanded, p.onToggleExp, p.onBookmark, p.onReport);
                 }
             }
 
@@ -870,14 +999,15 @@ public class EveTestResultFragment extends BaseFragment {
                 Payload pa = (Payload) a.object;
                 Payload pb = (Payload) b.object;
                 return pa.hi == pb.hi
+                        && pa.expanded == pb.expanded
                         && pa.ans.isBookmarked == pb.ans.isBookmarked
                         && TextUtils.equals(pa.ans.questionId, pb.ans.questionId);
             }
 
-            static UItem of(int id, EveExamModels.AttemptAnswerReview ans, boolean hi, ReviewCallback onBookmark, ReviewCallback onReport) {
+            static UItem of(int id, EveExamModels.AttemptAnswerReview ans, boolean hi, boolean expanded, View.OnClickListener onToggleExp, ReviewCallback onBookmark, ReviewCallback onReport) {
                 UItem item = UItem.ofFactory(Factory.class);
                 item.id = id;
-                item.object = new Payload(ans, hi, onBookmark, onReport);
+                item.object = new Payload(ans, hi, expanded, onToggleExp, onBookmark, onReport);
                 return item;
             }
         }

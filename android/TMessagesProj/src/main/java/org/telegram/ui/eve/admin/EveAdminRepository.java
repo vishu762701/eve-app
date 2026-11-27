@@ -801,6 +801,21 @@ public final class EveAdminRepository {
             int questionCount,
             String negativeMarkingText,
             String publishMode) throws EveBackendClient.BackendException {
+        updateExamSettings(token, examId, examName, category, timeLimitMinutes, questionCount, negativeMarkingText, publishMode, null, null, null);
+    }
+
+    public void updateExamSettings(
+            String token,
+            String examId,
+            String examName,
+            String category,
+            int timeLimitMinutes,
+            int questionCount,
+            String negativeMarkingText,
+            String publishMode,
+            Map<String, Double> cutoffs,
+            Boolean autoGenEnabled,
+            String autoGenTime) throws EveBackendClient.BackendException {
         JSONObject payload = new JSONObject();
         try {
             payload.put("examName", examName);
@@ -809,6 +824,21 @@ public final class EveAdminRepository {
             payload.put("questionCount", questionCount);
             payload.put("negativeMarkingText", negativeMarkingText);
             payload.put("publishMode", publishMode);
+            if (cutoffs != null) {
+                JSONObject cutoffsObj = new JSONObject();
+                for (Map.Entry<String, Double> e : cutoffs.entrySet()) {
+                    if (e.getValue() != null && e.getValue() >= 0.0) {
+                        cutoffsObj.put(e.getKey(), e.getValue());
+                    }
+                }
+                payload.put("cutoffs", cutoffsObj);
+            }
+            if (autoGenEnabled != null) {
+                payload.put("autoGenEnabled", autoGenEnabled);
+            }
+            if (autoGenTime != null && !autoGenTime.trim().isEmpty()) {
+                payload.put("autoGenTime", autoGenTime.trim());
+            }
         } catch (JSONException ignored) {
         }
         client.putJsonRoot("/api/exams/" + encode(examId), token, payload);
@@ -1324,9 +1354,24 @@ public final class EveAdminRepository {
     }
 
     public void reassignSyllabus(String token, String sourceExamId, String targetExamId) throws EveBackendClient.BackendException {
+        reassignSyllabus(token, sourceExamId, targetExamId, "", "");
+    }
+
+    public void reassignSyllabus(
+            String token,
+            String sourceExamId,
+            String targetExamId,
+            String expectedSyllabusUrl,
+            String expectedSyllabusFileName) throws EveBackendClient.BackendException {
         JSONObject payload = new JSONObject();
         try {
             payload.put("targetExamId", targetExamId);
+            if (expectedSyllabusUrl != null && !expectedSyllabusUrl.trim().isEmpty()) {
+                payload.put("expectedSyllabusUrl", expectedSyllabusUrl.trim());
+            }
+            if (expectedSyllabusFileName != null && !expectedSyllabusFileName.trim().isEmpty()) {
+                payload.put("expectedSyllabusFileName", expectedSyllabusFileName.trim());
+            }
         } catch (JSONException ignored) {
         }
         client.postJsonRoot("/api/exams/" + encode(sourceExamId) + "/syllabus/reassign", token, payload);
@@ -1778,10 +1823,24 @@ public final class EveAdminRepository {
     }
 
     public List<EveAdminModels.ExamAnalyticsItem> fetchExamAnalytics(String token) throws EveBackendClient.BackendException {
-        JSONObject root = client.getJsonRoot("/api/admin/analytics/exams", token);
+        return fetchExamAnalytics(token, 0);
+    }
+
+    public List<EveAdminModels.ExamAnalyticsItem> fetchExamAnalytics(String token, int days) throws EveBackendClient.BackendException {
+        String path = "/api/admin/analytics/exams" + (days > 0 ? ("?days=" + days) : "");
+        JSONObject root = client.getJsonRoot(path, token);
         JSONArray arr = root.optJSONArray("data");
-        if (arr != null) putSwrJson("exam_analytics", arr.toString());
+        if (days <= 0 && arr != null) {
+            putSwrJson("exam_analytics", arr.toString());
+        }
         return EveAdminModels.ExamAnalyticsItem.parseList(arr);
+    }
+
+    public List<EveAdminModels.QuestionAnalyticsItem> fetchQuestionAnalytics(String token, String examId) throws EveBackendClient.BackendException {
+        String path = "/api/admin/analytics/questions" + (examId != null && !examId.trim().isEmpty() ? ("?examId=" + encode(examId.trim())) : "");
+        JSONObject root = client.getJsonRoot(path, token);
+        JSONArray arr = root != null ? root.optJSONArray("data") : null;
+        return EveAdminModels.QuestionAnalyticsItem.parseList(arr);
     }
 
     public List<EveAdminModels.CrashSignatureItem> fetchCrashSignatures(String token) throws EveBackendClient.BackendException {

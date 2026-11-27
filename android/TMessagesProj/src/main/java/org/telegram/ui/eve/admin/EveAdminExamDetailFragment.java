@@ -49,6 +49,9 @@ import java.util.Locale;
  */
 public class EveAdminExamDetailFragment extends BaseFragment {
 
+    private static final int REQ_PICK_SYLLABUS_PDF = 6402;
+    private static final int MAX_SYLLABUS_BYTES = 18 * 1024 * 1024;
+
     private static final int ID_AVATAR_ACTION = 99;
 
     private static final int ID_MOCK_TESTS = 101;
@@ -56,6 +59,9 @@ public class EveAdminExamDetailFragment extends BaseFragment {
     private static final int ID_SYLLABUS = 103;
 
     private static final int ID_EDIT_SETTINGS = 201;
+    private static final int ID_AUTO_GEN_SWITCH = 208;
+    private static final int ID_PICK_DAILY_TIME = 209;
+    private static final int ID_LAST_RUN_STATUS = 210;
     private static final int ID_GENERATE_TEST = 202;
     private static final int ID_ASSEMBLE_FROM_BANK = 207;
     private static final int ID_PREVIEW_STUDENT = 203;
@@ -212,6 +218,10 @@ public class EveAdminExamDetailFragment extends BaseFragment {
 
     @Override
     public void onActivityResultFragment(int requestCode, int resultCode, Intent data) {
+        if (requestCode == REQ_PICK_SYLLABUS_PDF && resultCode == Activity.RESULT_OK && data != null && data.getData() != null) {
+            uploadPickedSyllabusPdf(data.getData());
+            return;
+        }
         if (avatarPicker != null) {
             avatarPicker.onActivityResult(requestCode, resultCode, data);
         }
@@ -346,19 +356,42 @@ public class EveAdminExamDetailFragment extends BaseFragment {
         items.add(UItem.asShadow(null));
 
         // Card 2: Exam Controls
-        items.add(UItem.asHeader("Exam Controls"));
+        items.add(UItem.asHeader("Exam & Auto-Generation Controls"));
+        String cutoffsSummary = exam.cutoffs != null && !exam.cutoffs.isEmpty()
+                ? (exam.cutoffs.size() + " category cutoffs")
+                : "No cutoffs set";
         items.add(SettingsActivity.SettingCell.Factory.of(
                 ID_EDIT_SETTINGS,
                 IconBackgroundColors.BLUE_DEEP.top, IconBackgroundColors.BLUE_DEEP.bottom,
                 R.drawable.msg_settings,
-                "Edit Exam Settings",
-                "Name, category, duration, marking & mode",
-                null));
+                "Edit Settings, Cutoffs & Mode",
+                exam.publishMode.toUpperCase(Locale.US) + " • " + cutoffsSummary,
+                "Save / Edit"));
+        items.add(UItem.asCheck(ID_AUTO_GEN_SWITCH, "Daily Auto-Generation").setChecked(exam.autoGenerationEnabled));
+        items.add(SettingsActivity.SettingCell.Factory.of(
+                ID_PICK_DAILY_TIME,
+                IconBackgroundColors.BLUE.top, IconBackgroundColors.BLUE.bottom,
+                R.drawable.msg_recent,
+                "Pick Daily Time",
+                "Scheduled daily generation clock (IST)",
+                exam.autoGenTime + " IST"));
+        String lastRunLabel = !TextUtils.isEmpty(exam.lastGenerationStatus) ? exam.lastGenerationStatus : "idle";
+        String lastRunSub = !TextUtils.isEmpty(exam.lastGenerationError)
+                ? exam.lastGenerationError
+                : (!TextUtils.isEmpty(exam.lastGeneratedDate) ? ("Last run: " + exam.lastGeneratedDate) : "No scheduled run recorded yet");
+        items.add(SettingsActivity.SettingCell.Factory.of(
+                ID_LAST_RUN_STATUS,
+                "failed".equalsIgnoreCase(lastRunLabel) ? IconBackgroundColors.RED.top : IconBackgroundColors.GREEN.top,
+                "failed".equalsIgnoreCase(lastRunLabel) ? IconBackgroundColors.RED.bottom : IconBackgroundColors.GREEN.bottom,
+                R.drawable.msg_info,
+                "Last Run Status",
+                lastRunSub,
+                lastRunLabel));
         items.add(SettingsActivity.SettingCell.Factory.of(
                 ID_GENERATE_TEST,
                 IconBackgroundColors.PURPLE.top, IconBackgroundColors.PURPLE.bottom,
                 R.drawable.msg_add,
-                "AI Prompt & Question Studio",
+                "AI Prompt & Generate AI Test Now",
                 "Edit master prompt, language, difficulty & generate mock test",
                 null));
         items.add(SettingsActivity.SettingCell.Factory.of(
@@ -464,6 +497,18 @@ public class EveAdminExamDetailFragment extends BaseFragment {
             case ID_EDIT_SETTINGS:
                 EveAdminDialogs.showCreateOrEditExamDialog(this, repo, exam, this::notifyParentAndReload);
                 break;
+            case ID_AUTO_GEN_SWITCH:
+                saveAutoGenSchedule(!exam.autoGenerationEnabled, exam.autoGenTime);
+                break;
+            case ID_PICK_DAILY_TIME:
+                openDailyTimePicker();
+                break;
+            case ID_LAST_RUN_STATUS:
+                BulletinFactory.of(this).createSimpleBulletin(
+                        R.raw.info,
+                        "Last status: " + exam.lastGenerationStatus
+                                + (!TextUtils.isEmpty(exam.lastGeneratedDate) ? (" on " + exam.lastGeneratedDate) : "")).show();
+                break;
             case ID_GENERATE_TEST:
                 presentFragment(new EveAdminExamPromptFragment(exam, allExams, this::notifyParentAndReload));
                 break;
@@ -474,8 +519,9 @@ public class EveAdminExamDetailFragment extends BaseFragment {
                 EveExamModels.ExamSummary summary = new EveExamModels.ExamSummary(
                         exam.id, exam.examName, exam.timeLimitMinutes, exam.category,
                         exam.questionCount, exam.testNumber, exam.negativeMarkingText,
-                        exam.parentExamId, exam.publishMode, 0L, 0, exam.testNumber, 0,
-                        false, exam.avatarUrl, exam.avatarEmoji, exam.avatarColor);
+                        exam.parentExamId, exam.publishMode, exam.lastGenerationTimeMs, 0, exam.testNumber, 0,
+                        false, exam.avatarUrl, exam.avatarEmoji, exam.avatarColor,
+                        exam.syllabusUrl, exam.syllabusFileName, exam.cutoffs);
                 presentFragment(new EveExamTestsFragment(summary));
                 break;
             case ID_TOGGLE_PUBLISH:
@@ -553,36 +599,145 @@ public class EveAdminExamDetailFragment extends BaseFragment {
         });
     }
 
+    private void saveAutoGenSchedule(boolean nextEnabled, String nextTime) {
+        if (destroyed || exam == null) return;
+        EveAdminRepository.ResultCallback<String> cb = new EveAdminRepository.ResultCallback<String>() {
+            @Override
+            public void onSuccess(String msg) {
+                if (destroyed) return;
+                exam = exam.withExtendedSettings(
+                        exam.examName, exam.category, exam.timeLimitMinutes, exam.questionCount,
+                        exam.negativeMarkingText, exam.publishMode, exam.cutoffs, nextEnabled, nextTime);
+                updateList();
+                BulletinFactory.of(EveAdminExamDetailFragment.this)
+                        .createSimpleBulletin(R.raw.contact_check, msg).show();
+                notifyParentAndReload();
+            }
+
+            @Override
+            public void onError(String message, int httpStatus) {
+                if (destroyed) return;
+                BulletinFactory.of(EveAdminExamDetailFragment.this)
+                        .createErrorBulletin(!TextUtils.isEmpty(message) ? message : "Failed to save schedule.").show();
+                updateList();
+            }
+        };
+        repo.runWithAdminToken(cb, token -> {
+            repo.updateExamSettings(token, exam.id, exam.examName, exam.category, exam.timeLimitMinutes,
+                    exam.questionCount, exam.negativeMarkingText, exam.publishMode, exam.cutoffs, nextEnabled, nextTime);
+            repo.postSuccess(cb, (nextEnabled ? "Daily auto-generation enabled at " : "Daily auto-generation paused (") + nextTime + (nextEnabled ? " IST" : ")"));
+        });
+    }
+
+    private void openDailyTimePicker() {
+        Activity act = getParentActivity();
+        if (act == null || exam == null) return;
+        int hour = 6;
+        int min = 0;
+        try {
+            String[] parts = (exam.autoGenTime != null ? exam.autoGenTime : "06:00").split(":");
+            if (parts.length >= 2) {
+                hour = Math.max(0, Math.min(23, Integer.parseInt(parts[0].trim())));
+                min = Math.max(0, Math.min(59, Integer.parseInt(parts[1].trim())));
+            }
+        } catch (Throwable ignored) {
+        }
+        new android.app.TimePickerDialog(act, (view, h, m) -> {
+            String formatted = String.format(Locale.US, "%02d:%02d", h, m);
+            saveAutoGenSchedule(exam.autoGenerationEnabled, formatted);
+        }, hour, min, true).show();
+    }
+
     private void showSyllabusActions() {
         Activity act = getParentActivity();
-        if (act == null) return;
-        String current = exam.syllabusFileName.isEmpty() ? "No PDF attached" : exam.syllabusFileName;
+        if (act == null || exam == null) return;
+        boolean hasSyllabus = !TextUtils.isEmpty(exam.syllabusFileName) || !TextUtils.isEmpty(exam.syllabusUrl);
+        java.util.List<String> labels = new java.util.ArrayList<>();
+        java.util.List<Runnable> actions = new java.util.ArrayList<>();
+        labels.add(hasSyllabus ? "Replace / Upload Syllabus PDF" : "Upload Syllabus PDF");
+        actions.add(this::launchSyllabusPdfPicker);
+        if (hasSyllabus) {
+            labels.add("View / Download Syllabus PDF");
+            actions.add(() -> org.telegram.ui.eve.exams.EvePdfHelper.downloadSyllabusPdf(
+                    this, exam.id, exam.examName, exam.syllabusUrl, exam.syllabusFileName));
+            labels.add("Reassign to Another Exam");
+            actions.add(this::promptReassignSyllabus);
+            labels.add("Remove Syllabus");
+            actions.add(this::removeSyllabusNow);
+        }
         showDialog(new AlertDialog.Builder(act, getResourceProvider())
                 .setTitle("Syllabus: " + exam.examName)
-                .setMessage("Current: " + current + (exam.syllabusUrl.isEmpty() ? "" : "\n" + exam.syllabusUrl))
-                .setPositiveButton("Reassign to Another Exam", (d, w) -> promptReassignSyllabus())
-                .setNeutralButton("Remove Syllabus", (d, w) -> {
-                    EveAdminRepository.ResultCallback<Void> cb = new EveAdminRepository.ResultCallback<Void>() {
-                        @Override
-                        public void onSuccess(Void data) {
-                            BulletinFactory.of(EveAdminExamDetailFragment.this)
-                                    .createSimpleBulletin(R.raw.contact_check, "Syllabus removed.").show();
-                            notifyParentAndReload();
-                        }
-
-                        @Override
-                        public void onError(String message, int httpStatus) {
-                            BulletinFactory.of(EveAdminExamDetailFragment.this)
-                                    .createErrorBulletin(message).show();
-                        }
-                    };
-                    repo.runWithAdminToken(cb, token -> {
-                        repo.removeSyllabus(token, exam.id);
-                        repo.postSuccess(cb, null);
-                    });
+                .setItems(labels.toArray(new String[0]), (d, idx) -> {
+                    if (idx >= 0 && idx < actions.size()) {
+                        actions.get(idx).run();
+                    }
                 })
                 .setNegativeButton(LocaleController.getString(R.string.Close), null)
                 .create());
+    }
+
+    private void removeSyllabusNow() {
+        EveAdminRepository.ResultCallback<Void> cb = new EveAdminRepository.ResultCallback<Void>() {
+            @Override
+            public void onSuccess(Void data) {
+                if (destroyed) return;
+                BulletinFactory.of(EveAdminExamDetailFragment.this)
+                        .createSimpleBulletin(R.raw.contact_check, "Syllabus removed.").show();
+                notifyParentAndReload();
+            }
+
+            @Override
+            public void onError(String message, int httpStatus) {
+                if (destroyed) return;
+                BulletinFactory.of(EveAdminExamDetailFragment.this)
+                        .createErrorBulletin(message).show();
+            }
+        };
+        repo.runWithAdminToken(cb, token -> {
+            repo.removeSyllabus(token, exam.id);
+            repo.postSuccess(cb, null);
+        });
+    }
+
+    private void launchSyllabusPdfPicker() {
+        Activity act = getParentActivity();
+        if (act == null) return;
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("application/pdf");
+        startActivityForResult(Intent.createChooser(intent, "Select Syllabus PDF"), REQ_PICK_SYLLABUS_PDF);
+    }
+
+    private void uploadPickedSyllabusPdf(android.net.Uri uri) {
+        Activity act = getParentActivity();
+        if (act == null || uri == null || exam == null) return;
+        BulletinFactory.of(this).createSimpleBulletin(R.raw.info, "Uploading Syllabus PDF...").show();
+        EveAdminRepository.ResultCallback<String> cb = new EveAdminRepository.ResultCallback<String>() {
+            @Override
+            public void onSuccess(String fileName) {
+                if (destroyed) return;
+                BulletinFactory.of(EveAdminExamDetailFragment.this)
+                        .createSimpleBulletin(R.raw.contact_check, "Syllabus attached: " + fileName).show();
+                notifyParentAndReload();
+            }
+
+            @Override
+            public void onError(String message, int httpStatus) {
+                if (destroyed) return;
+                BulletinFactory.of(EveAdminExamDetailFragment.this)
+                        .createErrorBulletin(!TextUtils.isEmpty(message) ? message : "Syllabus upload failed.").show();
+            }
+        };
+        repo.runWithAdminToken(cb, token -> {
+            byte[] bytes = EveAdminExamPromptFragment.readUriBytes(act, uri, MAX_SYLLABUS_BYTES);
+            if (bytes == null || bytes.length == 0) {
+                repo.postError(cb, "Could not read selected PDF or file exceeds 18MB.", 0);
+                return;
+            }
+            String fileName = EveAdminExamPromptFragment.resolveFileName(act, uri);
+            repo.uploadExamSyllabusPdf(token, exam.id, fileName, bytes);
+            repo.postSuccess(cb, fileName);
+        });
     }
 
     private void promptReassignSyllabus() {
@@ -619,7 +774,7 @@ public class EveAdminExamDetailFragment extends BaseFragment {
                         }
                     };
                     repo.runWithAdminToken(cb, token -> {
-                        repo.reassignSyllabus(token, exam.id, target.id);
+                        repo.reassignSyllabus(token, exam.id, target.id, exam.syllabusUrl, exam.syllabusFileName);
                         repo.postSuccess(cb, null);
                     });
                 })

@@ -181,6 +181,13 @@ adminRoutes.get("/dashboard", async (c) => {
     } else {
       publishedExams++;
     }
+    let parsedCutoffs: Record<string, number> = {};
+    try {
+      const raw = JSON.parse(String(r.cutoffs_json || "{}"));
+      if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+        parsedCutoffs = raw;
+      }
+    } catch {}
     return {
       id: r.id,
       examName: r.exam_name,
@@ -202,6 +209,13 @@ adminRoutes.get("/dashboard", async (c) => {
       aiPrompt: String(r.ai_prompt ?? r.generation_prompt ?? "").trim(),
       aiLanguage: String(r.ai_language || "english").trim().toLowerCase() || "english",
       aiDifficulty: String(r.ai_difficulty || "mixed").trim().toLowerCase() || "mixed",
+      cutoffs: parsedCutoffs,
+      autoGenerationEnabled: Boolean(r.auto_generation_enabled),
+      autoGenTime: String(r.auto_gen_time || "00:00"),
+      lastGeneratedDate: String(r.last_generated_date || ""),
+      lastGenerationStatus: String(r.last_generation_status || ""),
+      lastGenerationError: String(r.last_generation_error || ""),
+      lastGenerationTime: Number(r.last_generation_time || 0),
     };
   });
 

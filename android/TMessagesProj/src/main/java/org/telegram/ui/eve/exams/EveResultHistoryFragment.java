@@ -243,6 +243,10 @@ public class EveResultHistoryFragment extends BaseFragment {
                     : "No matching attempt history found."));
             return;
         }
+        if (searchQuery.isEmpty() && !attempts.isEmpty()) {
+            items.add(EveScoreTrendChartView.Factory.of(900, attempts));
+            items.add(UItem.asShadow(null));
+        }
 
         SimpleDateFormat fmt = new SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.getDefault());
         for (int i = 0; i < filteredAttempts.size(); i++) {

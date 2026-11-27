@@ -1,7 +1,9 @@
 package org.telegram.ui.eve.exams;
 
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Immutable data contracts for EVE backend exams, published mock tests,
@@ -38,6 +40,9 @@ public final class EveExamModels {
         public final String avatarUrl;
         public final String avatarEmoji;
         public final int avatarColor;
+        public final String syllabusUrl;
+        public final String syllabusFileName;
+        public final Map<String, Double> cutoffs;
 
         public ExamSummary(
                 String id,
@@ -55,7 +60,7 @@ public final class EveExamModels {
                 int latestTestTimestampSec) {
             this(id, examName, timeLimitMinutes, category, questionCount, testNumber,
                     negativeMarkingText, parentExamId, publishMode, lastGenerationTimeMs,
-                    liveTestCount, nextTestLabel, latestTestTimestampSec, false, "", "", -1);
+                    liveTestCount, nextTestLabel, latestTestTimestampSec, false, "", "", -1, "", "", null);
         }
 
         public ExamSummary(
@@ -75,7 +80,7 @@ public final class EveExamModels {
                 boolean isPinned) {
             this(id, examName, timeLimitMinutes, category, questionCount, testNumber,
                     negativeMarkingText, parentExamId, publishMode, lastGenerationTimeMs,
-                    liveTestCount, nextTestLabel, latestTestTimestampSec, isPinned, "", "", -1);
+                    liveTestCount, nextTestLabel, latestTestTimestampSec, isPinned, "", "", -1, "", "", null);
         }
 
         public ExamSummary(
@@ -96,6 +101,33 @@ public final class EveExamModels {
                 String avatarUrl,
                 String avatarEmoji,
                 int avatarColor) {
+            this(id, examName, timeLimitMinutes, category, questionCount, testNumber,
+                    negativeMarkingText, parentExamId, publishMode, lastGenerationTimeMs,
+                    liveTestCount, nextTestLabel, latestTestTimestampSec, isPinned,
+                    avatarUrl, avatarEmoji, avatarColor, "", "", null);
+        }
+
+        public ExamSummary(
+                String id,
+                String examName,
+                int timeLimitMinutes,
+                String category,
+                int questionCount,
+                String testNumber,
+                String negativeMarkingText,
+                String parentExamId,
+                String publishMode,
+                long lastGenerationTimeMs,
+                int liveTestCount,
+                String nextTestLabel,
+                int latestTestTimestampSec,
+                boolean isPinned,
+                String avatarUrl,
+                String avatarEmoji,
+                int avatarColor,
+                String syllabusUrl,
+                String syllabusFileName,
+                Map<String, Double> cutoffs) {
             this.id = id != null ? id : "";
             this.examName = examName != null ? examName : "";
             this.timeLimitMinutes = timeLimitMinutes;
@@ -113,6 +145,11 @@ public final class EveExamModels {
             this.avatarUrl = avatarUrl != null ? avatarUrl.trim() : "";
             this.avatarEmoji = avatarEmoji != null ? avatarEmoji.trim() : "";
             this.avatarColor = avatarColor;
+            this.syllabusUrl = syllabusUrl != null ? syllabusUrl.trim() : "";
+            this.syllabusFileName = syllabusFileName != null ? syllabusFileName.trim() : "";
+            this.cutoffs = cutoffs != null && !cutoffs.isEmpty()
+                    ? Collections.unmodifiableMap(new LinkedHashMap<>(cutoffs))
+                    : Collections.emptyMap();
         }
 
         public ExamSummary withPinned(boolean nextPinned) {
@@ -120,7 +157,24 @@ public final class EveExamModels {
                     id, examName, timeLimitMinutes, category, questionCount, testNumber,
                     negativeMarkingText, parentExamId, publishMode, lastGenerationTimeMs,
                     liveTestCount, nextTestLabel, latestTestTimestampSec, nextPinned,
-                    avatarUrl, avatarEmoji, avatarColor);
+                    avatarUrl, avatarEmoji, avatarColor, syllabusUrl, syllabusFileName, cutoffs);
+        }
+
+        public boolean hasSyllabus() {
+            return !syllabusUrl.trim().isEmpty() || !syllabusFileName.trim().isEmpty();
+        }
+
+        public Double getCutoffForCategory(String studentCategory) {
+            if (cutoffs.isEmpty()) {
+                return null;
+            }
+            String normalized = studentCategory != null ? studentCategory.trim() : "";
+            for (Map.Entry<String, Double> entry : cutoffs.entrySet()) {
+                if (entry.getKey().equalsIgnoreCase(normalized)) {
+                    return entry.getValue();
+                }
+            }
+            return cutoffs.get("General");
         }
 
         public boolean isMainExam() {

@@ -25,6 +25,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -493,24 +494,47 @@ public final class EveExamRepository {
         });
     }
 
+    public EveExamModels.ExamSummary findExamSummary(String examIdOrAttemptKey) {
+        if (examIdOrAttemptKey == null || examIdOrAttemptKey.trim().isEmpty()) {
+            return null;
+        }
+        String raw = examIdOrAttemptKey.trim();
+        int sep = raw.indexOf("__");
+        String baseExamId = sep > 0 ? raw.substring(0, sep).trim() : raw;
+        List<EveExamModels.ExamSummary> list = allExamSummaries;
+        if (list == null) {
+            return null;
+        }
+        for (EveExamModels.ExamSummary item : list) {
+            if (item != null && (baseExamId.equals(item.id) || raw.equals(item.id))) {
+                return item;
+            }
+        }
+        return null;
+    }
+
     public void startOrResumeAttempt(
             String attemptKey,
             String sourceExamId,
             String generatedTestId,
             String resumeAttemptId,
             ApiCallback<EveExamModels.StartAttemptResult> callback) {
+        if (attemptKey == null || attemptKey.trim().isEmpty()) {
+            postComplete(callback, null, "Invalid test identifier.");
+            return;
+        }
         withFreshToken(callback, token -> {
             JSONObject payload = new JSONObject();
-            payload.put("examId", attemptKey);
+            payload.put("examId", attemptKey.trim());
             if (resumeAttemptId != null && !resumeAttemptId.trim().isEmpty()) {
                 payload.put("resumeAttemptId", resumeAttemptId.trim());
             }
             JSONObject root = backendClient.postJsonRoot("/api/attempts/start", token, payload);
-            JSONObject data = root.optJSONObject("data");
+            JSONObject data = root != null ? root.optJSONObject("data") : null;
             EveExamModels.StartAttemptResult parsed = parseStartAttemptResult(data, sourceExamId);
             if (!parsed.alreadySubmitted && parsed.questions.isEmpty() && generatedTestId != null && !generatedTestId.trim().isEmpty()) {
                 JSONObject detailRoot = backendClient.getJsonRoot("/api/generated-tests/" + urlEncode(generatedTestId.trim()), token);
-                JSONObject detailData = detailRoot.optJSONObject("data");
+                JSONObject detailData = detailRoot != null ? detailRoot.optJSONObject("data") : null;
                 JSONArray qArr = detailData != null ? detailData.optJSONArray("questions") : null;
                 List<EveExamModels.TestQuestion> fallbackQs = parseQuestionsArray(qArr, sourceExamId, generatedTestId);
                 parsed = new EveExamModels.StartAttemptResult(
@@ -1244,8 +1268,12 @@ public final class EveExamRepository {
                 continue;
             }
             String qId = obj.optString("id", "");
-            if (qId.trim().isEmpty() && fallbackTestId != null && !fallbackTestId.trim().isEmpty()) {
-                qId = fallbackTestId.trim() + "_" + i;
+            if (qId.trim().isEmpty()) {
+                if (fallbackTestId != null && !fallbackTestId.trim().isEmpty()) {
+                    qId = fallbackTestId.trim() + "_" + i;
+                } else {
+                    qId = "q_" + (i + 1);
+                }
             }
             list.add(new EveExamModels.TestQuestion(
                     qId,
@@ -1552,7 +1580,10 @@ public final class EveExamRepository {
                     pinnedIds != null && pinnedIds.contains(id),
                     firstNonEmpty(obj, "avatarUrl", "imageUrl"),
                     firstNonEmpty(obj, "avatarEmoji", ""),
-                    obj.isNull("avatarColor") ? -1 : obj.optInt("avatarColor", -1)
+                    obj.isNull("avatarColor") ? -1 : obj.optInt("avatarColor", -1),
+                    firstNonEmpty(obj, "syllabusUrl", "syllabus_url"),
+                    firstNonEmpty(obj, "syllabusFileName", "syllabus_file_name"),
+                    parseCutoffsMap(obj.optJSONObject("cutoffs"))
             );
             if (!mainExamsOnly || summary.isMainExam()) {
                 list.add(summary);
@@ -1560,6 +1591,24 @@ public final class EveExamRepository {
         }
         Collections.sort(list, Comparator.comparing(e -> e.examName.toLowerCase()));
         return EveExamDialogsMapper.sortExamsByPin(list);
+    }
+
+    public static Map<String, Double> parseCutoffsMap(JSONObject cutoffsObj) {
+        if (cutoffsObj == null || cutoffsObj.length() == 0) {
+            return Collections.emptyMap();
+        }
+        Map<String, Double> map = new LinkedHashMap<>();
+        String[] keys = new String[] { "General", "OBC", "SC", "ST", "EWS" };
+        for (String key : keys) {
+            if (!cutoffsObj.has(key) || cutoffsObj.isNull(key)) {
+                continue;
+            }
+            double val = cutoffsObj.optDouble(key, Double.NaN);
+            if (!Double.isNaN(val) && !Double.isInfinite(val) && val >= 0.0) {
+                map.put(key, val);
+            }
+        }
+        return map.isEmpty() ? Collections.emptyMap() : Collections.unmodifiableMap(map);
     }
 
     public static List<EveExamModels.GeneratedTestSummary> parseGeneratedTests(JSONArray arr) {

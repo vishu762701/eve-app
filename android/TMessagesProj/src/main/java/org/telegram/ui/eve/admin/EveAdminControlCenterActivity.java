@@ -2,6 +2,7 @@ package org.telegram.ui.eve.admin;
 
 import android.app.Activity;
 import android.content.Context;
+import android.text.TextUtils;
 import android.view.View;
 
 import androidx.annotation.NonNull;
@@ -10,7 +11,9 @@ import androidx.annotation.Nullable;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.R;
 import org.telegram.ui.ActionBar.ActionBar;
+import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.BaseFragment;
+import org.telegram.ui.Cells.TextCheckCell;
 import org.telegram.ui.Components.BulletinFactory;
 import org.telegram.ui.Components.IconBackgroundColors;
 import org.telegram.ui.Components.RecyclerListView;
@@ -39,11 +42,14 @@ public class EveAdminControlCenterActivity extends BaseFragment {
     private static final int ID_MOD_CONTENT_COMMS = 1601;
 
     private static final int ID_MOD_STUDENTS = 1301;
-    private static final int ID_MOD_PAYMENTS = 1501;
-    private static final int ID_MOD_PREMIUM = 1502;
-    private static final int ID_MOD_PREMIUM_USERS = 1503;
+    private static final int ID_MOD_PREMIUM_HUB = 1501;
 
-    private static final int ID_MOD_INSIGHTS_SYSTEM = 1401;
+    private static final int ID_MAINTENANCE_SWITCH = 1400;
+    private static final int ID_MOD_ANALYTICS = 1401;
+    private static final int ID_MOD_API_USAGE = 1402;
+    private static final int ID_MOD_CRASH_SECURITY = 1403;
+    private static final int ID_MOD_APP_CONFIG = 1404;
+    private static final int ID_MOD_INSIGHTS_SYSTEM = 1405;
     private static final int ID_MOD_ADMINS = 1801;
     private static final int ID_MOD_AUDIT = 1802;
 
@@ -271,10 +277,10 @@ public class EveAdminControlCenterActivity extends BaseFragment {
                         ID_MOD_EXAMS,
                         IconBackgroundColors.ORANGE.top, IconBackgroundColors.ORANGE.bottom,
                         R.drawable.msg_folders,
-                        "Exams & Syllabus",
+                        "Exams & Auto-Generation",
                         hasSnapshot
-                                ? (snapshot.publishedExams + " live • " + snapshot.draftExams + " paused")
-                                : "Manage exams, tests & question banks",
+                                ? (snapshot.publishedExams + " live • " + snapshot.draftExams + " paused • Cutoffs & Syllabus PDF")
+                                : "Exams, sub-exams, cutoffs, syllabus PDF, AI & banks",
                         hasSnapshot ? String.valueOf(snapshot.totalExams) : null));
                 items.add(SettingsActivity.SettingCell.Factory.of(
                         ID_MOD_AI_STUDIO,
@@ -290,17 +296,18 @@ public class EveAdminControlCenterActivity extends BaseFragment {
                         IconBackgroundColors.RED.top, IconBackgroundColors.RED.bottom,
                         R.drawable.settings_sounds,
                         "Content & Moderation",
-                        "Banners, polls, broadcasts & flags",
+                        "Home banners, broadcasts, polls, flags & feedback",
                         hasSnapshot && snapshot.pendingReports > 0 ? String.valueOf(snapshot.pendingReports) : null));
             }
             items.add(UItem.asShadow(null));
         }
 
-        // Card 2: Students & Revenue
+        // Card 2: People & Premium
         boolean canUsers = !hasSnapshot || EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_USERS);
         boolean canPremium = !hasSnapshot || EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_PREMIUM);
-        if (canUsers || canPremium) {
-            items.add(UItem.asHeader("Students & Revenue"));
+        boolean canAdmins = !hasSnapshot || EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_ADMINS_RIGHTS);
+        if (canUsers || canPremium || canAdmins) {
+            items.add(UItem.asHeader("People & Premium"));
             if (canUsers) {
                 items.add(SettingsActivity.SettingCell.Factory.of(
                         ID_MOD_STUDENTS,
@@ -308,68 +315,90 @@ public class EveAdminControlCenterActivity extends BaseFragment {
                         R.drawable.settings_account,
                         "Students",
                         hasSnapshot
-                                ? (snapshot.activeStudents + " active now • Manage accounts")
-                                : "Directory, profiles & test attempts",
+                                ? (snapshot.activeStudents + " active now • Directory & performance")
+                                : "Overview stats, filters, search & student performance",
                         hasSnapshot ? String.valueOf(snapshot.totalStudents) : null));
             }
             if (canPremium) {
+                String premSub = hasSnapshot
+                        ? ("₹" + snapshot.totalRevenueInr + " earned • " + snapshot.activePremiumUsers + " active • " + snapshot.pendingTransactions + " pending")
+                        : "Plan & UPI, Benefits, Session Expiry, QR, Subscribers & Orders";
                 items.add(SettingsActivity.SettingCell.Factory.of(
-                        ID_MOD_PAYMENTS,
-                        IconBackgroundColors.GREEN.top, IconBackgroundColors.GREEN.bottom,
-                        R.drawable.msg_stats,
-                        "Payment Orders",
-                        hasSnapshot
-                                ? ("₹" + snapshot.totalRevenueInr + " earned • " + snapshot.pendingTransactions + " pending")
-                                : "UPI & QR payment transactions",
-                        hasSnapshot ? String.valueOf(snapshot.totalTransactions) : null));
-                items.add(SettingsActivity.SettingCell.Factory.of(
-                        ID_MOD_PREMIUM,
+                        ID_MOD_PREMIUM_HUB,
                         0xFFB659FF, 0xFF617CFF,
                         R.drawable.settings_premium,
-                        "Premium Plans & UPI",
-                        "Pricing, duration & UPI QR",
-                        null));
+                        "Manage Premium",
+                        premSub,
+                        hasSnapshot && snapshot.pendingTransactions > 0 ? String.valueOf(snapshot.pendingTransactions) : null));
+            }
+            if (canAdmins) {
                 items.add(SettingsActivity.SettingCell.Factory.of(
-                        ID_MOD_PREMIUM_USERS,
-                        IconBackgroundColors.ORANGE_DEEP.top, IconBackgroundColors.ORANGE_DEEP.bottom,
-                        R.drawable.msg_groups,
-                        "Premium Subscribers",
-                        "Active memberships",
-                        hasSnapshot ? String.valueOf(snapshot.activePremiumUsers) : null));
+                        ID_MOD_ADMINS,
+                        IconBackgroundColors.BLUE_DEEP.top, IconBackgroundColors.BLUE_DEEP.bottom,
+                        R.drawable.settings_privacy,
+                        "Admin Roles",
+                        "Delegate granular team rights & permissions",
+                        null));
             }
             items.add(UItem.asShadow(null));
         }
 
-        // Card 3: System & Access
-        items.add(UItem.asHeader("System & Access"));
+        // Card 3: System & Insights
+        items.add(UItem.asHeader("System & Insights"));
+        boolean canConfig = !hasSnapshot || EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_CONFIG);
+        boolean maintenanceActive = snapshot != null && snapshot.appConfig != null && snapshot.appConfig.maintenanceMode;
+        if (canConfig) {
+            items.add(UItem.asCheck(ID_MAINTENANCE_SWITCH, "Maintenance Mode").setChecked(maintenanceActive));
+        }
         items.add(SettingsActivity.SettingCell.Factory.of(
-                ID_MOD_INSIGHTS_SYSTEM,
+                ID_MOD_ANALYTICS,
                 IconBackgroundColors.CYAN.top, IconBackgroundColors.CYAN.bottom,
                 R.drawable.msg_stats,
-                "Analytics & Health",
+                "Analytics & Charts",
                 hasSnapshot
                         ? (snapshot.completedAttempts + " attempts • Avg " + String.format(Locale.US, "%.1f", snapshot.averageScorePct))
-                        : "Exam scores, crash alerts & config",
+                        : "Score trends, 7d/30d filters & question accuracy",
                 null));
-        if (!hasSnapshot || EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_ADMINS_RIGHTS)) {
+        items.add(SettingsActivity.SettingCell.Factory.of(
+                ID_MOD_API_USAGE,
+                IconBackgroundColors.PURPLE.top, IconBackgroundColors.PURPLE.bottom,
+                R.drawable.msg_send,
+                "API Usage & AI Provider",
+                "AI requests, latency & provider settings",
+                null));
+        items.add(SettingsActivity.SettingCell.Factory.of(
+                ID_MOD_CRASH_SECURITY,
+                IconBackgroundColors.RED.top, IconBackgroundColors.RED.bottom,
+                R.drawable.msg_warning,
+                "Crash & Security Monitor",
+                "Live crash signatures & security audit signals",
+                null));
+        if (canConfig) {
             items.add(SettingsActivity.SettingCell.Factory.of(
-                    ID_MOD_ADMINS,
+                    ID_MOD_APP_CONFIG,
                     IconBackgroundColors.BLUE_DEEP.top, IconBackgroundColors.BLUE_DEEP.bottom,
-                    R.drawable.settings_privacy,
-                    "Admin Roles",
-                    "Manage team & permissions",
+                    R.drawable.msg_settings,
+                    "App Config",
+                    "Min supported version, maintenance note & defaults",
                     null));
         }
+        items.add(SettingsActivity.SettingCell.Factory.of(
+                ID_MOD_INSIGHTS_SYSTEM,
+                IconBackgroundColors.GREEN.top, IconBackgroundColors.GREEN.bottom,
+                R.drawable.msg_select,
+                "System Health & Jobs",
+                "D1/KV/AI health probe & generation job queue",
+                null));
         if (!hasSnapshot || EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_VIEW_ANALYTICS_LOGS)) {
             items.add(SettingsActivity.SettingCell.Factory.of(
                     ID_MOD_AUDIT,
                     IconBackgroundColors.BLUE_ALT.top, IconBackgroundColors.BLUE_ALT.bottom,
                     R.drawable.msg_log,
                     "Audit Log",
-                    "Admin action history",
+                    "Categorized admin action history",
                     null));
         }
-        items.add(UItem.asShadow(null));
+        items.add(UItem.asShadow("Flip Maintenance Mode directly above or inspect system telemetry & audit logs."));
     }
 
     private void onClick(UItem item, View view, int position, float x, float y) {
@@ -396,14 +425,23 @@ public class EveAdminControlCenterActivity extends BaseFragment {
             case ID_MOD_STUDENTS:
                 presentFragment(new EveAdminStudentsFragment());
                 break;
-            case ID_MOD_PAYMENTS:
-                presentFragment(new EveAdminPaymentsFragment());
+            case ID_MOD_PREMIUM_HUB:
+                presentFragment(new EveAdminPremiumHubFragment());
                 break;
-            case ID_MOD_PREMIUM:
-                presentFragment(new EveAdminPremiumConfigFragment());
+            case ID_MAINTENANCE_SWITCH:
+                confirmAndToggleMaintenance(view);
                 break;
-            case ID_MOD_PREMIUM_USERS:
-                presentFragment(new EveAdminPremiumUsersFragment());
+            case ID_MOD_ANALYTICS:
+                presentFragment(new EveAdminExamAnalyticsFragment());
+                break;
+            case ID_MOD_API_USAGE:
+                presentFragment(new EveAdminApiUsageFragment());
+                break;
+            case ID_MOD_CRASH_SECURITY:
+                presentFragment(new EveAdminCrashReportsFragment(profile));
+                break;
+            case ID_MOD_APP_CONFIG:
+                presentFragment(new EveAdminMaintenanceConfigFragment(snapshot != null ? snapshot.appConfig : null, this::refreshDashboard));
                 break;
             case ID_MOD_INSIGHTS_SYSTEM:
                 presentFragment(new EveAdminInsightsAndSystemFragment(profile));
@@ -415,6 +453,58 @@ public class EveAdminControlCenterActivity extends BaseFragment {
                 presentFragment(new EveAdminAuditLogFragment());
                 break;
         }
+    }
+
+    private void confirmAndToggleMaintenance(View view) {
+        Activity activity = getParentActivity();
+        if (activity == null) return;
+        EveAdminModels.AppConfigModel currentCfg = snapshot != null ? snapshot.appConfig : null;
+        boolean currentState = currentCfg != null && currentCfg.maintenanceMode;
+        boolean nextState = !currentState;
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(activity, getResourceProvider());
+        builder.setTitle(nextState ? "Enable Maintenance Mode?" : "Disable Maintenance Mode?");
+        builder.setMessage(nextState
+                ? "Students will immediately see the maintenance screen until you turn it back off."
+                : "Students will regain normal access to exams and mock tests.");
+        builder.setPositiveButton(nextState ? "Enable Now" : "Disable Now", (d, w) -> {
+            if (view instanceof TextCheckCell) {
+                ((TextCheckCell) view).setChecked(nextState);
+            }
+            EveAdminRepository.ResultCallback<EveAdminModels.AppConfigModel> cb = new EveAdminRepository.ResultCallback<EveAdminModels.AppConfigModel>() {
+                @Override
+                public void onSuccess(EveAdminModels.AppConfigModel updated) {
+                    if (destroyed) return;
+                    BulletinFactory.of(EveAdminControlCenterActivity.this)
+                            .createSuccessBulletin(updated.maintenanceMode ? "Maintenance Mode enabled" : "Maintenance Mode disabled").show();
+                    refreshDashboard();
+                }
+
+                @Override
+                public void onError(String message, int httpStatus) {
+                    if (destroyed) return;
+                    BulletinFactory.of(EveAdminControlCenterActivity.this)
+                            .createErrorBulletin(!TextUtils.isEmpty(message) ? message : "Failed to update Maintenance Mode.").show();
+                    if (listView != null && listView.adapter != null) {
+                        listView.adapter.update(true);
+                    }
+                }
+            };
+            repo.runWithAdminToken(cb, token -> {
+                EveAdminModels.AppConfigModel latest = currentCfg != null ? currentCfg : repo.fetchAppConfig(token);
+                int minVer = latest != null ? Math.max(1, latest.minimumSupportedVersionCode) : 1;
+                String msg = latest != null && !TextUtils.isEmpty(latest.maintenanceMessage)
+                        ? latest.maintenanceMessage
+                        : "EVE is under scheduled maintenance. Please check back shortly.";
+                String defMode = latest != null && !TextUtils.isEmpty(latest.defaultPublishMode)
+                        ? latest.defaultPublishMode
+                        : "paused";
+                EveAdminModels.AppConfigModel res = repo.updateAppConfig(token, minVer, nextState, msg, defMode);
+                repo.postSuccess(cb, res);
+            });
+        });
+        builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
+        showDialog(builder.create());
     }
 
     private void openAiPromptStudio() {

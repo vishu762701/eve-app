@@ -247,4 +247,75 @@ public class EveStudentExamExecutionTest {
         assertEquals("parent-1", topLevel.get(0).id);
         assertEquals(2, allItems.size());
     }
+
+    @Test
+    public void testPlayerStartupGuards_paletteTimerStatesAndCutoffEvaluation() throws Exception {
+        // 1. Startup guards against null/empty/malformed payloads
+        assertFalse(EveTestPlayerFragment.validateStartupSession("", null, "").isEmpty());
+        assertFalse(EveTestPlayerFragment.validateStartupSession("k1", null, "Network down").isEmpty());
+        assertEquals("Network down", EveTestPlayerFragment.validateStartupSession("k1", null, "Network down"));
+        assertFalse(EveTestPlayerFragment.validateStartupSession("k1", null, "").isEmpty());
+
+        EveExamModels.StartAttemptResult emptyQs = new EveExamModels.StartAttemptResult(
+                false, "", "c-1", 1000L, 1800, 1800, java.util.Collections.emptyList());
+        assertEquals("No questions are available in this test yet.",
+                EveTestPlayerFragment.validateStartupSession("k1", emptyQs, ""));
+
+        EveExamModels.StartAttemptResult submittedNoId = new EveExamModels.StartAttemptResult(
+                true, "", "c-1", 1000L, 1800, 1800, java.util.Collections.emptyList());
+        assertFalse(EveTestPlayerFragment.validateStartupSession("k1", submittedNoId, "").isEmpty());
+
+        EveExamModels.StartAttemptResult submittedValid = new EveExamModels.StartAttemptResult(
+                true, "att-99", "c-1", 1000L, 1800, 1800, java.util.Collections.emptyList());
+        assertEquals("ALREADY_SUBMITTED", EveTestPlayerFragment.validateStartupSession("k1", submittedValid, ""));
+
+        java.util.List<EveExamModels.TestQuestion> validList = java.util.Collections.singletonList(
+                new EveExamModels.TestQuestion("q1", "ex1", 1, "Q?", "", "A", "B", "C", "D", "", "", "", "", "GS"));
+        EveExamModels.StartAttemptResult validStart = new EveExamModels.StartAttemptResult(
+                false, "", "c-1", 1000L, 1800, 1800, validList);
+        assertEquals("", EveTestPlayerFragment.validateStartupSession("k1", validStart, ""));
+
+        // 2. All 4 Palette states & Low-time red warning (<= 120s)
+        assertEquals(EveTestPlayerFragment.PaletteState.UNVISITED, EveTestPlayerFragment.resolvePaletteState(false, false));
+        assertEquals(EveTestPlayerFragment.PaletteState.ANSWERED, EveTestPlayerFragment.resolvePaletteState(true, false));
+        assertEquals(EveTestPlayerFragment.PaletteState.MARKED, EveTestPlayerFragment.resolvePaletteState(false, true));
+        assertEquals(EveTestPlayerFragment.PaletteState.ANSWERED_AND_MARKED, EveTestPlayerFragment.resolvePaletteState(true, true));
+        assertTrue(EveTestPlayerFragment.isLowTimeWarning(120, 1800));
+        assertFalse(EveTestPlayerFragment.isLowTimeWarning(121, 1800));
+        assertFalse(EveTestPlayerFragment.isLowTimeWarning(0, 0));
+
+        // 3. ExamSummary cutoffs & syllabus parsing + Cutoff badge evaluation
+        JSONArray cutCatalog = new JSONArray("[{"
+                + "\"id\":\"ex-cut\",\"examName\":\"UPSC Prelims\",\"publishMode\":\"live\","
+                + "\"syllabusUrl\":\"/api/exams/ex-cut/syllabus\",\"syllabusFileName\":\"upsc.pdf\","
+                + "\"cutoffs\":{\"General\":105,\"OBC\":98.5,\"SC\":88,\"ST\":82,\"EWS\":100}"
+                + "}]");
+        List<EveExamModels.ExamSummary> parsedCatalog = EveExamRepository.parseExamCatalog(cutCatalog, null);
+        assertEquals(1, parsedCatalog.size());
+        EveExamModels.ExamSummary cutExam = parsedCatalog.get(0);
+        assertTrue(cutExam.hasSyllabus());
+        assertEquals(Double.valueOf(98.5), cutExam.getCutoffForCategory("OBC"));
+
+        EveTestResultFragment.CutoffEvaluation cleared = EveTestResultFragment.evaluateCutoffStatus(104.0, "OBC", cutExam.getCutoffForCategory("OBC"));
+        assertTrue(cleared.hasCutoff);
+        assertTrue(cleared.cleared);
+        assertEquals("Cleared OBC Cutoff (+5.50)", cleared.label);
+
+        EveTestResultFragment.CutoffEvaluation missed = EveTestResultFragment.evaluateCutoffStatus(95.0, "General", cutExam.getCutoffForCategory("General"));
+        assertTrue(missed.hasCutoff);
+        assertFalse(missed.cleared);
+        assertEquals("Below General Cutoff (-10)", missed.label);
+
+        assertFalse(EveTestResultFragment.evaluateCutoffStatus(95.0, "General", null).hasCutoff);
+
+        // 4. Deterministic question fallback ID + new PDF/Chart classes present
+        List<EveExamModels.TestQuestion> noIdQs = EveExamRepository.parseQuestionsArray(
+                new JSONArray("[{\"questionText\":\"Q without ID\",\"optionA\":\"1\",\"optionB\":\"2\",\"optionC\":\"3\",\"optionD\":\"4\"}]"),
+                "ex-cut", "");
+        assertEquals("q_1", noIdQs.get(0).id);
+
+        assertNotNull(Class.forName("org.telegram.ui.eve.exams.EvePdfHelper"));
+        assertNotNull(Class.forName("org.telegram.ui.eve.exams.EveQuestionTimeChartView"));
+        assertNotNull(Class.forName("org.telegram.ui.eve.exams.EveScoreTrendChartView"));
+    }
 }

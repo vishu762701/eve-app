@@ -239,10 +239,19 @@ examRoutes.post("/", requirePermission("manage_exams"), async (c) => {
   let publishMode = "inherit";
   if (body.publishMode !== undefined && body.publishMode !== null) {
     const mode = String(body.publishMode).trim().toLowerCase();
-    if (mode !== "inherit" && mode !== "live" && mode !== "paused" && mode !== "archived") {
-      return c.json({ success: false, error: "publishMode must be 'inherit', 'live', 'paused', or 'archived'" }, 400);
+    if (mode !== "inherit" && mode !== "live" && mode !== "paused" && mode !== "draft" && mode !== "archived") {
+      return c.json({ success: false, error: "publishMode must be 'inherit', 'live', 'paused', 'draft', or 'archived'" }, 400);
     }
     publishMode = mode;
+  }
+
+  let cutoffsJson = "{}";
+  if (body.cutoffs !== undefined) {
+    const cutoffs = normalizeCutoffs(body.cutoffs);
+    if (!cutoffs) {
+      return c.json({ success: false, error: "Cutoffs must contain non-negative numeric General/OBC/SC/ST/EWS values" }, 400);
+    }
+    cutoffsJson = JSON.stringify(cutoffs);
   }
 
   if (!name) {
@@ -331,6 +340,10 @@ examRoutes.post("/", requirePermission("manage_exams"), async (c) => {
     insertCols.push("ai_difficulty");
     insertVals.push(aiDifficulty);
   }
+  if (examCols.has("cutoffs_json")) {
+    insertCols.push("cutoffs_json");
+    insertVals.push(cutoffsJson);
+  }
 
   const insertStmt = db
     .prepare(
@@ -350,7 +363,19 @@ examRoutes.post("/", requirePermission("manage_exams"), async (c) => {
   await db.batch([insertStmt, auditStmt]);
   await purgeEdgeCache(c, ["/api/exams"]);
 
-  return c.json({ success: true, data: { id } }, 201);
+  return c.json(
+    {
+      success: true,
+      data: {
+        id,
+        publishMode,
+        cutoffs: JSON.parse(cutoffsJson),
+        autoGenerationEnabled: autoGenEnabled === 1,
+        autoGenTime,
+      },
+    },
+    201
+  );
 });
 
 // PUT /api/exams/:id - Full settings update (Admin)
@@ -440,8 +465,8 @@ examRoutes.put("/:id", requirePermission("manage_exams"), async (c) => {
   let publishMode = existing.publish_mode || "inherit";
   if (body.publishMode !== undefined && body.publishMode !== null) {
     const mode = String(body.publishMode).trim().toLowerCase();
-    if (mode !== "inherit" && mode !== "live" && mode !== "paused" && mode !== "archived") {
-      return c.json({ success: false, error: "publishMode must be 'inherit', 'live', 'paused', or 'archived'" }, 400);
+    if (mode !== "inherit" && mode !== "live" && mode !== "paused" && mode !== "draft" && mode !== "archived") {
+      return c.json({ success: false, error: "publishMode must be 'inherit', 'live', 'paused', 'draft', or 'archived'" }, 400);
     }
     publishMode = mode;
   }
@@ -499,6 +524,9 @@ examRoutes.put("/:id", requirePermission("manage_exams"), async (c) => {
   add("negative_marking_value", negValue, body.negativeMarkingText != null);
   add("parent_exam_id", parentExamId, body.parentExamId !== undefined);
   add("publish_mode", publishMode, body.publishMode != null);
+  if (body.cutoffs !== undefined && !examCols.has("cutoffs_json")) {
+    await db.prepare("ALTER TABLE exams ADD COLUMN cutoffs_json TEXT NOT NULL DEFAULT '{}'").run().catch(() => {});
+  }
   add("cutoffs_json", cutoffsJson, body.cutoffs !== undefined);
   if (!assignments.length) return c.json({ success: false, error: "No editable exam fields provided" }, 400);
   const destination = examDestinationGuard(body.examName !== undefined ? examName : undefined,
