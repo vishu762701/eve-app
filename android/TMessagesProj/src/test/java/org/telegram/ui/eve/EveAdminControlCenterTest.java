@@ -10,6 +10,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.telegram.ui.eve.admin.EveAdminConfig;
+import org.telegram.ui.eve.admin.EveAdminDialogs;
 import org.telegram.ui.eve.admin.EveAdminModels;
 import org.telegram.ui.eve.admin.EveAdminRepository;
 import org.telegram.ui.eve.auth.EveBackendClient;
