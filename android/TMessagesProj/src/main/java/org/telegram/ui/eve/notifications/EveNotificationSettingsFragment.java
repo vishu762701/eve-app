@@ -104,7 +104,7 @@ public class EveNotificationSettingsFragment extends BaseFragment {
                 EveNotificationHelper.toggleCategory(ctx, EveNotificationHelper.PREF_VIBRATE);
                 break;
             case ID_OPEN_ANNOUNCEMENTS:
-                presentFragment(new EveAnnouncementsFragment());
+                org.telegram.ui.eve.auth.EveTelegramSessionManager.getInstance().openAnnouncementsDestination(EveNotificationSettingsFragment.this);
                 return;
             case ID_SYNC_FCM:
                 EveNotificationHelper.syncFcmTokenIfSignedIn();

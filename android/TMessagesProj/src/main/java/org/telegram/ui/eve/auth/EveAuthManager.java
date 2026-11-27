@@ -645,8 +645,11 @@ public final class EveAuthManager {
                         return;
                     }
                     ioExecutor.execute(() -> {
+                        EveTelegramSessionManager tgSession = EveTelegramSessionManager.getInstance();
+                        String tgUserId = tgSession.getLinkedTelegramUserId(UserConfig.selectedAccount);
+                        String tgUsername = tgSession.getLinkedTelegramUsername(UserConfig.selectedAccount);
                         EveAuthCoordinator.SyncOutcome outcome = EveAuthCoordinator.executeCloudSync(
-                                backendClient, workingProfile, idToken);
+                                backendClient, workingProfile, idToken, tgUserId, tgUsername);
                         if (outcome.state == EveAuthCoordinator.SyncState.AUTH_EXPIRED && allowRetryOn401) {
                             // One retry with another forced refresh in case of clock skew / key rotation.
                             runFreshTokenSync(user, overrideDisplayName, false, callback);
@@ -930,6 +933,9 @@ public final class EveAuthManager {
     private volatile String lastEnsuredUiSignature = "";
 
     public long ensureLocalUiUser(int account) {
+        if (EveTelegramSessionManager.getInstance().isRealMtprotoSession(account)) {
+            return UserConfig.getInstance(account).getClientUserId();
+        }
         long userId = getEffectiveUiUserId();
         EveUserProfile profile = getCachedProfile();
         if (userId == 0L || profile == null) {

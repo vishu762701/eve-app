@@ -284,9 +284,10 @@ import me.vkryl.core.BitwiseUtils;
 public class DialogsActivity extends BaseFragment implements NotificationCenter.NotificationCenterDelegate, FloatingDebugProvider, FactorAnimator.Target, MainTabsActivity.TabFragmentDelegate, EveExamRepository.CatalogListener {
     // EVE-PATCH: Mission 2 - Main Chats screen serves live EVE exams through original DialogCell UI.
     private String examSearchQuery = "";
+    private boolean eveExamsMode = true;
 
     public boolean isEveExamsMode() {
-        return initialDialogsType == DIALOGS_TYPE_DEFAULT && folderId == 0 && communityId == 0 && !onlySelect && searchString == null;
+        return eveExamsMode && initialDialogsType == DIALOGS_TYPE_DEFAULT && folderId == 0 && communityId == 0 && !onlySelect && searchString == null;
     }
 
     public String getExamSearchQuery() {
@@ -3015,6 +3016,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             closeFragment = arguments.getBoolean("closeFragment", true);
             allowGlobalSearch = arguments.getBoolean("allowGlobalSearch", true);
             hasMainTabs = arguments.getBoolean("hasMainTabs", false);
+            eveExamsMode = arguments.getBoolean("eve_exams_mode", true);
 
             byte[] requestPeerTypeBytes = arguments.getByteArray("requestPeerType");
             if (requestPeerTypeBytes != null) {
@@ -3681,9 +3683,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             } else {
                 statusDrawable = new AnimatedEmojiDrawable.SwapAnimatedEmojiDrawable(null, dp(26));
                 statusDrawable.center = true;
-                // EVE-PATCH: Mission 1 - Display EVE title instead of Telegram wordmark drawable on main screen.
+                // EVE-PATCH: Mission 1 - Display EVE title in Exams mode and Chats title in Telegram Chats mode.
                 logoDrawable = null;
-                actionBar.setTitle(getString(R.string.AppName), statusDrawable);
+                actionBar.setTitle(getString(isEveExamsMode() ? R.string.AppName : R.string.MainTabsChats), statusDrawable);
                 updateStatus(UserConfig.getInstance(currentAccount).getCurrentUser(), false);
             }
             if (folderId == 0) {
@@ -7757,7 +7759,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 if (viewPages != null && viewPages[0] != null && viewPages[0].dialogsAdapter != null) {
                     viewPages[0].dialogsAdapter.updateList(null);
                 }
-                presentFragment(new org.telegram.ui.eve.exams.EveAnnouncementsFragment());
+                org.telegram.ui.eve.auth.EveTelegramSessionManager.getInstance().openAnnouncementsDestination(DialogsActivity.this);
                 return;
             }
             if (object instanceof EveExamModels.ExamSummary) {
@@ -13258,7 +13260,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 presentFragment(new org.telegram.ui.eve.exams.EveLeaderboardFragment("overall", getString(R.string.EveLeaderboard)));
             });
             io.add(R.drawable.msg_notifications, getString(R.string.EveAnnouncements), () -> {
-                presentFragment(new org.telegram.ui.eve.exams.EveAnnouncementsFragment());
+                org.telegram.ui.eve.auth.EveTelegramSessionManager.getInstance().openAnnouncementsDestination(DialogsActivity.this);
             });
             io.add(R.drawable.msg_settings_old, getString(R.string.Settings), () -> {
                 presentFragment(new SettingsActivity());

@@ -10,6 +10,7 @@
 
     <!-- Bottom Tabs & Main Screen -->
     <string name="MainTabsExams">परीक्षाएँ</string>
+    <string name="MainTabsChats">चैट</string>
     <string name="MainTabsProfile">प्रोफ़ाइल</string>
     <string name="MainTabsSettings">सेटिंग्स</string>
     <string name="Settings">सेटिंग्स</string>
@@ -77,6 +78,7 @@
     <string name="EveThirdPartyApiDisclosure">आपका स्वतंत्र सरकारी परीक्षा तैयारी ऐप।</string>
     <string name="EveCloudAccount">EVE क्लाउड खाता</string>
     <string name="EveCloudSignInSubtitle">परीक्षाएँ, परिणाम और एडमिन एक्सेस सिंक करने के लिए Google से साइन इन करें</string>
+    <string name="EveTelegramChatSync">टेलीग्राम चैट और सिंक</string>
     <string name="EveAdminControlCenter">EVE एडमिन नियंत्रण केंद्र</string>
     <string name="EveAdminControlCenterSubtitle">डैशबोर्ड, परीक्षाएँ, छात्र और मूल्य</string>
     <string name="EvePremium">EVE प्रीमियम</string>

@@ -1709,9 +1709,24 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                 } else {
                     Bundle args = new Bundle();
                     args.putBoolean("afterSignup", afterSignup);
-                    MainTabsActivity mainTabsActivity = new MainTabsActivity();
-                    mainTabsActivity.prepareDialogsActivity(args);
-                    presentFragment(mainTabsActivity, true);
+                    MainTabsActivity existingMainTabs = null;
+                    if (parentLayout != null && parentLayout.getFragmentStack() != null) {
+                        for (int i = parentLayout.getFragmentStack().size() - 1; i >= 0; i--) {
+                            BaseFragment f = parentLayout.getFragmentStack().get(i);
+                            if (f instanceof MainTabsActivity) {
+                                existingMainTabs = (MainTabsActivity) f;
+                                break;
+                            }
+                        }
+                    }
+                    if (existingMainTabs != null) {
+                        existingMainTabs.onTelegramSessionStateChanged(true);
+                        finishFragment();
+                    } else {
+                        MainTabsActivity mainTabsActivity = new MainTabsActivity();
+                        mainTabsActivity.prepareDialogsActivity(args);
+                        presentFragment(mainTabsActivity, true);
+                    }
                 }
 
                 NotificationCenter.getInstance(currentAccount).postNotificationName(NotificationCenter.mainUserInfoChanged);
@@ -1743,6 +1758,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
         UserConfig.getInstance(currentAccount).syncContacts = syncContacts;
         UserConfig.getInstance(currentAccount).setCurrentUser(res.user);
         UserConfig.getInstance(currentAccount).saveConfig(true);
+        org.telegram.ui.eve.auth.EveTelegramSessionManager.getInstance().onTelegramAuthSuccess(currentAccount, res.user);
         MessagesStorage.getInstance(currentAccount).cleanup(true);
         ArrayList<TLRPC.User> users = new ArrayList<>();
         users.add(res.user);

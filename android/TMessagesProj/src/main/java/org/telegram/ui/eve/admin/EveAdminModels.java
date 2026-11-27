@@ -1685,9 +1685,11 @@ public final class EveAdminModels {
         public final String defaultPublishMode;
         public final String announcementChannelName;
         public final String announcementChannelAvatarUrl;
+        public final String officialTelegramChannelUsername;
+        public final String officialTelegramSupportUsername;
 
         public AppConfigModel(int minSupportedVersionCode, boolean maintenanceMode, String maintenanceMessage, String defaultPublishMode) {
-            this(minSupportedVersionCode, maintenanceMode, maintenanceMessage, defaultPublishMode, "Announcements", "");
+            this(minSupportedVersionCode, maintenanceMode, maintenanceMessage, defaultPublishMode, "Announcements", "", "", "");
         }
 
         public AppConfigModel(
@@ -1697,6 +1699,19 @@ public final class EveAdminModels {
                 String defaultPublishMode,
                 String announcementChannelName,
                 String announcementChannelAvatarUrl) {
+            this(minSupportedVersionCode, maintenanceMode, maintenanceMessage, defaultPublishMode,
+                    announcementChannelName, announcementChannelAvatarUrl, "", "");
+        }
+
+        public AppConfigModel(
+                int minSupportedVersionCode,
+                boolean maintenanceMode,
+                String maintenanceMessage,
+                String defaultPublishMode,
+                String announcementChannelName,
+                String announcementChannelAvatarUrl,
+                String officialTelegramChannelUsername,
+                String officialTelegramSupportUsername) {
             this.minSupportedVersionCode = Math.max(1, minSupportedVersionCode);
             this.maintenanceMode = maintenanceMode;
             this.maintenanceMessage = maintenanceMessage != null ? maintenanceMessage : "";
@@ -1704,11 +1719,13 @@ public final class EveAdminModels {
             this.announcementChannelName = announcementChannelName != null && !announcementChannelName.trim().isEmpty()
                     ? announcementChannelName.trim() : "Announcements";
             this.announcementChannelAvatarUrl = announcementChannelAvatarUrl != null ? announcementChannelAvatarUrl.trim() : "";
+            this.officialTelegramChannelUsername = officialTelegramChannelUsername != null ? officialTelegramChannelUsername.trim() : "";
+            this.officialTelegramSupportUsername = officialTelegramSupportUsername != null ? officialTelegramSupportUsername.trim() : "";
         }
 
         public static AppConfigModel fromJson(JSONObject data) {
             if (data == null) {
-                return new AppConfigModel(1, false, "", "paused", "Announcements", "");
+                return new AppConfigModel(1, false, "", "paused", "Announcements", "", "", "");
             }
             int minVer = data.has("minSupportedVersionCode")
                     ? data.optInt("minSupportedVersionCode", 1)
@@ -1720,7 +1737,9 @@ public final class EveAdminModels {
             String pub = clean(data, "defaultPublishMode", clean(data, "default_publish_mode", "paused"));
             String chName = clean(data, "announcementChannelName", clean(data, "announcement_channel_name", "Announcements"));
             String chAvatar = clean(data, "announcementChannelAvatarUrl", clean(data, "announcement_channel_avatar_url", ""));
-            return new AppConfigModel(minVer, maint, msg, pub, chName, chAvatar);
+            String tgChannel = clean(data, "officialTelegramChannelUsername", clean(data, "official_telegram_channel_username", ""));
+            String tgSupport = clean(data, "officialTelegramSupportUsername", clean(data, "official_telegram_support_username", ""));
+            return new AppConfigModel(minVer, maint, msg, pub, chName, chAvatar, tgChannel, tgSupport);
         }
     }
 

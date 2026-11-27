@@ -92,6 +92,8 @@ public final class EveBackendClient {
         public final String defaultPublishMode;
         public final String announcementChannelName;
         public final String announcementChannelAvatarUrl;
+        public final String officialTelegramChannelUsername;
+        public final String officialTelegramSupportUsername;
 
         public AppConfigResult(
                 boolean maintenanceMode,
@@ -100,6 +102,19 @@ public final class EveBackendClient {
                 String defaultPublishMode,
                 String announcementChannelName,
                 String announcementChannelAvatarUrl) {
+            this(maintenanceMode, maintenanceMessage, minSupportedVersionCode, defaultPublishMode,
+                    announcementChannelName, announcementChannelAvatarUrl, "", "");
+        }
+
+        public AppConfigResult(
+                boolean maintenanceMode,
+                String maintenanceMessage,
+                int minSupportedVersionCode,
+                String defaultPublishMode,
+                String announcementChannelName,
+                String announcementChannelAvatarUrl,
+                String officialTelegramChannelUsername,
+                String officialTelegramSupportUsername) {
             this.maintenanceMode = maintenanceMode;
             this.maintenanceMessage = maintenanceMessage != null ? maintenanceMessage : "";
             this.minSupportedVersionCode = minSupportedVersionCode;
@@ -107,6 +122,8 @@ public final class EveBackendClient {
             this.announcementChannelName = announcementChannelName != null && !announcementChannelName.trim().isEmpty()
                     ? announcementChannelName.trim() : "Announcements";
             this.announcementChannelAvatarUrl = announcementChannelAvatarUrl != null ? announcementChannelAvatarUrl.trim() : "";
+            this.officialTelegramChannelUsername = officialTelegramChannelUsername != null ? officialTelegramChannelUsername.trim() : "";
+            this.officialTelegramSupportUsername = officialTelegramSupportUsername != null ? officialTelegramSupportUsername.trim() : "";
         }
 
         public JSONObject toJson() {
@@ -118,6 +135,8 @@ public final class EveBackendClient {
                 obj.put("defaultPublishMode", defaultPublishMode);
                 obj.put("announcementChannelName", announcementChannelName);
                 obj.put("announcementChannelAvatarUrl", announcementChannelAvatarUrl);
+                obj.put("officialTelegramChannelUsername", officialTelegramChannelUsername);
+                obj.put("officialTelegramSupportUsername", officialTelegramSupportUsername);
             } catch (JSONException ignored) {
             }
             return obj;
@@ -125,7 +144,7 @@ public final class EveBackendClient {
 
         public static AppConfigResult fromJson(JSONObject data) {
             if (data == null) {
-                return new AppConfigResult(false, "", 1, "paused", "Announcements", "");
+                return new AppConfigResult(false, "", 1, "paused", "Announcements", "", "", "");
             }
             boolean maint = data.has("maintenanceMode")
                     ? data.optBoolean("maintenanceMode", false)
@@ -142,7 +161,11 @@ public final class EveBackendClient {
                     optCleanString(data, "announcement_channel_name", "Announcements"));
             String chAvatar = optCleanString(data, "announcementChannelAvatarUrl",
                     optCleanString(data, "announcement_channel_avatar_url", ""));
-            return new AppConfigResult(maint, msg, minVer, pub, chName, chAvatar);
+            String tgChannel = optCleanString(data, "officialTelegramChannelUsername",
+                    optCleanString(data, "official_telegram_channel_username", ""));
+            String tgSupport = optCleanString(data, "officialTelegramSupportUsername",
+                    optCleanString(data, "official_telegram_support_username", ""));
+            return new AppConfigResult(maint, msg, minVer, pub, chName, chAvatar, tgChannel, tgSupport);
         }
     }
 
@@ -370,6 +393,14 @@ public final class EveBackendClient {
     }
 
     public SyncResponse syncUserProfile(String firebaseIdToken, String displayName) throws BackendException {
+        return syncUserProfile(firebaseIdToken, displayName, null, null);
+    }
+
+    public SyncResponse syncUserProfile(
+            String firebaseIdToken,
+            String displayName,
+            String telegramUserId,
+            String telegramUsername) throws BackendException {
         requireToken(firebaseIdToken, "/api/users/sync");
         String safeName = (displayName != null && !displayName.trim().isEmpty()) ? displayName.trim() : "Student";
         if (safeName.length() > 100) {
@@ -378,6 +409,12 @@ public final class EveBackendClient {
         JSONObject payload = new JSONObject();
         try {
             payload.put("displayName", safeName);
+            if (telegramUserId != null && !telegramUserId.trim().isEmpty()) {
+                payload.put("telegramUserId", telegramUserId.trim());
+            }
+            if (telegramUsername != null && !telegramUsername.trim().isEmpty()) {
+                payload.put("telegramUsername", telegramUsername.trim().replaceFirst("^@+", ""));
+            }
         } catch (JSONException e) {
             throw new BackendException(0, "/api/users/sync", "SERIALIZE_ERROR", ErrorKind.CLIENT_BAD_REQUEST,
                     "Failed to serialize profile sync payload.");

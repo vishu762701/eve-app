@@ -292,6 +292,8 @@ export interface UserRow {
   username?: string | null;
   phone?: string | null;
   bio?: string | null;
+  telegram_user_id?: string | null;
+  telegram_username?: string | null;
 }
 
 export interface PremiumConfigRow {

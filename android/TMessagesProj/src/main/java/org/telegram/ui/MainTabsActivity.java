@@ -94,18 +94,23 @@ import me.vkryl.android.animator.FactorAnimator;
 
 public class MainTabsActivity extends ViewPagerActivity implements NotificationCenter.NotificationCenterDelegate, FactorAnimator.Target {
 
-    public static final int TABS_COUNT = 3;
-    private static final int POSITION_CHATS = 0;
-    private static final int POSITION_CALLS_OR_SETTINGS = 1;
-    private static final int POSITION_PROFILE = 2;
+    public static final int TABS_COUNT = 4;
+    private static final int POSITION_EXAMS = 0;
+    private static final int POSITION_CHATS = 1;
+    private static final int POSITION_SETTINGS = 2;
+    private static final int POSITION_PROFILE = 3;
 
-    private static final int INDEX_CHATS = 0;
-    private static final int INDEX_SETTINGS = 1;
-    private static final int INDEX_PROFILE = 2;
+    private static final int INDEX_EXAMS = 0;
+    private static final int INDEX_CHATS = 1;
+    private static final int INDEX_SETTINGS = 2;
+    private static final int INDEX_PROFILE = 3;
 
     private static int indexToPosition(int index) {
         return index;
     }
+
+    private boolean lastKnownMtprotoConnected;
+    private DialogsActivity chatsDialogsActivity;
 
     private static final int ANIMATOR_ID_TABS_VISIBLE = 0;
     private final BoolAnimator animatorTabsVisible = new BoolAnimator(ANIMATOR_ID_TABS_VISIBLE,
@@ -244,10 +249,13 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
     }
 
     private int getEstBackgroundColor() {
+        final float whiteTabVisibility = viewPager != null
+                ? Math.max(viewPager.getPositionVisibility(POSITION_EXAMS), viewPager.getPositionVisibility(POSITION_CHATS))
+                : 1f;
         return ColorUtils.blendARGB(
                 getThemedColor(Theme.key_windowBackgroundGray),
                 getThemedColor(Theme.key_windowBackgroundWhite),
-                viewPager != null ? viewPager.getPositionVisibility(0) : 1);
+                whiteTabVisibility);
     }
 
     private boolean tabletLayout;
@@ -285,12 +293,38 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         super.onResume();
         blur3_updateColors();
         checkContactsTabBadge();
+        syncTelegramChatsTabState(false);
         checkUnreadCount(true);
         if (tabs != null && tabs[INDEX_PROFILE] != null) {
             tabs[INDEX_PROFILE].updateUserAvatar(currentAccount);
         }
 
         showAccountChangeHint();
+    }
+
+    public void onTelegramSessionStateChanged(boolean openChatsTab) {
+        lastKnownMtprotoConnected = org.telegram.ui.eve.auth.EveTelegramSessionManager.getInstance().isRealMtprotoSession(currentAccount);
+        chatsDialogsActivity = null;
+        if (viewPager != null) {
+            dropFragmentAtPosition(POSITION_CHATS);
+            dropFragmentAtPosition(POSITION_PROFILE);
+            viewPager.rebuild(false);
+            if (openChatsTab) {
+                selectTab(POSITION_CHATS, true);
+                viewPager.scrollToPosition(POSITION_CHATS);
+            }
+        }
+        checkUnreadCount(false);
+        if (tabs != null && tabs[INDEX_PROFILE] != null) {
+            tabs[INDEX_PROFILE].updateUserAvatar(currentAccount);
+        }
+    }
+
+    private void syncTelegramChatsTabState(boolean openChatsTab) {
+        boolean nowConnected = org.telegram.ui.eve.auth.EveTelegramSessionManager.getInstance().isRealMtprotoSession(currentAccount);
+        if (nowConnected != lastKnownMtprotoConnected) {
+            onTelegramSessionStateChanged(openChatsTab);
+        }
     }
 
     private void checkContactsTabBadge() {
@@ -312,15 +346,17 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         tabsView = new MainTabsLayout(context, resourceProvider);
         tabsView.setClipChildren(false);
         tabsView.setPadding(dp(DialogsActivity.MAIN_TABS_MARGIN + 4), dp(DialogsActivity.MAIN_TABS_MARGIN + 4), dp(DialogsActivity.MAIN_TABS_MARGIN + 4), dp(DialogsActivity.MAIN_TABS_MARGIN + 4));
-        tabsView.setMaxWidth(dp(328 + DialogsActivity.MAIN_TABS_MARGIN * 2));
+        tabsView.setMaxWidth(dp(360 + DialogsActivity.MAIN_TABS_MARGIN * 2));
 
-        tabs = new GlassTabView[3];
-        // EVE-PATCH: Mission 2 - Preserve original Chats icon while renaming bottom tab label to Exams.
-        tabs[INDEX_CHATS] = GlassTabView.createMainTab(context, resourceProvider, GlassTabView.TabAnimation.CHATS, R.string.MainTabsExams);
+        tabs = new GlassTabView[TABS_COUNT];
+        // EVE-PATCH: Host dedicated EVE Exams tab alongside native Telegram Chats tab.
+        tabs[INDEX_EXAMS] = GlassTabView.createMainTab(context, resourceProvider, GlassTabView.TabAnimation.CHECKLIST, R.string.MainTabsExams);
+        tabs[INDEX_CHATS] = GlassTabView.createMainTab(context, resourceProvider, GlassTabView.TabAnimation.CHATS, R.string.MainTabsChats);
         tabs[INDEX_SETTINGS] = GlassTabView.createMainTab(context, resourceProvider, GlassTabView.TabAnimation.SETTINGS, R.string.Settings);
         tabs[INDEX_PROFILE] = GlassTabView.createAvatar(context, resourceProvider, currentAccount, R.string.MainTabsProfile);
         tabs[INDEX_PROFILE].setOnLongClickListener(this::openAccountSelector);
 
+        tabsView.addTabToIgnoreClick(tabs[INDEX_EXAMS]);
         tabsView.addTabToIgnoreClick(tabs[INDEX_CHATS]);
         tabsView.addTabToIgnoreClick(tabs[INDEX_PROFILE]);
 
@@ -401,11 +437,21 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
     }
 
     private void checkUnreadCount(boolean animated) {
-        if (tabsView == null) {
+        if (tabsView == null || tabs == null) {
             return;
         }
-        // EVE-PATCH: Do not display Telegram chat unread-message badges on the EVE Exams tab.
-        tabs[INDEX_CHATS].setCounter(null, false, animated);
+        // Keep unread badge hidden on Exams; display real Telegram unread count on Chats only.
+        if (tabs[INDEX_EXAMS] != null) {
+            tabs[INDEX_EXAMS].setCounter(null, false, animated);
+        }
+        if (tabs[INDEX_CHATS] != null) {
+            if (org.telegram.ui.eve.auth.EveTelegramSessionManager.getInstance().isRealMtprotoSession(currentAccount)) {
+                int unread = MessagesStorage.getInstance(currentAccount).getMainUnreadCount();
+                tabs[INDEX_CHATS].setCounter(unread > 0 ? LocaleController.formatNumber(unread, ',') : null, false, animated);
+            } else {
+                tabs[INDEX_CHATS].setCounter(null, false, animated);
+            }
+        }
     }
 
     public boolean openContactsSelector(View anchor) {
@@ -577,12 +623,9 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
     }
 
     private void openFolder(int folderId) {
-        if (viewPager.getCurrentPosition() == POSITION_CHATS && dialogsActivity != null) {
-            dialogsActivity.scrollToFolder(folderId);
+        if (viewPager.getCurrentPosition() == POSITION_CHATS && chatsDialogsActivity != null) {
+            chatsDialogsActivity.scrollToFolder(folderId);
         } else {
-            if (dialogsActivity == null) {
-                prepareDialogsActivity(null);
-            }
             pendingFolderId = folderId;
             selectTab(POSITION_CHATS, true);
             viewPager.scrollToPosition(POSITION_CHATS);
@@ -657,15 +700,15 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
 
         if (viewPager != null) {
             final int currentPosition = viewPager.getCurrentPosition();
-            if (currentPosition != POSITION_CALLS_OR_SETTINGS && dropCallsFragmentAfterPageScroll) {
-                dropFragmentAtPosition(POSITION_CALLS_OR_SETTINGS);
+            if (currentPosition != POSITION_SETTINGS && dropCallsFragmentAfterPageScroll) {
+                dropFragmentAtPosition(POSITION_SETTINGS);
                 dropCallsFragmentAfterPageScroll = false;
             }
             if (currentPosition != POSITION_PROFILE) {
                 dropFragmentAtPosition(POSITION_PROFILE);
             }
-            if (pendingFolderId != null && currentPosition == POSITION_CHATS && dialogsActivity != null) {
-                dialogsActivity.scrollToFolder(pendingFolderId);
+            if (pendingFolderId != null && currentPosition == POSITION_CHATS && chatsDialogsActivity != null) {
+                chatsDialogsActivity.scrollToFolder(pendingFolderId);
                 pendingFolderId = null;
             }
         }
@@ -697,7 +740,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
 
     @Override
     protected int getStartPosition() {
-        return POSITION_CHATS;
+        return POSITION_EXAMS;
     }
 
     private DialogsActivity dialogsActivity;
@@ -723,25 +766,37 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         }
 
         bundle.putBoolean("hasMainTabs", true);
+        bundle.putBoolean("eve_exams_mode", true);
         dialogsActivity = new DialogsActivity(bundle);
         dialogsActivity.setMainTabsActivityController(new MainTabsActivityControllerImpl());
-        putFragmentAtPosition(POSITION_CHATS, dialogsActivity);
+        putFragmentAtPosition(POSITION_EXAMS, dialogsActivity);
         return dialogsActivity;
     }
 
     @Override
     protected BaseFragment createBaseFragmentAt(int position) {
-        if (position == POSITION_CALLS_OR_SETTINGS) {
-
+        if (position == POSITION_EXAMS) {
             Bundle args = new Bundle();
             args.putBoolean("hasMainTabs", true);
-            return new SettingsActivity(args);
-        } else if (position == POSITION_CHATS) {
-            Bundle args = new Bundle();
-            args.putBoolean("hasMainTabs", true);
+            args.putBoolean("eve_exams_mode", true);
             dialogsActivity = new DialogsActivity(args);
             dialogsActivity.setMainTabsActivityController(new MainTabsActivityControllerImpl());
             return dialogsActivity;
+        } else if (position == POSITION_CHATS) {
+            if (org.telegram.ui.eve.auth.EveTelegramSessionManager.getInstance().isRealMtprotoSession(currentAccount)) {
+                Bundle args = new Bundle();
+                args.putBoolean("hasMainTabs", true);
+                args.putBoolean("eve_exams_mode", false);
+                chatsDialogsActivity = new DialogsActivity(args);
+                chatsDialogsActivity.setMainTabsActivityController(new MainTabsActivityControllerImpl());
+                return chatsDialogsActivity;
+            }
+            chatsDialogsActivity = null;
+            return new org.telegram.ui.eve.auth.EveTelegramChatOnboardingFragment();
+        } else if (position == POSITION_SETTINGS) {
+            Bundle args = new Bundle();
+            args.putBoolean("hasMainTabs", true);
+            return new SettingsActivity(args);
         } else if (position == POSITION_PROFILE) {
             long profileUid = org.telegram.ui.eve.auth.EveAuthManager.getInstance().ensureLocalUiUser(currentAccount);
             if (profileUid == 0) {
@@ -879,8 +934,10 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
 
     @Override
     public void didReceivedNotification(int id, int account, Object... args) {
-        if (id == NotificationCenter.notificationsCountUpdated || id == NotificationCenter.updateInterfaces) {
+        if (id == NotificationCenter.notificationsCountUpdated || id == NotificationCenter.updateInterfaces || id == NotificationCenter.dialogsUnreadCounterChanged) {
             checkUnreadCount(fragmentView != null && fragmentView.isAttachedToWindow());
+        } else if (id == NotificationCenter.appDidLogout) {
+            syncTelegramChatsTabState(false);
         } else if (id == NotificationCenter.appUpdateLoading) {
             if (updateLayout != null) {
                 updateLayout.updateFileProgress(null);
@@ -915,14 +972,8 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         } else if (id == NotificationCenter.callTabsVisibleToggled) {
             final boolean callTabsVisible = getUserConfig().showCallsTab;
             checkUi_callTabVisible(callTabsVisible, true);
-            if (viewPager != null && viewPager.getCurrentPosition() == POSITION_CALLS_OR_SETTINGS) {
-                viewPager.scrollToPosition(POSITION_CHATS);
-                selectTab(POSITION_CHATS, true);
-                dropCallsFragmentAfterPageScroll = true;
-            } else {
-                dropFragmentAtPosition(POSITION_CALLS_OR_SETTINGS);
-            }
         } else if (id == NotificationCenter.mainUserInfoChanged) {
+            syncTelegramChatsTabState(false);
             if (tabs != null && tabs[INDEX_PROFILE] != null) {
                 tabs[INDEX_PROFILE].updateUserAvatar(currentAccount);
             }
@@ -930,8 +981,11 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
             checkContactsTabBadge();
         } else if (id == NotificationCenter.reloadInterface) {
             if (tabs != null) {
+                if (tabs[INDEX_EXAMS] != null) {
+                    tabs[INDEX_EXAMS].setText(LocaleController.getString(R.string.MainTabsExams));
+                }
                 if (tabs[INDEX_CHATS] != null) {
-                    tabs[INDEX_CHATS].setText(LocaleController.getString(R.string.MainTabsExams));
+                    tabs[INDEX_CHATS].setText(LocaleController.getString(R.string.MainTabsChats));
                 }
                 if (tabs[INDEX_SETTINGS] != null) {
                     tabs[INDEX_SETTINGS].setText(LocaleController.getString(R.string.Settings));
@@ -947,15 +1001,18 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
 
     @Override
     public boolean onFragmentCreate() {
+        lastKnownMtprotoConnected = org.telegram.ui.eve.auth.EveTelegramSessionManager.getInstance().isRealMtprotoSession(currentAccount);
         observersGroup = NotificationCenter.getInstance(currentAccount)
             .createObserversGroup(this)
             .add(NotificationCenter.fileLoaded)
             .add(NotificationCenter.fileLoadProgressChanged)
             .add(NotificationCenter.fileLoadFailed)
             .add(NotificationCenter.notificationsCountUpdated)
+            .add(NotificationCenter.dialogsUnreadCounterChanged)
             .add(NotificationCenter.updateInterfaces)
             .add(NotificationCenter.callTabsVisibleToggled)
             .add(NotificationCenter.mainUserInfoChanged)
+            .add(NotificationCenter.appDidLogout)
             .add(NotificationCenter.contactsPermissionBadgeCheck)
             .addGlobal(NotificationCenter.appUpdateAvailable)
             .addGlobal(NotificationCenter.appUpdateLoading)

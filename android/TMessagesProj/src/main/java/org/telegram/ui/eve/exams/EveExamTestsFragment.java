@@ -138,7 +138,7 @@ public class EveExamTestsFragment extends BaseFragment {
                         } else if (id == SUB_HISTORY) {
                             presentFragment(new EveResultHistoryFragment());
                         } else if (id == SUB_ANNOUNCEMENTS) {
-                            presentFragment(new EveAnnouncementsFragment());
+                            org.telegram.ui.eve.auth.EveTelegramSessionManager.getInstance().openAnnouncementsDestination(EveExamTestsFragment.this);
                         } else if (id == SUB_EXAM_INFO) {
                             showExamInfoDialog();
                         }

@@ -48,6 +48,8 @@ public class EveAdminMaintenanceConfigFragment extends BaseFragment {
     private static final int ID_MODE_LIVE = 401;
     private static final int ID_MODE_PAUSED = 402;
     private static final int ID_MODE_DRAFT = 403;
+    private static final int ID_TG_CHANNEL_INPUT = 451;
+    private static final int ID_TG_SUPPORT_INPUT = 452;
     private static final int ID_SAVE_BUTTON = 501;
 
     private final EveAdminRepository repo = EveAdminRepository.getInstance();
@@ -59,11 +61,17 @@ public class EveAdminMaintenanceConfigFragment extends BaseFragment {
     private LinearLayout messageCard;
     private EditTextBoldCursor messageInput;
     private TextView charCountView;
+    private LinearLayout tgChannelCard;
+    private EditTextBoldCursor tgChannelInput;
+    private LinearLayout tgSupportCard;
+    private EditTextBoldCursor tgSupportInput;
 
     private boolean maintenanceMode;
     private int minSupportedVersionCode;
     private String maintenanceMessage;
     private String defaultPublishMode;
+    private String officialTelegramChannelUsername;
+    private String officialTelegramSupportUsername;
     private boolean saving = false;
     private boolean destroyed = false;
 
@@ -81,6 +89,8 @@ public class EveAdminMaintenanceConfigFragment extends BaseFragment {
         this.minSupportedVersionCode = Math.max(1, cfg.minSupportedVersionCode);
         this.maintenanceMessage = !cfg.maintenanceMessage.isEmpty() ? cfg.maintenanceMessage : DEFAULT_MAINTENANCE_MSG;
         this.defaultPublishMode = normalizeMode(cfg.defaultPublishMode);
+        this.officialTelegramChannelUsername = cfg.officialTelegramChannelUsername != null ? cfg.officialTelegramChannelUsername : "";
+        this.officialTelegramSupportUsername = cfg.officialTelegramSupportUsername != null ? cfg.officialTelegramSupportUsername : "";
         this.onSaved = onSaved;
     }
 
@@ -232,6 +242,52 @@ public class EveAdminMaintenanceConfigFragment extends BaseFragment {
             }
         });
         messageCard.addView(messageInput, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+
+        tgChannelCard = new LinearLayout(context);
+        tgChannelCard.setOrientation(LinearLayout.VERTICAL);
+        tgChannelCard.setPadding(dp(20), dp(12), dp(20), dp(12));
+
+        TextView tgChLabel = new TextView(context);
+        tgChLabel.setText("Official Telegram Channel (@username)");
+        tgChLabel.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
+        tgChLabel.setTypeface(AndroidUtilities.bold());
+        tgChLabel.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueHeader, rp));
+        tgChannelCard.addView(tgChLabel, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 4));
+
+        tgChannelInput = new EditTextBoldCursor(context);
+        tgChannelInput.setHint("@eve_official (optional)");
+        tgChannelInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
+        tgChannelInput.setSingleLine(true);
+        tgChannelInput.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16);
+        tgChannelInput.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, rp));
+        tgChannelInput.setHintTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteHintText, rp));
+        tgChannelInput.setCursorColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText, rp));
+        tgChannelInput.setBackground(null);
+        tgChannelInput.setText(officialTelegramChannelUsername);
+        tgChannelCard.addView(tgChannelInput, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+
+        tgSupportCard = new LinearLayout(context);
+        tgSupportCard.setOrientation(LinearLayout.VERTICAL);
+        tgSupportCard.setPadding(dp(20), dp(12), dp(20), dp(12));
+
+        TextView tgSupLabel = new TextView(context);
+        tgSupLabel.setText("Official Support (@username)");
+        tgSupLabel.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
+        tgSupLabel.setTypeface(AndroidUtilities.bold());
+        tgSupLabel.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueHeader, rp));
+        tgSupportCard.addView(tgSupLabel, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 4));
+
+        tgSupportInput = new EditTextBoldCursor(context);
+        tgSupportInput.setHint("@eve_support (optional)");
+        tgSupportInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
+        tgSupportInput.setSingleLine(true);
+        tgSupportInput.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16);
+        tgSupportInput.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, rp));
+        tgSupportInput.setHintTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteHintText, rp));
+        tgSupportInput.setCursorColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText, rp));
+        tgSupportInput.setBackground(null);
+        tgSupportInput.setText(officialTelegramSupportUsername);
+        tgSupportCard.addView(tgSupportInput, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
     }
 
     private void updateCharCounter(int len) {
@@ -250,11 +306,19 @@ public class EveAdminMaintenanceConfigFragment extends BaseFragment {
                         minSupportedVersionCode = Math.max(1, data.minSupportedVersionCode);
                         maintenanceMessage = !data.maintenanceMessage.isEmpty() ? data.maintenanceMessage : DEFAULT_MAINTENANCE_MSG;
                         defaultPublishMode = normalizeMode(data.defaultPublishMode);
+                        officialTelegramChannelUsername = data.officialTelegramChannelUsername != null ? data.officialTelegramChannelUsername : "";
+                        officialTelegramSupportUsername = data.officialTelegramSupportUsername != null ? data.officialTelegramSupportUsername : "";
                         if (minVersionInput != null) {
                             minVersionInput.setText(String.valueOf(minSupportedVersionCode));
                         }
                         if (messageInput != null) {
                             messageInput.setText(maintenanceMessage);
+                        }
+                        if (tgChannelInput != null) {
+                            tgChannelInput.setText(officialTelegramChannelUsername);
+                        }
+                        if (tgSupportInput != null) {
+                            tgSupportInput.setText(officialTelegramSupportUsername);
                         }
                         if (simpleActionBar != null) {
                             simpleActionBar.setSubtitle(maintenanceMode ? "Maintenance Active" : "App is Online");
@@ -306,6 +370,11 @@ public class EveAdminMaintenanceConfigFragment extends BaseFragment {
         items.add(pausedOpt);
         items.add(draftOpt);
         items.add(UItem.asShadow("Default visibility applied when an exam uses 'Inherit' publish mode."));
+
+        items.add(UItem.asHeader("Official Telegram Offload (Optional)"));
+        items.add(UItem.asCustom(ID_TG_CHANNEL_INPUT, tgChannelCard));
+        items.add(UItem.asCustom(ID_TG_SUPPORT_INPUT, tgSupportCard));
+        items.add(UItem.asShadow("When set and Telegram Chat is connected, Home Announcements and Help & Support open directly in native Telegram ChatActivity."));
 
         UItem saveBtn = UItem.asButton(ID_SAVE_BUTTON, R.drawable.ic_ab_done, saving ? "Saving..." : "Save Configuration");
         saveBtn.accent = true;
@@ -365,6 +434,12 @@ public class EveAdminMaintenanceConfigFragment extends BaseFragment {
         final String finalMsg = rawMsg;
         final String finalMode = normalizeMode(defaultPublishMode);
         final boolean finalMaint = maintenanceMode;
+        final String finalTgChannel = tgChannelInput != null && tgChannelInput.getText() != null
+                ? tgChannelInput.getText().toString().trim()
+                : officialTelegramChannelUsername;
+        final String finalTgSupport = tgSupportInput != null && tgSupportInput.getText() != null
+                ? tgSupportInput.getText().toString().trim()
+                : officialTelegramSupportUsername;
 
         EveAdminRepository.ResultCallback<EveAdminModels.AppConfigModel> cb =
                 new EveAdminRepository.ResultCallback<EveAdminModels.AppConfigModel>() {
@@ -389,7 +464,9 @@ public class EveAdminMaintenanceConfigFragment extends BaseFragment {
                     }
                 };
         repo.runWithAdminToken(cb, token -> {
-            EveAdminModels.AppConfigModel updated = repo.updateAppConfig(token, finalMinVer, finalMaint, finalMsg, finalMode);
+            EveAdminModels.AppConfigModel updated = repo.updateAppConfig(
+                    token, finalMinVer, finalMaint, finalMsg, finalMode, finalTgChannel, finalTgSupport);
+            org.telegram.ui.eve.exams.EveExamRepository.getInstance().fetchAppConfig(null);
             repo.postSuccess(cb, updated);
         });
     }

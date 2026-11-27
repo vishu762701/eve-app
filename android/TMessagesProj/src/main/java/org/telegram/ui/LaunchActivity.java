@@ -1234,6 +1234,16 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         }
         if (account != -1) {
             switchToAccount(account, true);
+        } else if (org.telegram.ui.eve.auth.EveAuthManager.getInstance().isSignedInAccount()) {
+            // Keep EVE Google/Firebase session & MainTabsActivity intact when only Telegram MTProto disconnects.
+            org.telegram.ui.eve.auth.EveAuthManager.getInstance().ensureLocalUiUser(currentAccount);
+            for (int i = 0; i < mainFragmentsStack.size(); i++) {
+                BaseFragment f = mainFragmentsStack.get(i);
+                if (f instanceof MainTabsActivity) {
+                    ((MainTabsActivity) f).onTelegramSessionStateChanged(false);
+                }
+            }
+            NotificationCenter.getInstance(currentAccount).postNotificationName(NotificationCenter.mainUserInfoChanged);
         } else {
             RestrictedLanguagesSelectActivity.checkRestrictedLanguages(true);
             clearFragments();

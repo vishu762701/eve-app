@@ -5762,6 +5762,7 @@
     <string name="EvePremiumFooterInfo">Paid EVE plans and pricing are managed by EVE administrators in the EVE Admin Control Center.</string>
     <string name="EveCloudAccount">EVE Cloud Account</string>
     <string name="EveCloudSignInSubtitle">Sign in with Google to sync exams, results &amp; admin access</string>
+    <string name="EveTelegramChatSync">Telegram Chat &amp; Sync</string>
     <string name="EveAdminControlCenter">EVE Admin Control Center</string>
     <string name="EveAdminControlCenterSubtitle">Dashboard, Exams, Students &amp; Pricing</string>
     <string name="EveHelpSupport">EVE Help &amp; Support</string>

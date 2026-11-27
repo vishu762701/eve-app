@@ -1526,12 +1526,29 @@ public final class EveAdminRepository {
             boolean maintenanceMode,
             String maintenanceMessage,
             String defaultPublishMode) throws EveBackendClient.BackendException {
+        return updateAppConfig(token, minVersionCode, maintenanceMode, maintenanceMessage, defaultPublishMode, null, null);
+    }
+
+    public EveAdminModels.AppConfigModel updateAppConfig(
+            String token,
+            int minVersionCode,
+            boolean maintenanceMode,
+            String maintenanceMessage,
+            String defaultPublishMode,
+            String officialTelegramChannelUsername,
+            String officialTelegramSupportUsername) throws EveBackendClient.BackendException {
         JSONObject payload = new JSONObject();
         try {
             payload.put("minimum_supported_version_code", Math.max(1, minVersionCode));
             payload.put("maintenance_mode", maintenanceMode);
             payload.put("maintenance_message", maintenanceMessage != null ? maintenanceMessage : "");
             payload.put("default_publish_mode", defaultPublishMode != null ? defaultPublishMode : "paused");
+            if (officialTelegramChannelUsername != null) {
+                payload.put("officialTelegramChannelUsername", officialTelegramChannelUsername.trim());
+            }
+            if (officialTelegramSupportUsername != null) {
+                payload.put("officialTelegramSupportUsername", officialTelegramSupportUsername.trim());
+            }
         } catch (JSONException ignored) {
         }
         JSONObject root = client.putJsonRoot("/api/admin/config", token, payload);

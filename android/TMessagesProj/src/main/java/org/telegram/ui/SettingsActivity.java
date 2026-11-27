@@ -208,6 +208,9 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
             .add(NotificationCenter.newSuggestionsAvailable);
         org.telegram.ui.eve.auth.EveAuthManager.getInstance().addSessionListener(eveSessionListener);
         org.telegram.ui.eve.auth.EveAuthManager.getInstance().refreshSessionSilentlyIfSignedIn();
+        if (org.telegram.ui.eve.exams.EveExamRepository.getInstance().getCachedAppConfig() == null) {
+            org.telegram.ui.eve.exams.EveExamRepository.getInstance().fetchAppConfig(null);
+        }
 
         if (arguments != null) {
             hasMainTabs = arguments.getBoolean("hasMainTabs", false);
@@ -805,6 +808,15 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
         if (org.telegram.ui.eve.admin.EveAdminConfig.isAdminAvailable()) {
             items.add(SettingCell.Factory.of(28, 0xFF3D8BEB, 0xFF2A6FD9, R.drawable.settings_devices, getString(R.string.EveAdminControlCenter), getString(R.string.EveAdminControlCenterSubtitle)));
         }
+        final String tgChatSubtitle = org.telegram.ui.eve.auth.EveTelegramSessionManager.getInstance()
+                .getConnectionStatusSubtitle(currentAccount);
+        items.add(SettingCell.Factory.of(
+                EVE_SETTINGS_ITEM_TELEGRAM_CHAT,
+                IconBackgroundColors.CYAN.top,
+                IconBackgroundColors.CYAN.bottom,
+                R.drawable.settings_chat,
+                getString(R.string.EveTelegramChatSync),
+                tgChatSubtitle));
         items.add(UItem.asShadow(null));
 
         // EVE-PATCH: Mission 6 - Rebrand Settings entry to EVE Premium while preserving settings_premium star icon.
@@ -828,6 +840,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
 
     public static final int EVE_SETTINGS_ITEM_PREMIUM = 11;
     public static final int EVE_SETTINGS_ITEM_TELEGRAM_FEATURES = 23;
+    public static final int EVE_SETTINGS_ITEM_TELEGRAM_CHAT = 30;
 
     // EVE-PATCH: Mission 6 - Remove Telegram Features while keeping remaining Settings sections intact.
     public static boolean isEveSettingsItemEnabled(int itemId) {
@@ -925,7 +938,9 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
                 break;
 
             case 17:
-                showEveInfoDialog(getString(R.string.EveHelpSupport), getString(R.string.EveHelpSupportBody));
+                if (!org.telegram.ui.eve.auth.EveTelegramSessionManager.getInstance().openOfficialSupportIfConnected(SettingsActivity.this)) {
+                    showEveInfoDialog(getString(R.string.EveHelpSupport), getString(R.string.EveHelpSupportBody));
+                }
                 break;
             case 18:
                 showEveInfoDialog(getString(R.string.EveFaq), getString(R.string.EveFaqBody));
@@ -957,6 +972,10 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
             }
             case 29: {
                 handleEveCloudAccountClick();
+                break;
+            }
+            case EVE_SETTINGS_ITEM_TELEGRAM_CHAT: {
+                handleEveTelegramChatClick();
                 break;
             }
             case 27: {
@@ -1005,6 +1024,50 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
                 .setTitle(title)
                 .setMessage(message)
                 .setPositiveButton(getString(R.string.OK), null)
+                .create());
+    }
+
+    private void handleEveTelegramChatClick() {
+        Activity activity = getParentActivity();
+        if (activity == null) {
+            return;
+        }
+        org.telegram.ui.eve.auth.EveTelegramSessionManager tgManager =
+                org.telegram.ui.eve.auth.EveTelegramSessionManager.getInstance();
+        if (!tgManager.isRealMtprotoSession(currentAccount)) {
+            tgManager.launchTelegramLogin(SettingsActivity.this);
+            return;
+        }
+        String statusText = tgManager.getConnectionStatusSubtitle(currentAccount);
+        showDialog(new AlertDialog.Builder(activity, resourceProvider)
+                .setTitle(getString(R.string.EveTelegramChatSync))
+                .setMessage(statusText + "\n\nTelegram Chats, groups, channels, and polls are active alongside your EVE Exams account.")
+                .setPositiveButton("Open Chats", (d, w) -> {
+                    if (parentLayout != null && parentLayout.getFragmentStack() != null) {
+                        for (int i = parentLayout.getFragmentStack().size() - 1; i >= 0; i--) {
+                            BaseFragment f = parentLayout.getFragmentStack().get(i);
+                            if (f instanceof MainTabsActivity) {
+                                ((MainTabsActivity) f).onTelegramSessionStateChanged(true);
+                                if (f != this) {
+                                    finishFragment();
+                                }
+                                return;
+                            }
+                        }
+                    }
+                    Bundle args = new Bundle();
+                    args.putBoolean("eve_exams_mode", false);
+                    presentFragment(new DialogsActivity(args));
+                })
+                .setNeutralButton("Disconnect", (d, w) -> tgManager.confirmAndDisconnect(SettingsActivity.this, () -> {
+                    if (listView != null && listView.adapter != null) {
+                        listView.adapter.update(true);
+                    }
+                    BulletinFactory.of(SettingsActivity.this)
+                            .createSimpleBulletin(R.raw.info, "Telegram Chat disconnected. EVE Exams remain active.")
+                            .show();
+                }))
+                .setNegativeButton(getString(R.string.Cancel), null)
                 .create());
     }
 

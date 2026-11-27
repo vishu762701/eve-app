@@ -1,0 +1,174 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { DatabaseSync } from "node:sqlite";
+import { Hono } from "hono";
+import { isolatedD1 } from "./support/sqliteD1.mjs";
+import { authRoutes } from "../src/routes/auth.ts";
+import { adminRoutes } from "../src/routes/admin.ts";
+import { appContentRoutes } from "../src/routes/appContent.ts";
+import { readAppConfig } from "../src/util/appConfig.ts";
+
+function buildApp(d1, user) {
+  const app = new Hono();
+  app.use("*", async (c, next) => {
+    c.env = { DB: d1, FIREBASE_PROJECT_ID: "test-project" };
+    if (user) c.set("user", user);
+    await next();
+  });
+  app.get("/api/app-config", async (c) => {
+    const config = await readAppConfig(c.env.DB);
+    return c.json({ success: true, data: config });
+  });
+  app.route("/api/users", authRoutes);
+  app.route("/api/admin", adminRoutes);
+  app.route("/api/app-content", appContentRoutes);
+  return app;
+}
+
+test("POST /api/users/sync persists and returns telegramUserId and telegramUsername when migration is applied", async () => {
+  const { d1 } = isolatedD1();
+  const app = buildApp(d1, {
+    uid: "stu-tg-1",
+    email: "student.tg@example.com",
+    displayName: "Aarav",
+    isAdmin: false,
+    emailVerified: true,
+  });
+
+  const syncRes = await app.request("http://localhost/api/users/sync", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      displayName: "Aarav",
+      telegramUserId: "9996628429",
+      telegramUsername: "@aarav_test",
+    }),
+  });
+  assert.equal(syncRes.status, 200);
+  const syncJson = await syncRes.json();
+  assert.equal(syncJson.success, true);
+  assert.ok(syncJson.data.eveId.startsWith("EV-"));
+  assert.equal(syncJson.data.telegramUserId, "9996628429");
+  assert.equal(syncJson.data.telegramUsername, "aarav_test");
+
+  // Subsequent sync without telegram fields preserves linked Telegram identity
+  const secondRes = await app.request("http://localhost/api/users/sync", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ displayName: "Aarav Kumar" }),
+  });
+  assert.equal(secondRes.status, 200);
+  const secondJson = await secondRes.json();
+  assert.equal(secondJson.data.telegramUserId, "9996628429");
+  assert.equal(secondJson.data.telegramUsername, "aarav_test");
+
+  // Invalid telegramUserId is rejected with 400
+  const badRes = await app.request("http://localhost/api/users/sync", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ displayName: "Aarav", telegramUserId: "bad id with spaces!" }),
+  });
+  assert.equal(badRes.status, 400);
+});
+
+test("POST /api/users/sync succeeds defensively on legacy users table before migration 0036", async () => {
+  const sqlite = new DatabaseSync(":memory:");
+  sqlite.exec(`CREATE TABLE users (
+    id TEXT PRIMARY KEY,
+    eve_id TEXT,
+    email TEXT,
+    display_name TEXT,
+    created_at INTEGER,
+    last_active INTEGER
+  )`);
+  const d1 = {
+    prepare(sql) {
+      const make = (values = []) => ({
+        bind(...args) { return make(args); },
+        async run() {
+          const r = sqlite.prepare(sql).run(...values);
+          return { meta: { changes: Number(r.changes) } };
+        },
+        async first() { return sqlite.prepare(sql).get(...values) || null; },
+        async all() { return { results: sqlite.prepare(sql).all(...values) }; },
+      });
+      return make();
+    },
+  };
+  const app = buildApp(d1, {
+    uid: "legacy-u1",
+    email: "legacy@example.com",
+    displayName: "Legacy Student",
+    isAdmin: false,
+  });
+  const res = await app.request("http://localhost/api/users/sync", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      displayName: "Legacy Student",
+      telegramUserId: "12345678",
+      telegramUsername: "@legacy_tg",
+    }),
+  });
+  assert.equal(res.status, 200);
+  const json = await res.json();
+  assert.ok(json.data.eveId.startsWith("EV-"));
+  assert.equal(json.data.telegramUserId, undefined);
+  sqlite.close();
+});
+
+test("PUT /api/admin/config and GET /api/app-config store and sanitize official Telegram usernames (while /api/app-content/app_config stays isolated)", async () => {
+  const { sqlite, d1 } = isolatedD1();
+  sqlite.prepare("INSERT OR IGNORE INTO admins (email, created_at) VALUES (?, ?)").run("pronlike9@gmail.com", 1000);
+  const app = buildApp(d1, {
+    uid: "owner-1",
+    email: "pronlike9@gmail.com",
+    displayName: "Owner",
+    isAdmin: true,
+    emailVerified: true,
+  });
+
+  const putRes = await app.request("http://localhost/api/admin/config", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      officialTelegramChannelUsername: "https://t.me/eve_official_updates",
+      officialTelegramSupportUsername: "eve_support_desk",
+    }),
+  });
+  assert.equal(putRes.status, 200);
+  const putJson = await putRes.json();
+  assert.equal(putJson.data.official_telegram_channel_username, "@eve_official_updates");
+  assert.equal(putJson.data.official_telegram_support_username, "@eve_support_desk");
+
+  const appContentRes = await app.request("http://localhost/api/app-content/app_config");
+  assert.equal(appContentRes.status, 404);
+
+  const appConfigRes = await app.request("http://localhost/api/app-config");
+  assert.equal(appConfigRes.status, 200);
+  const appConfigJson = await appConfigRes.json();
+  assert.equal(appConfigJson.data.officialTelegramChannelUsername, "@eve_official_updates");
+  assert.equal(appConfigJson.data.officialTelegramSupportUsername, "@eve_support_desk");
+
+  // Blank clears it cleanly
+  const clearRes = await app.request("http://localhost/api/admin/config", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      officialTelegramChannelUsername: "",
+      officialTelegramSupportUsername: "",
+    }),
+  });
+  assert.equal(clearRes.status, 200);
+  const clearedCfg = await (await app.request("http://localhost/api/app-config")).json();
+  assert.equal(clearedCfg.data.officialTelegramChannelUsername, "");
+  assert.equal(clearedCfg.data.officialTelegramSupportUsername, "");
+
+  // Invalid username returns 400
+  const invalidRes = await app.request("http://localhost/api/admin/config", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ officialTelegramChannelUsername: "bad username!" }),
+  });
+  assert.equal(invalidRes.status, 400);
+});

@@ -104,6 +104,15 @@ public final class EveAuthCoordinator {
             EveBackendClient backendClient,
             EveUserProfile baseProfile,
             String firebaseIdToken) {
+        return executeCloudSync(backendClient, baseProfile, firebaseIdToken, null, null);
+    }
+
+    public static SyncOutcome executeCloudSync(
+            EveBackendClient backendClient,
+            EveUserProfile baseProfile,
+            String firebaseIdToken,
+            String telegramUserId,
+            String telegramUsername) {
         if (baseProfile == null) {
             return new SyncOutcome(
                     SyncState.AUTH_EXPIRED, null, 401, "/api/users/sync", "NO_LOCAL_PROFILE",
@@ -116,7 +125,8 @@ public final class EveAuthCoordinator {
         }
 
         try {
-            EveBackendClient.SyncResponse syncResp = backendClient.syncUserProfile(firebaseIdToken, baseProfile.displayName);
+            EveBackendClient.SyncResponse syncResp = backendClient.syncUserProfile(
+                    firebaseIdToken, baseProfile.displayName, telegramUserId, telegramUsername);
             String resolvedEveId = syncResp.eveId;
             String resolvedName = baseProfile.displayName;
             String resolvedUsername = baseProfile.username;

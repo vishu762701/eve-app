@@ -13,12 +13,46 @@ export interface NormalizedAppConfig {
   default_publish_mode: string;
   announcement_channel_name: string;
   announcement_channel_avatar_url: string;
+  official_telegram_channel_username: string;
+  official_telegram_support_username: string;
   minSupportedVersionCode: number;
   maintenanceMode: boolean;
   maintenanceMessage: string;
   defaultPublishMode: string;
   announcementChannelName: string;
   announcementChannelAvatarUrl: string;
+  officialTelegramChannelUsername: string;
+  officialTelegramSupportUsername: string;
+}
+
+export function sanitizeTelegramAtUsername(raw: unknown): { valid: boolean; value: string; error?: string } {
+  if (raw === undefined || raw === null) {
+    return { valid: true, value: "" };
+  }
+  if (typeof raw !== "string") {
+    return { valid: false, value: "", error: "Telegram username must be a string" };
+  }
+  let cleaned = raw.trim();
+  if (!cleaned) {
+    return { valid: true, value: "" };
+  }
+  cleaned = cleaned.replace(/^https?:\/\/(www\.)?t\.me\//i, "").replace(/^t\.me\//i, "");
+  const queryIdx = cleaned.indexOf("?");
+  if (queryIdx >= 0) {
+    cleaned = cleaned.slice(0, queryIdx);
+  }
+  cleaned = cleaned.replace(/^\/+/, "").replace(/\/+$/, "").replace(/^@+/, "").trim();
+  if (!cleaned) {
+    return { valid: true, value: "" };
+  }
+  if (!/^[a-zA-Z0-9_]{3,32}$/.test(cleaned)) {
+    return {
+      valid: false,
+      value: "",
+      error: "Telegram username must be 3-32 letters, numbers, or underscores",
+    };
+  }
+  return { valid: true, value: `@${cleaned}` };
 }
 
 export function normalizeAppConfigObject(raw: Record<string, any> | null | undefined): Record<string, any> & NormalizedAppConfig {
@@ -52,6 +86,16 @@ export function normalizeAppConfigObject(raw: Record<string, any> | null | undef
   const announcementChannelAvatarUrl =
     typeof chAvatarRaw === "string" ? chAvatarRaw.trim() : "";
 
+  const tgChannelRes = sanitizeTelegramAtUsername(
+    src.official_telegram_channel_username ?? src.officialTelegramChannelUsername
+  );
+  const officialTelegramChannelUsername = tgChannelRes.valid ? tgChannelRes.value : "";
+
+  const tgSupportRes = sanitizeTelegramAtUsername(
+    src.official_telegram_support_username ?? src.officialTelegramSupportUsername
+  );
+  const officialTelegramSupportUsername = tgSupportRes.valid ? tgSupportRes.value : "";
+
   return {
     ...src,
     minimum_supported_version_code: minVer,
@@ -60,12 +104,16 @@ export function normalizeAppConfigObject(raw: Record<string, any> | null | undef
     default_publish_mode: defaultPublishMode,
     announcement_channel_name: announcementChannelName,
     announcement_channel_avatar_url: announcementChannelAvatarUrl,
+    official_telegram_channel_username: officialTelegramChannelUsername,
+    official_telegram_support_username: officialTelegramSupportUsername,
     minSupportedVersionCode: minVer,
     maintenanceMode,
     maintenanceMessage,
     defaultPublishMode,
     announcementChannelName,
     announcementChannelAvatarUrl,
+    officialTelegramChannelUsername,
+    officialTelegramSupportUsername,
   };
 }
 

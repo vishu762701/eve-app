@@ -7,6 +7,73 @@ import { AuthUser, Env, UserRow } from "../types";
 
 export const authRoutes = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
 
+async function getUsersTelegramLinkColumns(
+  db: D1Database
+): Promise<{ hasTelegramUserId: boolean; hasTelegramUsername: boolean }> {
+  try {
+    const { results } = await db.prepare("PRAGMA table_info(users)").all<{ name: string }>();
+    const names = new Set((results || []).map((col) => String(col?.name || "").toLowerCase()));
+    return {
+      hasTelegramUserId: names.has("telegram_user_id"),
+      hasTelegramUsername: names.has("telegram_username"),
+    };
+  } catch {
+    return { hasTelegramUserId: false, hasTelegramUsername: false };
+  }
+}
+
+function parseOptionalTelegramUserId(
+  raw: unknown
+): { provided: boolean; valid: boolean; value: string; error?: string } {
+  if (raw === undefined) {
+    return { provided: false, valid: true, value: "" };
+  }
+  if (raw === null || raw === "") {
+    return { provided: true, valid: true, value: "" };
+  }
+  if (typeof raw !== "string" && typeof raw !== "number") {
+    return { provided: true, valid: false, value: "", error: "telegramUserId must be a string or number" };
+  }
+  if (typeof raw === "number" && (!Number.isFinite(raw) || raw < 0)) {
+    return { provided: true, valid: false, value: "", error: "telegramUserId must be a valid non-negative ID" };
+  }
+  const trimmed = String(raw).trim();
+  if (!trimmed) {
+    return { provided: true, valid: true, value: "" };
+  }
+  if (trimmed.length > 32 || !/^[a-zA-Z0-9_-]{1,32}$/.test(trimmed)) {
+    return { provided: true, valid: false, value: "", error: "telegramUserId must be 1-32 valid ID characters" };
+  }
+  return { provided: true, valid: true, value: trimmed };
+}
+
+function parseOptionalTelegramUsername(
+  raw: unknown
+): { provided: boolean; valid: boolean; value: string; error?: string } {
+  if (raw === undefined) {
+    return { provided: false, valid: true, value: "" };
+  }
+  if (raw === null || raw === "") {
+    return { provided: true, valid: true, value: "" };
+  }
+  if (typeof raw !== "string") {
+    return { provided: true, valid: false, value: "", error: "telegramUsername must be a string" };
+  }
+  const cleaned = raw.trim().replace(/^@+/, "").trim();
+  if (!cleaned) {
+    return { provided: true, valid: true, value: "" };
+  }
+  if (cleaned.length > 64 || !/^[a-zA-Z0-9_]{3,64}$/.test(cleaned)) {
+    return {
+      provided: true,
+      valid: false,
+      value: "",
+      error: "telegramUsername must be 3-64 letters, numbers, or underscores",
+    };
+  }
+  return { provided: true, valid: true, value: cleaned };
+}
+
 // GET /api/auth/me - Current user auth info
 authRoutes.get("/me", async (c) => {
   const user = c.get("user");
@@ -182,6 +249,14 @@ authRoutes.post("/sync", async (c) => {
       !body.displayName.trim() || body.displayName.length > 100)) {
     return c.json({ success: false, error: "Display name must contain 1-100 characters" }, 400);
   }
+  const tgIdParsed = parseOptionalTelegramUserId(body.telegramUserId);
+  if (!tgIdParsed.valid) {
+    return c.json({ success: false, error: tgIdParsed.error }, 400);
+  }
+  const tgUsernameParsed = parseOptionalTelegramUsername(body.telegramUsername);
+  if (!tgUsernameParsed.valid) {
+    return c.json({ success: false, error: tgUsernameParsed.error }, 400);
+  }
   const db = c.env.DB;
   const now = Date.now();
 
@@ -203,7 +278,45 @@ authRoutes.post("/sync", async (c) => {
 
   const eveId = await getOrAssignEveId(db, user.uid, email, displayName);
 
-  return c.json({ success: true, data: { eveId } });
+  const linkCols = await getUsersTelegramLinkColumns(db);
+  const responseData: Record<string, any> = { eveId };
+  if (linkCols.hasTelegramUserId || linkCols.hasTelegramUsername) {
+    const setClauses: string[] = [];
+    const bindValues: any[] = [];
+    if (linkCols.hasTelegramUserId && tgIdParsed.provided) {
+      setClauses.push("telegram_user_id = ?");
+      bindValues.push(tgIdParsed.value || null);
+    }
+    if (linkCols.hasTelegramUsername && tgUsernameParsed.provided) {
+      setClauses.push("telegram_username = ?");
+      bindValues.push(tgUsernameParsed.value || null);
+    }
+    if (setClauses.length > 0) {
+      bindValues.push(user.uid);
+      await db
+        .prepare(`UPDATE users SET ${setClauses.join(", ")} WHERE id = ?`)
+        .bind(...bindValues)
+        .run()
+        .catch(() => {});
+    }
+    const selectCols = [
+      linkCols.hasTelegramUserId ? "telegram_user_id" : "NULL AS telegram_user_id",
+      linkCols.hasTelegramUsername ? "telegram_username" : "NULL AS telegram_username",
+    ].join(", ");
+    const linkRow = await db
+      .prepare(`SELECT ${selectCols} FROM users WHERE id = ?`)
+      .bind(user.uid)
+      .first<{ telegram_user_id?: string | null; telegram_username?: string | null }>()
+      .catch(() => null);
+    if (linkRow?.telegram_user_id) {
+      responseData.telegramUserId = String(linkRow.telegram_user_id);
+    }
+    if (linkRow?.telegram_username) {
+      responseData.telegramUsername = String(linkRow.telegram_username);
+    }
+  }
+
+  return c.json({ success: true, data: responseData });
 });
 
 // GET /api/users/username/check?u=... - Check username availability

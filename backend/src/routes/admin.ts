@@ -12,7 +12,7 @@ import { isUserAdmin, HARDCODED_ADMIN_EMAILS, ALL_ADMIN_RIGHTS, AdminRight, isOw
 import { prepareAdminAuditLog, recordAdminAction, runBatch } from "../util/auditLog";
 import { getMonthlyApiUsage, trackGeminiCall } from "../util/usageTracker";
 import { validateReformatInput, reformatExplanationWithAi } from "../ai/explanationReformat";
-import { normalizeAppConfigObject, readAppConfig } from "../util/appConfig";
+import { normalizeAppConfigObject, readAppConfig, sanitizeTelegramAtUsername } from "../util/appConfig";
 import { AssetStorage } from "../storage";
 import {
   detectAvatarImage,
@@ -1124,6 +1124,37 @@ adminRoutes.put("/config", requirePermission("manage_config_maintenance"), async
     announcementChannelAvatarUrl = rawChAvatarProvided.trim();
   }
 
+  // 6. Validate optional Official Telegram Channel & Support usernames
+  const rawTgChannelProvided =
+    body.official_telegram_channel_username !== undefined
+      ? body.official_telegram_channel_username
+      : body.officialTelegramChannelUsername;
+  let officialTelegramChannelUsername = sanitizeTelegramAtUsername(
+    prevConfig.official_telegram_channel_username ?? prevConfig.officialTelegramChannelUsername
+  ).value;
+  if (rawTgChannelProvided !== undefined && rawTgChannelProvided !== null) {
+    const parsed = sanitizeTelegramAtUsername(rawTgChannelProvided);
+    if (!parsed.valid) {
+      return c.json({ success: false, error: `officialTelegramChannelUsername: ${parsed.error}` }, 400);
+    }
+    officialTelegramChannelUsername = parsed.value;
+  }
+
+  const rawTgSupportProvided =
+    body.official_telegram_support_username !== undefined
+      ? body.official_telegram_support_username
+      : body.officialTelegramSupportUsername;
+  let officialTelegramSupportUsername = sanitizeTelegramAtUsername(
+    prevConfig.official_telegram_support_username ?? prevConfig.officialTelegramSupportUsername
+  ).value;
+  if (rawTgSupportProvided !== undefined && rawTgSupportProvided !== null) {
+    const parsed = sanitizeTelegramAtUsername(rawTgSupportProvided);
+    if (!parsed.valid) {
+      return c.json({ success: false, error: `officialTelegramSupportUsername: ${parsed.error}` }, 400);
+    }
+    officialTelegramSupportUsername = parsed.value;
+  }
+
   const configObj: Record<string, any> = {
     ...prevConfig,
     minimum_supported_version_code: minVersion,
@@ -1136,6 +1167,12 @@ adminRoutes.put("/config", requirePermission("manage_config_maintenance"), async
   }
   if (rawChAvatarProvided !== undefined || prevConfig.announcement_channel_avatar_url !== undefined) {
     configObj.announcement_channel_avatar_url = announcementChannelAvatarUrl;
+  }
+  if (rawTgChannelProvided !== undefined || prevConfig.official_telegram_channel_username !== undefined) {
+    configObj.official_telegram_channel_username = officialTelegramChannelUsername;
+  }
+  if (rawTgSupportProvided !== undefined || prevConfig.official_telegram_support_username !== undefined) {
+    configObj.official_telegram_support_username = officialTelegramSupportUsername;
   }
 
   const patch: Record<string, any> = {};
@@ -1157,6 +1194,12 @@ adminRoutes.put("/config", requirePermission("manage_config_maintenance"), async
   if (rawChAvatarProvided !== undefined && rawChAvatarProvided !== null) {
     patch.announcement_channel_avatar_url = announcementChannelAvatarUrl;
   }
+  if (rawTgChannelProvided !== undefined && rawTgChannelProvided !== null) {
+    patch.official_telegram_channel_username = officialTelegramChannelUsername;
+  }
+  if (rawTgSupportProvided !== undefined && rawTgSupportProvided !== null) {
+    patch.official_telegram_support_username = officialTelegramSupportUsername;
+  }
   try {
     const user = c.get("user");
     const saveStmt = db
@@ -1171,7 +1214,14 @@ adminRoutes.put("/config", requirePermission("manage_config_maintenance"), async
       description: `Updated app configuration (maintenance=${maintenanceMode}, minVersion=${minVersion}, channel=${announcementChannelName})`,
       targetType: "app_content",
       targetId: "app_config",
-      metadata: { maintenanceMode, minVersion, defaultPublishMode, announcementChannelName },
+      metadata: {
+        maintenanceMode,
+        minVersion,
+        defaultPublishMode,
+        announcementChannelName,
+        officialTelegramChannelUsername,
+        officialTelegramSupportUsername,
+      },
     });
 
     await runBatch(db, [saveStmt, auditStmt]);
