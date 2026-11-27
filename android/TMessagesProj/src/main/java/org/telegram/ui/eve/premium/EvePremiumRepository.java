@@ -1,7 +1,11 @@
 package org.telegram.ui.eve.premium;
 
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.RectF;
+import android.graphics.Typeface;
 import android.os.Handler;
 import android.os.Looper;
 
@@ -10,6 +14,7 @@ import com.google.zxing.BarcodeFormat;
 import com.google.zxing.EncodeHintType;
 import com.google.zxing.common.BitMatrix;
 import com.google.zxing.qrcode.QRCodeWriter;
+import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -294,24 +299,111 @@ public final class EvePremiumRepository {
     }
 
     public static Bitmap generateQrBitmap(String content, int sizePx) {
-        if (content == null || content.trim().isEmpty()) {
+        return generateQrBitmap(content, sizePx, 0xFF141B29, Color.WHITE);
+    }
+
+    /**
+     * Telegram-styled UPI QR generator using ZXing {@link ErrorCorrectionLevel#H},
+     * rounded data dots, smooth rounded finder corners, and a compact center ₹ emblem
+     * safely within Error Correction Level H (~30%) recovery tolerance for GPay/PhonePe/Paytm/BHIM.
+     */
+    public static Bitmap generateQrBitmap(String content, int sizePx, int fgColor, int bgColor) {
+        if (content == null || content.trim().isEmpty() || sizePx <= 0) {
             return null;
         }
         try {
             Map<EncodeHintType, Object> hints = new EnumMap<>(EncodeHintType.class);
-            hints.put(EncodeHintType.MARGIN, 1);
-            BitMatrix matrix = new QRCodeWriter().encode(content, BarcodeFormat.QR_CODE, sizePx, sizePx, hints);
-            Bitmap bmp = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.RGB_565);
-            for (int x = 0; x < sizePx; x++) {
-                for (int y = 0; y < sizePx; y++) {
-                    bmp.setPixel(x, y, matrix.get(x, y) ? Color.BLACK : Color.WHITE);
+            hints.put(EncodeHintType.ERROR_CORRECTION, ErrorCorrectionLevel.H);
+            hints.put(EncodeHintType.MARGIN, 0);
+            hints.put(EncodeHintType.CHARACTER_SET, "UTF-8");
+
+            BitMatrix matrix = new QRCodeWriter().encode(content, BarcodeFormat.QR_CODE, 0, 0, hints);
+            int modules = Math.max(matrix.getWidth(), matrix.getHeight());
+            if (modules <= 0) {
+                return null;
+            }
+
+            Bitmap bmp = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888);
+            Canvas canvas = new Canvas(bmp);
+            canvas.drawColor(Color.TRANSPARENT);
+
+            Paint cardPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            cardPaint.setColor(bgColor);
+            float cardRadius = sizePx * 0.06f;
+            canvas.drawRoundRect(new RectF(0f, 0f, sizePx, sizePx), cardRadius, cardRadius, cardPaint);
+
+            float quietPad = sizePx * 0.065f;
+            float drawArea = sizePx - (quietPad * 2f);
+            float cellSize = drawArea / (float) modules;
+
+            Paint dotPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            dotPaint.setColor(fgColor);
+
+            float centerCutoutRadiusModules = modules * 0.145f;
+            float centerModule = modules / 2f;
+
+            for (int y = 0; y < modules; y++) {
+                for (int x = 0; x < modules; x++) {
+                    if (!matrix.get(x, y)) {
+                        continue;
+                    }
+                    if (isInsideFinderPattern(x, y, modules)) {
+                        continue;
+                    }
+                    float dx = (x + 0.5f) - centerModule;
+                    float dy = (y + 0.5f) - centerModule;
+                    if (Math.hypot(dx, dy) <= centerCutoutRadiusModules) {
+                        continue;
+                    }
+                    float cx = quietPad + (x + 0.5f) * cellSize;
+                    float cy = quietPad + (y + 0.5f) * cellSize;
+                    canvas.drawCircle(cx, cy, cellSize * 0.43f, dotPaint);
                 }
             }
+
+            drawRoundedFinder(canvas, dotPaint, cardPaint, quietPad, quietPad, cellSize);
+            drawRoundedFinder(canvas, dotPaint, cardPaint, quietPad + (modules - 7) * cellSize, quietPad, cellSize);
+            drawRoundedFinder(canvas, dotPaint, cardPaint, quietPad, quietPad + (modules - 7) * cellSize, cellSize);
+
+            // Compact center UPI badge inside ErrorCorrectionLevel.H safe zone
+            float badgeCx = sizePx / 2f;
+            float badgeCy = sizePx / 2f;
+            float badgeOuterR = sizePx * 0.088f;
+            float badgeInnerR = sizePx * 0.072f;
+            canvas.drawCircle(badgeCx, badgeCy, badgeOuterR, cardPaint);
+
+            Paint accentPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            accentPaint.setColor(0xFF2481CC);
+            canvas.drawCircle(badgeCx, badgeCy, badgeInnerR, accentPaint);
+
+            Paint symbolPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            symbolPaint.setColor(Color.WHITE);
+            symbolPaint.setTextAlign(Paint.Align.CENTER);
+            symbolPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+            symbolPaint.setTextSize(badgeInnerR * 1.18f);
+            Paint.FontMetrics fm = symbolPaint.getFontMetrics();
+            float textY = badgeCy - (fm.ascent + fm.descent) / 2f;
+            canvas.drawText("₹", badgeCx, textY, symbolPaint);
+
             return bmp;
         } catch (Throwable t) {
             FileLog.e("EvePremiumRepository: QR generation failed", t);
             return null;
         }
+    }
+
+    private static boolean isInsideFinderPattern(int x, int y, int modules) {
+        boolean topLeft = x < 7 && y < 7;
+        boolean topRight = x >= modules - 7 && y < 7;
+        boolean bottomLeft = x < 7 && y >= modules - 7;
+        return topLeft || topRight || bottomLeft;
+    }
+
+    private static void drawRoundedFinder(Canvas canvas, Paint fg, Paint bg, float left, float top, float cell) {
+        float outerSize = 7f * cell;
+        canvas.drawRoundRect(new RectF(left, top, left + outerSize, top + outerSize), cell * 2.0f, cell * 2.0f, fg);
+        canvas.drawRoundRect(new RectF(left + cell, top + cell, left + 6f * cell, top + 6f * cell), cell * 1.25f, cell * 1.25f, bg);
+        canvas.drawRoundRect(new RectF(left + 2f * cell, top + 2f * cell, left + 5f * cell, top + 5f * cell), cell * 0.85f, cell * 0.85f, fg);
     }
 
     private static PlanDetails parsePlan(JSONObject d) {

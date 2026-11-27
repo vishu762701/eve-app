@@ -41,7 +41,7 @@ generatedTestRoutes.get("/", async (c) => {
     query += " WHERE " + conditions.join(" AND ");
   }
 
-  query += " ORDER BY generated_at DESC";
+  query += " ORDER BY generated_at ASC";
 
   const { results } = await db.prepare(query).bind(...params).all<GeneratedTestRow>();
   const serverNow = Date.now();

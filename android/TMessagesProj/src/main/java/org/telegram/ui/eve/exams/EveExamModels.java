@@ -35,6 +35,9 @@ public final class EveExamModels {
         public final String nextTestLabel;
         public final int latestTestTimestampSec;
         public final boolean isPinned;
+        public final String avatarUrl;
+        public final String avatarEmoji;
+        public final int avatarColor;
 
         public ExamSummary(
                 String id,
@@ -52,7 +55,7 @@ public final class EveExamModels {
                 int latestTestTimestampSec) {
             this(id, examName, timeLimitMinutes, category, questionCount, testNumber,
                     negativeMarkingText, parentExamId, publishMode, lastGenerationTimeMs,
-                    liveTestCount, nextTestLabel, latestTestTimestampSec, false);
+                    liveTestCount, nextTestLabel, latestTestTimestampSec, false, "", "", -1);
         }
 
         public ExamSummary(
@@ -70,6 +73,29 @@ public final class EveExamModels {
                 String nextTestLabel,
                 int latestTestTimestampSec,
                 boolean isPinned) {
+            this(id, examName, timeLimitMinutes, category, questionCount, testNumber,
+                    negativeMarkingText, parentExamId, publishMode, lastGenerationTimeMs,
+                    liveTestCount, nextTestLabel, latestTestTimestampSec, isPinned, "", "", -1);
+        }
+
+        public ExamSummary(
+                String id,
+                String examName,
+                int timeLimitMinutes,
+                String category,
+                int questionCount,
+                String testNumber,
+                String negativeMarkingText,
+                String parentExamId,
+                String publishMode,
+                long lastGenerationTimeMs,
+                int liveTestCount,
+                String nextTestLabel,
+                int latestTestTimestampSec,
+                boolean isPinned,
+                String avatarUrl,
+                String avatarEmoji,
+                int avatarColor) {
             this.id = id != null ? id : "";
             this.examName = examName != null ? examName : "";
             this.timeLimitMinutes = timeLimitMinutes;
@@ -84,13 +110,17 @@ public final class EveExamModels {
             this.nextTestLabel = nextTestLabel != null ? nextTestLabel : "";
             this.latestTestTimestampSec = Math.max(0, latestTestTimestampSec);
             this.isPinned = isPinned;
+            this.avatarUrl = avatarUrl != null ? avatarUrl.trim() : "";
+            this.avatarEmoji = avatarEmoji != null ? avatarEmoji.trim() : "";
+            this.avatarColor = avatarColor;
         }
 
         public ExamSummary withPinned(boolean nextPinned) {
             return new ExamSummary(
                     id, examName, timeLimitMinutes, category, questionCount, testNumber,
                     negativeMarkingText, parentExamId, publishMode, lastGenerationTimeMs,
-                    liveTestCount, nextTestLabel, latestTestTimestampSec, nextPinned);
+                    liveTestCount, nextTestLabel, latestTestTimestampSec, nextPinned,
+                    avatarUrl, avatarEmoji, avatarColor);
         }
 
         public boolean isMainExam() {

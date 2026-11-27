@@ -12,6 +12,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.FileLog;
+import org.telegram.ui.eve.admin.EveAdminModels;
 import org.telegram.ui.eve.auth.EveAuthManager;
 import org.telegram.ui.eve.auth.EveBackendClient;
 import org.telegram.ui.eve.polls.EvePollModel;
@@ -71,6 +72,8 @@ public final class EveExamRepository {
 
     private volatile EveExamModels.ExamCatalogResult currentResult =
             new EveExamModels.ExamCatalogResult(EveExamModels.LoadState.LOADING, Collections.emptyList(), "");
+    private volatile List<EveExamModels.ExamSummary> allExamSummaries = Collections.emptyList();
+    private volatile List<EveAdminModels.BannerItem> cachedBanners = Collections.emptyList();
     private volatile Set<String> pinnedExamIds = Collections.emptySet();
     private volatile long lastSuccessLoadMs;
 
@@ -94,6 +97,7 @@ public final class EveExamRepository {
             String testsRaw = prefs.getString(KEY_TESTS_JSON, "[]");
             JSONArray testsArr = (testsRaw != null && !testsRaw.trim().isEmpty()) ? new JSONArray(testsRaw) : new JSONArray();
             List<EveExamModels.ExamSummary> parsed = parseExamCatalog(examsArr, testsArr, pinnedExamIds);
+            allExamSummaries = parseAllExamsCatalog(examsArr, testsArr, pinnedExamIds);
             if (!parsed.isEmpty()) {
                 currentResult = new EveExamModels.ExamCatalogResult(EveExamModels.LoadState.LOADED, parsed, "");
             }
@@ -259,6 +263,7 @@ public final class EveExamRepository {
                                 pinnedExamIds = fetchedPins;
                             }
                             saveDiskCache(examsJson, testsJson, pinnedExamIds);
+                            allExamSummaries = parseAllExamsCatalog(examsJson, testsJson, pinnedExamIds);
                             List<EveExamModels.ExamSummary> parsed = parseExamCatalog(examsJson, testsJson, pinnedExamIds);
                             lastSuccessLoadMs = System.currentTimeMillis();
                             EveExamModels.LoadState state = parsed.isEmpty()
@@ -548,6 +553,43 @@ public final class EveExamRepository {
                 }
             }
             postComplete(callback, items, "");
+        });
+    }
+
+    public List<EveExamModels.ExamSummary> getSubExamsForParent(String parentExamId) {
+        if (parentExamId == null || parentExamId.trim().isEmpty()) {
+            return Collections.emptyList();
+        }
+        String parent = parentExamId.trim();
+        List<EveExamModels.ExamSummary> out = new ArrayList<>();
+        for (EveExamModels.ExamSummary item : allExamSummaries) {
+            if (item != null && !item.isPaused() && parent.equals(item.parentExamId.trim())) {
+                out.add(item);
+            }
+        }
+        return out;
+    }
+
+    public List<EveAdminModels.BannerItem> getCachedBanners() {
+        return cachedBanners;
+    }
+
+    public void loadActiveBanners(ApiCallback<List<EveAdminModels.BannerItem>> callback) {
+        ioExecutor.execute(() -> {
+            try {
+                JSONObject root = backendClient.getPublicJsonRoot("/api/banners");
+                List<EveAdminModels.BannerItem> parsed = EveAdminModels.BannerItem.parseList(root.optJSONArray("data"));
+                List<EveAdminModels.BannerItem> activeOnly = new ArrayList<>();
+                for (EveAdminModels.BannerItem b : parsed) {
+                    if (b != null && b.active) {
+                        activeOnly.add(b);
+                    }
+                }
+                cachedBanners = Collections.unmodifiableList(activeOnly);
+                postComplete(callback, cachedBanners, "");
+            } catch (Throwable t) {
+                postComplete(callback, cachedBanners, t.getMessage() != null ? t.getMessage() : "Unable to load banners.");
+            }
         });
     }
 
@@ -948,10 +990,25 @@ public final class EveExamRepository {
         return parseExamCatalog(examsJson, testsJson, Collections.emptySet());
     }
 
+    public static List<EveExamModels.ExamSummary> parseAllExamsCatalog(
+            JSONArray examsJson,
+            JSONArray testsJson,
+            Set<String> pinnedIds) {
+        return parseExamCatalogInternal(examsJson, testsJson, pinnedIds, false);
+    }
+
     public static List<EveExamModels.ExamSummary> parseExamCatalog(
             JSONArray examsJson,
             JSONArray testsJson,
             Set<String> pinnedIds) {
+        return parseExamCatalogInternal(examsJson, testsJson, pinnedIds, true);
+    }
+
+    private static List<EveExamModels.ExamSummary> parseExamCatalogInternal(
+            JSONArray examsJson,
+            JSONArray testsJson,
+            Set<String> pinnedIds,
+            boolean mainExamsOnly) {
         Map<String, Integer> liveCountByExam = new HashMap<>();
         Map<String, EveExamModels.GeneratedTestSummary> latestLiveByExam = new HashMap<>();
 
@@ -1009,9 +1066,12 @@ public final class EveExamRepository {
                     liveCount,
                     nextLabel,
                     dateSec,
-                    pinnedIds != null && pinnedIds.contains(id)
+                    pinnedIds != null && pinnedIds.contains(id),
+                    firstNonEmpty(obj, "avatarUrl", "imageUrl"),
+                    firstNonEmpty(obj, "avatarEmoji", ""),
+                    obj.isNull("avatarColor") ? -1 : obj.optInt("avatarColor", -1)
             );
-            if (summary.isMainExam()) {
+            if (!mainExamsOnly || summary.isMainExam()) {
                 list.add(summary);
             }
         }

@@ -53,7 +53,7 @@ test("an admin without manage_generated_tests cannot list or read unpublished ge
     const request = client(limitedEmail);
     const list = await request("");
     assert.equal(list.status, 200);
-    assert.deepEqual((await list.json()).data.map((entry) => entry.id), ["scheduled-1", "published-1"]);
+    assert.deepEqual((await list.json()).data.map((entry) => entry.id), ["published-1", "scheduled-1"]);
     const draft = await request("/draft-1");
     assert.equal(draft.status, 403);
     const scheduled = await request("/scheduled-1");

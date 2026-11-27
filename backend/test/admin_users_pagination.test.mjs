@@ -129,7 +129,7 @@ test('LIKE wildcard characters are literal, ordering deterministic and no extra 
     const data = await f.request('?page=1&pageSize=2&q=student');
     assert.deepEqual(data.json.data.map(u => u.id), ['u0001', 'u0002']);
     assert.deepEqual(Object.keys(data.json.data[0]).sort(),
-      ['id', 'eveId', 'email', 'displayName', 'dob', 'category', 'createdAt', 'lastActive', 'disabled'].sort());
+      ['id', 'eveId', 'email', 'displayName', 'dob', 'category', 'createdAt', 'lastActive', 'disabled', 'isOnline', 'isPremium'].sort());
   } finally { f.close(); }
 });
 test('malformed and excessive paging parameters fail closed', async () => {

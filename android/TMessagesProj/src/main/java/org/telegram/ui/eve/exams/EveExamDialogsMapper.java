@@ -108,6 +108,9 @@ public final class EveExamDialogsMapper {
         custom.muted = false;
         custom.isMedia = false;
         custom.sent = -1;
+        custom.avatarUrl = exam.avatarUrl;
+        custom.avatarEmoji = exam.avatarEmoji;
+        custom.avatarColor = exam.avatarColor;
         return custom;
     }
 

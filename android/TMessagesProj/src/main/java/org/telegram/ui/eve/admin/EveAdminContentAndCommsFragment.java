@@ -24,7 +24,6 @@ import java.util.ArrayList;
 public class EveAdminContentAndCommsFragment extends BaseFragment {
 
     private static final int ID_BANNERS = 101;
-    private static final int ID_FLOATING_LINK = 102;
     private static final int ID_POLLS = 103;
     private static final int ID_APP_CONTENT_ABOUT = 104;
     private static final int ID_APP_CONTENT_PRIVACY = 105;
@@ -118,13 +117,6 @@ public class EveAdminContentAndCommsFragment extends BaseFragment {
                     "View, edit links, reorder or remove banners",
                     null));
             items.add(SettingsActivity.SettingCell.Factory.of(
-                    ID_FLOATING_LINK,
-                    IconBackgroundColors.BLUE.top, IconBackgroundColors.BLUE.bottom,
-                    R.drawable.msg_link,
-                    "Floating Community Link",
-                    "Configure quick home community URL",
-                    null));
-            items.add(SettingsActivity.SettingCell.Factory.of(
                     ID_APP_CONTENT_ABOUT,
                     IconBackgroundColors.CYAN.top, IconBackgroundColors.CYAN.bottom,
                     R.drawable.msg_info,
@@ -205,10 +197,6 @@ public class EveAdminContentAndCommsFragment extends BaseFragment {
         switch (item.id) {
             case ID_BANNERS:
                 presentFragment(new EveAdminBannersFragment());
-                break;
-            case ID_FLOATING_LINK:
-                presentFragment(new EveAdminContentEditorFragment(
-                        EveAdminContentEditorFragment.MODE_FLOATING_LINK, "Floating Community Link"));
                 break;
             case ID_POLLS:
                 presentFragment(new EveAdminPollsFragment());

@@ -143,10 +143,14 @@ public class QRCodeBottomSheet extends BottomSheet {
             linearLayout.addView(button2TextView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48, Gravity.BOTTOM, 16, 3, 16, 16));
         }
 
+        onAddExtraContent(linearLayout);
         updateColors();
         ScrollView scrollView = new ScrollView(context);
         scrollView.addView(linearLayout);
         setCustomView(scrollView);
+    }
+
+    protected void onAddExtraContent(LinearLayout container) {
     }
 
     public Bitmap createQR(Context context, String key, Bitmap oldBitmap) {

@@ -151,7 +151,7 @@ test("admin upload stores a banner and its optional link metadata", async (t) =>
   assert.equal(db.rows[0].link_label, "Start Practicing");
 });
 
-test("banner links require HTTP(S), a host, and a usable label", async (t) => {
+test("banner links reject invalid URLs when provided and allow empty optional links", async (t) => {
   const db = new MockD1();
   const { app, env } = makeApp(db, true);
   const originalFetch = globalThis.fetch;
@@ -160,10 +160,9 @@ test("banner links require HTTP(S), a host, and a usable label", async (t) => {
 
   const invalidLinks = [
     ["javascript:alert(1)", "Open"],
-    ["https://example.com/path", ""],
-    ["https://example.com/path", "x".repeat(49)],
+    ["ftp://example.com/file", "Open"],
+    ["not a url", "Open"],
     ["https://user:pass@example.com", "Open"],
-    ["", "Orphan label"],
   ];
   for (const [linkUrl, linkLabel] of invalidLinks) {
     const form = new FormData();
@@ -174,6 +173,21 @@ test("banner links require HTTP(S), a host, and a usable label", async (t) => {
     assert.equal(response.status, 400);
   }
   assert.equal(db.rows.length, 0);
+
+  const optionalCases = [
+    ["https://example.com/path", ""],
+    ["", "Optional label"],
+    ["", ""],
+  ];
+  for (const [linkUrl, linkLabel] of optionalCases) {
+    const form = new FormData();
+    form.append("file", new Blob(["image-bytes"], { type: "image/jpeg" }), "banner.jpg");
+    form.append("linkUrl", linkUrl);
+    form.append("linkLabel", linkLabel);
+    const response = await app.request("/api/banners", { method: "POST", body: form }, env);
+    assert.equal(response.status, 201);
+  }
+  assert.equal(db.rows.length, 3);
 });
 
 test("admin can update or clear a banner link without replacing its image", async () => {

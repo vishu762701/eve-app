@@ -16,6 +16,7 @@ import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.SimpleActionBarMenu;
 import org.telegram.ui.ActionBar.SimpleActionBarMenuItem;
+import org.telegram.ui.Components.BulletinFactory;
 import org.telegram.ui.Components.FlickerLoadingView;
 import org.telegram.ui.Components.IconBackgroundColors;
 import org.telegram.ui.Components.RecyclerListView;
@@ -24,13 +25,18 @@ import org.telegram.ui.Components.UniversalAdapter;
 import org.telegram.ui.Components.UniversalRecyclerView;
 import org.telegram.ui.SettingsActivity;
 import org.telegram.ui.eve.admin.EveAdminUiChrome;
+import org.telegram.ui.eve.polls.EvePollModel;
+import org.telegram.ui.eve.polls.EveTelegramPollCardView;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Edge-to-Edge Exam Tests directory displaying live mock tests immediately at the top,
@@ -45,9 +51,9 @@ public class EveExamTestsFragment extends BaseFragment {
     private static final int SUB_HISTORY = 102;
     private static final int SUB_ANNOUNCEMENTS = 103;
     private static final int SUB_EXAM_INFO = 104;
-    private static final int SUB_REFRESH = 105;
 
     private static final int ID_RETRY = 200;
+    private static final int BASE_POLL_ID = 500;
     private static final int BASE_TEST_ID = 1000;
 
     private final EveExamModels.ExamSummary exam;
@@ -56,10 +62,14 @@ public class EveExamTestsFragment extends BaseFragment {
     private List<EveExamModels.GeneratedTestSummary> tests = Collections.emptyList();
     private final List<EveExamModels.GeneratedTestSummary> liveTests = new ArrayList<>();
     private final List<EveExamModels.GeneratedTestSummary> filteredTests = new ArrayList<>();
+    private final List<EvePollModel> activePolls = new ArrayList<>();
+    private String votingPollId = "";
+    private int votingOptionIdx = -1;
     private boolean loading = true;
     private boolean destroyed = false;
     private String errorMessage = "";
     private String searchQuery = "";
+    private final EveAdminUiChrome.AutoSyncController autoSync = new EveAdminUiChrome.AutoSyncController(this::loadAll);
 
     public EveExamTestsFragment(EveExamModels.ExamSummary exam) {
         this.exam = exam;
@@ -137,8 +147,6 @@ public class EveExamTestsFragment extends BaseFragment {
                             presentFragment(new EveAnnouncementsFragment());
                         } else if (id == SUB_EXAM_INFO) {
                             showExamInfoDialog();
-                        } else if (id == SUB_REFRESH) {
-                            loadTests();
                         }
                     }
                 },
@@ -174,18 +182,35 @@ public class EveExamTestsFragment extends BaseFragment {
             moreItem.addSubItem(SUB_HISTORY, R.drawable.msg_recent, LocaleController.getString(R.string.EveResultHistory));
             moreItem.addSubItem(SUB_ANNOUNCEMENTS, R.drawable.msg_notifications, "Announcements & Polls");
             moreItem.addSubItem(SUB_EXAM_INFO, R.drawable.msg_info, "Exam Info");
-            moreItem.addSubItem(SUB_REFRESH, R.drawable.msg_retry, "Refresh");
         }
 
         fragmentView = chrome.rootView;
-        loadTests();
+        loadAll();
         return chrome.rootView;
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        autoSync.onResume();
+    }
+
+    @Override
+    public void onPause() {
+        autoSync.onPause();
+        super.onPause();
     }
 
     @Override
     public void onFragmentDestroy() {
         destroyed = true;
+        autoSync.destroy();
         super.onFragmentDestroy();
+    }
+
+    private void loadAll() {
+        loadTests();
+        loadActivePolls();
     }
 
     private String buildCompactSubtitle() {
@@ -208,12 +233,15 @@ public class EveExamTestsFragment extends BaseFragment {
             loading = false;
             return;
         }
-        loading = true;
+        loading = tests.isEmpty();
         errorMessage = "";
-        updateList();
+        if (loading) {
+            updateList();
+        }
         EveExamRepository.getInstance().loadTestsForExam(exam.id, (loaded, err) -> {
             if (destroyed) return;
             loading = false;
+            autoSync.markSynced();
             tests = loaded != null ? loaded : Collections.emptyList();
             errorMessage = err != null ? err : "";
             liveTests.clear();
@@ -222,8 +250,112 @@ public class EveExamTestsFragment extends BaseFragment {
                     liveTests.add(t);
                 }
             }
+            Collections.sort(liveTests, NATURAL_TEST_COMPARATOR);
             applyFilter(searchQuery);
         });
+    }
+
+    private void loadActivePolls() {
+        EveExamRepository.getInstance().loadActivePolls((loaded, err) -> {
+            if (destroyed || loaded == null) return;
+            activePolls.clear();
+            activePolls.addAll(loaded);
+            updateList();
+        });
+    }
+
+    private void handleStudentPollVote(EvePollModel poll, int optionIndex) {
+        if (poll == null || !TextUtils.isEmpty(votingPollId)) {
+            return;
+        }
+        votingPollId = poll.id;
+        votingOptionIdx = optionIndex;
+        updateList();
+        EveExamRepository.getInstance().submitPollVote(poll.id, optionIndex, (ok, err) -> {
+            if (destroyed) return;
+            votingPollId = "";
+            votingOptionIdx = -1;
+            if (Boolean.TRUE.equals(ok)) {
+                for (int i = 0; i < activePolls.size(); i++) {
+                    if (poll.id.equals(activePolls.get(i).id)) {
+                        activePolls.set(i, activePolls.get(i).withRecordedVote(optionIndex));
+                        break;
+                    }
+                }
+                BulletinFactory.of(this).createSimpleBulletin(R.raw.contact_check, "Vote recorded!").show();
+            } else {
+                BulletinFactory.of(this).createErrorBulletin(err != null && !err.isEmpty() ? err : "Could not record vote.").show();
+                loadActivePolls();
+            }
+            updateList();
+        });
+    }
+
+    private static final Pattern LABELED_NUMBER_PATTERN = Pattern.compile("(?:test|mock|set|paper|#)\\s*[-:#]?\\s*(\\d+)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern TRAILING_NUMBER_PATTERN = Pattern.compile("(\\d+)\\s*$");
+    private static final Pattern ANY_NUMBER_PATTERN = Pattern.compile("(\\d+)");
+
+    public static final Comparator<EveExamModels.GeneratedTestSummary> NATURAL_TEST_COMPARATOR =
+            EveExamTestsFragment::compareTestsAscending;
+
+    public static int extractTestNumber(EveExamModels.GeneratedTestSummary test) {
+        if (test == null) {
+            return Integer.MAX_VALUE;
+        }
+        String label = test.testNumber != null ? test.testNumber.trim() : "";
+        if (!label.isEmpty()) {
+            Matcher m = LABELED_NUMBER_PATTERN.matcher(label);
+            if (m.find()) {
+                return safeParsePositiveInt(m.group(1));
+            }
+            Matcher mAny = ANY_NUMBER_PATTERN.matcher(label);
+            if (mAny.find()) {
+                return safeParsePositiveInt(mAny.group(1));
+            }
+        }
+        String title = test.getDisplayTitle() != null ? test.getDisplayTitle().trim() : "";
+        if (!title.isEmpty()) {
+            Matcher m = LABELED_NUMBER_PATTERN.matcher(title);
+            if (m.find()) {
+                return safeParsePositiveInt(m.group(1));
+            }
+            Matcher mTrail = TRAILING_NUMBER_PATTERN.matcher(title);
+            if (mTrail.find()) {
+                return safeParsePositiveInt(mTrail.group(1));
+            }
+        }
+        return Integer.MAX_VALUE;
+    }
+
+    private static int safeParsePositiveInt(String raw) {
+        try {
+            return Integer.parseInt(raw);
+        } catch (NumberFormatException ignored) {
+            return Integer.MAX_VALUE;
+        }
+    }
+
+    public static int compareTestsAscending(
+            EveExamModels.GeneratedTestSummary a,
+            EveExamModels.GeneratedTestSummary b) {
+        if (a == b) return 0;
+        if (a == null) return 1;
+        if (b == null) return -1;
+        int numA = extractTestNumber(a);
+        int numB = extractTestNumber(b);
+        if (numA != numB) {
+            return Integer.compare(numA, numB);
+        }
+        if (a.generatedAtMs != b.generatedAtMs) {
+            if (a.generatedAtMs <= 0L) return 1;
+            if (b.generatedAtMs <= 0L) return -1;
+            return Long.compare(a.generatedAtMs, b.generatedAtMs);
+        }
+        int titleCmp = a.getDisplayTitle().compareToIgnoreCase(b.getDisplayTitle());
+        if (titleCmp != 0) {
+            return titleCmp;
+        }
+        return a.id.compareTo(b.id);
     }
 
     private void applyFilter(String query) {
@@ -237,6 +369,7 @@ public class EveExamTestsFragment extends BaseFragment {
                 filteredTests.add(t);
             }
         }
+        Collections.sort(filteredTests, NATURAL_TEST_COMPARATOR);
         updateList();
     }
 
@@ -259,6 +392,18 @@ public class EveExamTestsFragment extends BaseFragment {
             return;
         }
 
+        if (searchQuery.isEmpty() && !activePolls.isEmpty()) {
+            items.add(UItem.asHeader("Live Polls"));
+            for (int i = 0; i < activePolls.size(); i++) {
+                EvePollModel p = activePolls.get(i);
+                int subIdx = p.id.equals(votingPollId) ? votingOptionIdx : -1;
+                items.add(EveTelegramPollCardView.Factory.of(
+                        BASE_POLL_ID + i,
+                        new EveTelegramPollCardView.Payload(p, false, subIdx, this::handleStudentPollVote, null)));
+            }
+            items.add(UItem.asShadow(null));
+        }
+
         if (!errorMessage.isEmpty()) {
             items.add(SettingsActivity.SettingCell.Factory.of(
                     ID_RETRY,
@@ -276,6 +421,10 @@ public class EveExamTestsFragment extends BaseFragment {
                     ? "No published mock tests available yet for this exam."
                     : "No matching mock tests found."));
             return;
+        }
+
+        if (!activePolls.isEmpty() && searchQuery.isEmpty()) {
+            items.add(UItem.asHeader(LocaleController.getString(R.string.EveExamTests)));
         }
 
         SimpleDateFormat fmt = new SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault());

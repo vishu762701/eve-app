@@ -9,6 +9,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -39,7 +40,8 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Full-screen Telegram-native Student Directory with debounced live search and pagination.
+ * Full-screen Telegram-native Student Directory with Overview Stats card,
+ * 1-tap quick filters (All, Online, Premium, Banned), live search, and pagination.
  */
 public class EveAdminStudentsFragment extends BaseFragment {
 
@@ -51,12 +53,23 @@ public class EveAdminStudentsFragment extends BaseFragment {
     private static final int PAGE_SIZE = 50;
     private static final long SEARCH_DEBOUNCE_MS = 300L;
 
+    public static final String FILTER_ALL = "all";
+    public static final String FILTER_ONLINE = "online";
+    public static final String FILTER_PREMIUM = "premium";
+    public static final String FILTER_BANNED = "banned";
+
     private final EveAdminRepository repo = EveAdminRepository.getInstance();
     private UniversalRecyclerView listView;
     private ActionBarMenuItem searchItem;
+    private StudentsOverviewView overviewHeader;
 
     private final List<EveAdminModels.AdminStudentItem> students = new ArrayList<>();
     private String currentQuery = "";
+    private String currentFilter = FILTER_ALL;
+    private int summaryTotal = 0;
+    private int summaryPremium = 0;
+    private int summaryOnline = 0;
+    private int summaryBanned = 0;
     private int currentPage = 1;
     private boolean loading = true;
     private boolean loadingMore = false;
@@ -114,6 +127,22 @@ public class EveAdminStudentsFragment extends BaseFragment {
         destroyed = false;
         setHasOwnBackground(true);
 
+        EveAdminModels.DashboardSnapshot cached = repo.getCachedSnapshot();
+        if (cached != null) {
+            summaryTotal = cached.totalStudents;
+            summaryPremium = cached.activePremiumUsers;
+            summaryOnline = cached.activeStudents;
+        }
+
+        overviewHeader = new StudentsOverviewView(context, getResourceProvider(), filter -> {
+            if (!Objects.equals(currentFilter, filter)) {
+                currentFilter = filter;
+                overviewHeader.bind(summaryTotal, summaryPremium, summaryOnline, summaryBanned, currentFilter);
+                loadPage(1, false);
+            }
+        });
+        overviewHeader.bind(summaryTotal, summaryPremium, summaryOnline, summaryBanned, currentFilter);
+
         EveAdminUiChrome.Chrome chrome = EveAdminUiChrome.setup(
                 this,
                 context,
@@ -134,7 +163,11 @@ public class EveAdminStudentsFragment extends BaseFragment {
                         }
                     }
                 },
-                null
+                () -> {
+                    if (overviewHeader != null) {
+                        overviewHeader.updateColors();
+                    }
+                }
         );
         listView = chrome.listView;
 
@@ -208,6 +241,7 @@ public class EveAdminStudentsFragment extends BaseFragment {
         }
         final int seq = ++searchSeq;
         final String querySnapshot = currentQuery;
+        final String filterSnapshot = currentFilter;
         if (append) {
             loadingMore = true;
             updateList();
@@ -219,10 +253,10 @@ public class EveAdminStudentsFragment extends BaseFragment {
             }
         }
 
-        EveAdminRepository.ResultCallback<List<EveAdminModels.AdminStudentItem>> cb =
-                new EveAdminRepository.ResultCallback<List<EveAdminModels.AdminStudentItem>>() {
+        EveAdminRepository.ResultCallback<EveAdminRepository.StudentsPageResult> cb =
+                new EveAdminRepository.ResultCallback<EveAdminRepository.StudentsPageResult>() {
                     @Override
-                    public void onSuccess(List<EveAdminModels.AdminStudentItem> data) {
+                    public void onSuccess(EveAdminRepository.StudentsPageResult data) {
                         if (destroyed || seq != searchSeq) {
                             return;
                         }
@@ -235,7 +269,14 @@ public class EveAdminStudentsFragment extends BaseFragment {
                             students.clear();
                         }
                         if (data != null) {
-                            students.addAll(data);
+                            students.addAll(data.users);
+                            summaryTotal = data.totalCount;
+                            summaryPremium = data.premiumCount;
+                            summaryOnline = data.onlineCount;
+                            summaryBanned = data.bannedCount;
+                        }
+                        if (overviewHeader != null) {
+                            overviewHeader.bind(summaryTotal, summaryPremium, summaryOnline, summaryBanned, currentFilter);
                         }
                         updateHeaderSubtitle();
                         updateList();
@@ -254,7 +295,8 @@ public class EveAdminStudentsFragment extends BaseFragment {
                         updateList();
                     }
                 };
-        repo.runWithAdminToken(cb, token -> repo.postSuccess(cb, repo.searchStudents(token, querySnapshot, page, PAGE_SIZE)));
+        repo.runWithAdminToken(cb, token -> repo.postSuccess(cb,
+                repo.searchStudentsWithSummary(token, querySnapshot, filterSnapshot, page, PAGE_SIZE)));
     }
 
     private void updateHeaderSubtitle() {
@@ -263,10 +305,10 @@ public class EveAdminStudentsFragment extends BaseFragment {
         }
         if (!errorText.isEmpty() && students.isEmpty()) {
             simpleActionBar.setSubtitle("Unable to load");
-        } else if (!currentQuery.isEmpty()) {
+        } else if (!currentQuery.isEmpty() || !FILTER_ALL.equals(currentFilter)) {
             simpleActionBar.setSubtitle(students.size() + " matching");
         } else {
-            simpleActionBar.setSubtitle(students.size() + " registered");
+            simpleActionBar.setSubtitle(summaryTotal + " registered");
         }
     }
 
@@ -278,6 +320,8 @@ public class EveAdminStudentsFragment extends BaseFragment {
 
     private void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
         EveAdminUiChrome.addTopSpace(items);
+
+        items.add(UItem.asCustom(overviewHeader));
 
         if (!errorText.isEmpty()) {
             items.add(SettingsActivity.SettingCell.Factory.of(
@@ -299,11 +343,19 @@ public class EveAdminStudentsFragment extends BaseFragment {
 
         if (students.isEmpty()) {
             items.add(UItem.asHeader("Students"));
-            items.add(UItem.asShadow("No students found"));
+            items.add(UItem.asShadow(FILTER_ALL.equals(currentFilter)
+                    ? "No students found"
+                    : "No students match this filter"));
             return;
         }
 
-        items.add(UItem.asHeader(currentQuery.isEmpty() ? "Registered Students" : "Search Results"));
+        String listTitle;
+        if (FILTER_ONLINE.equals(currentFilter)) listTitle = "Online Students";
+        else if (FILTER_PREMIUM.equals(currentFilter)) listTitle = "Premium Subscribers";
+        else if (FILTER_BANNED.equals(currentFilter)) listTitle = "Suspended / Banned Students";
+        else listTitle = currentQuery.isEmpty() ? "Registered Students" : "Search Results";
+
+        items.add(UItem.asHeader(listTitle));
         for (int i = 0; i < students.size(); i++) {
             items.add(StudentRowCell.Factory.of(BASE_STUDENT_ID + i, students.get(i)));
         }
@@ -336,8 +388,153 @@ public class EveAdminStudentsFragment extends BaseFragment {
         }
     }
 
+    private interface FilterSelectListener {
+        void onSelect(String filter);
+    }
+
+    private static final class StudentsOverviewView extends LinearLayout implements Theme.Colorable {
+
+        private final Theme.ResourcesProvider resourcesProvider;
+        private final FilterSelectListener listener;
+        private final LinearLayout statsCard;
+        private final TextView totalVal;
+        private final TextView totalLbl;
+        private final TextView premiumVal;
+        private final TextView premiumLbl;
+        private final TextView onlineVal;
+        private final TextView onlineLbl;
+        private final TextView bannedVal;
+        private final TextView bannedLbl;
+        private final TextView[] chips = new TextView[4];
+        private final String[] chipKeys = new String[] { FILTER_ALL, FILTER_ONLINE, FILTER_PREMIUM, FILTER_BANNED };
+        private final String[] chipLabels = new String[] { "All", "Online", "Premium", "Banned" };
+        private String activeFilter = FILTER_ALL;
+
+        StudentsOverviewView(Context context, Theme.ResourcesProvider resourcesProvider, FilterSelectListener listener) {
+            super(context);
+            this.resourcesProvider = resourcesProvider;
+            this.listener = listener;
+            setOrientation(VERTICAL);
+            setPadding(dp(14), dp(8), dp(14), dp(8));
+
+            statsCard = new LinearLayout(context);
+            statsCard.setOrientation(HORIZONTAL);
+            statsCard.setPadding(dp(10), dp(10), dp(10), dp(10));
+
+            TextView[] t = addStatColumn(context, statsCard);
+            totalVal = t[0];
+            totalLbl = t[1];
+            totalLbl.setText("Registered");
+
+            TextView[] p = addStatColumn(context, statsCard);
+            premiumVal = p[0];
+            premiumLbl = p[1];
+            premiumLbl.setText("Premium");
+
+            TextView[] o = addStatColumn(context, statsCard);
+            onlineVal = o[0];
+            onlineLbl = o[1];
+            onlineLbl.setText("Online Now");
+
+            TextView[] b = addStatColumn(context, statsCard);
+            bannedVal = b[0];
+            bannedLbl = b[1];
+            bannedLbl.setText("Banned");
+
+            addView(statsCard, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 10));
+
+            HorizontalScrollView chipScroll = new HorizontalScrollView(context);
+            chipScroll.setHorizontalScrollBarEnabled(false);
+            LinearLayout chipRow = new LinearLayout(context);
+            chipRow.setOrientation(HORIZONTAL);
+            for (int i = 0; i < chipKeys.length; i++) {
+                final String key = chipKeys[i];
+                TextView chip = new TextView(context);
+                chip.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
+                chip.setTypeface(AndroidUtilities.bold());
+                chip.setPadding(dp(14), dp(7), dp(14), dp(7));
+                chip.setOnClickListener(v -> {
+                    if (this.listener != null) {
+                        this.listener.onSelect(key);
+                    }
+                });
+                chips[i] = chip;
+                chipRow.addView(chip, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, 0, 0, 8, 0));
+            }
+            chipScroll.addView(chipRow);
+            addView(chipScroll, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+            updateColors();
+        }
+
+        private static TextView[] addStatColumn(Context context, LinearLayout row) {
+            LinearLayout col = new LinearLayout(context);
+            col.setOrientation(VERTICAL);
+            col.setGravity(Gravity.CENTER_HORIZONTAL);
+            TextView val = new TextView(context);
+            val.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 17);
+            val.setTypeface(AndroidUtilities.bold());
+            val.setGravity(Gravity.CENTER);
+            col.addView(val, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+            TextView lbl = new TextView(context);
+            lbl.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 11.5f);
+            lbl.setGravity(Gravity.CENTER);
+            col.addView(lbl, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 2, 0, 0));
+            row.addView(col, LayoutHelper.createLinear(0, LayoutHelper.WRAP_CONTENT, 1f));
+            return new TextView[] { val, lbl };
+        }
+
+        void bind(int total, int premium, int online, int banned, String filter) {
+            this.activeFilter = filter != null ? filter : FILTER_ALL;
+            totalVal.setText(String.valueOf(Math.max(0, total)));
+            premiumVal.setText(String.valueOf(Math.max(0, premium)));
+            onlineVal.setText(String.valueOf(Math.max(0, online)));
+            bannedVal.setText(String.valueOf(Math.max(0, banned)));
+            chips[0].setText(chipLabels[0] + " (" + Math.max(0, total) + ")");
+            chips[1].setText(chipLabels[1] + " (" + Math.max(0, online) + ")");
+            chips[2].setText(chipLabels[2] + " (" + Math.max(0, premium) + ")");
+            chips[3].setText(chipLabels[3] + " (" + Math.max(0, banned) + ")");
+            updateColors();
+        }
+
+        @Override
+        public void updateColors() {
+            int black = Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider);
+            int gray = Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, resourcesProvider);
+            int blue = Theme.getColor(Theme.key_windowBackgroundWhiteBlueText, resourcesProvider);
+            int red = Theme.getColor(Theme.key_text_RedRegular, resourcesProvider);
+
+            statsCard.setBackground(Theme.createRoundRectDrawable(dp(12), Theme.multAlpha(gray, 0.09f)));
+            totalVal.setTextColor(black);
+            premiumVal.setTextColor(0xFF9F55DF);
+            onlineVal.setTextColor(0xFF27B434);
+            bannedVal.setTextColor(red);
+
+            totalLbl.setTextColor(gray);
+            premiumLbl.setTextColor(gray);
+            onlineLbl.setTextColor(gray);
+            bannedLbl.setTextColor(gray);
+
+            for (int i = 0; i < chips.length; i++) {
+                boolean selected = Objects.equals(chipKeys[i], activeFilter);
+                chips[i].setTextColor(selected ? 0xFFFFFFFF : black);
+                chips[i].setBackground(Theme.createRoundRectDrawable(
+                        dp(16),
+                        selected ? blue : Theme.multAlpha(gray, 0.11f)));
+            }
+        }
+
+        @Override
+        public void addColorKeys(HashSet<Integer> colors) {
+            colors.add(Theme.key_windowBackgroundWhiteBlackText);
+            colors.add(Theme.key_windowBackgroundWhiteGrayText);
+            colors.add(Theme.key_windowBackgroundWhiteBlueText);
+            colors.add(Theme.key_text_RedRegular);
+        }
+    }
+
     /**
-     * Telegram-native UserCell-style student row with 44dp circular avatar, bold name, metadata, and status badge.
+     * Telegram-native UserCell-style student row with 44dp circular avatar, bold name,
+     * metadata, and clear Online / Premium / Suspended badge.
      */
     public static final class StudentRowCell extends FrameLayout implements Theme.Colorable {
 
@@ -348,6 +545,8 @@ public class EveAdminStudentsFragment extends BaseFragment {
         private final TextView subtitleView;
         private final TextView statusView;
         private boolean isDisabled;
+        private boolean isPremium;
+        private boolean isOnline;
 
         public StudentRowCell(Context context, Theme.ResourcesProvider resourcesProvider) {
             super(context);
@@ -398,21 +597,34 @@ public class EveAdminStudentsFragment extends BaseFragment {
 
         public void setStudent(EveAdminModels.AdminStudentItem student) {
             this.isDisabled = student.disabled;
+            this.isPremium = student.isPremium;
+            this.isOnline = student.isOnline;
             EveAdminUiChrome.bindStudentAvatar(avatarView, avatarDrawable, student, 44);
 
             nameView.setText(student.displayName);
 
-            String subtitle;
+            String baseSub;
             if (!student.username.isEmpty()) {
-                subtitle = "@" + student.username + (!student.email.isEmpty() ? " • " + student.email : "");
+                baseSub = "@" + student.username + (!student.email.isEmpty() ? " • " + student.email : "");
             } else if (!student.eveId.isEmpty()) {
-                subtitle = (!student.email.isEmpty() ? student.email + " • " : "") + student.eveId;
+                baseSub = (!student.email.isEmpty() ? student.email + " • " : "") + student.eveId;
             } else {
-                subtitle = student.email;
+                baseSub = student.email;
             }
-            subtitleView.setText(subtitle);
+            if (student.isOnline && student.isPremium) {
+                baseSub = "● Online • " + baseSub;
+            }
+            subtitleView.setText(baseSub);
 
-            statusView.setText(student.disabled ? "Suspended" : "Active");
+            if (student.disabled) {
+                statusView.setText("Suspended");
+            } else if (student.isPremium) {
+                statusView.setText("Premium");
+            } else if (student.isOnline) {
+                statusView.setText("Online");
+            } else {
+                statusView.setText("Active");
+            }
             updateColors();
         }
 
@@ -424,6 +636,14 @@ public class EveAdminStudentsFragment extends BaseFragment {
                 int red = Theme.getColor(Theme.key_text_RedRegular, resourcesProvider);
                 statusView.setTextColor(red);
                 statusView.setBackground(Theme.createRoundRectDrawable(dp(10), Theme.multAlpha(red, 0.12f)));
+            } else if (isPremium) {
+                int purple = 0xFF9F55DF;
+                statusView.setTextColor(purple);
+                statusView.setBackground(Theme.createRoundRectDrawable(dp(10), Theme.multAlpha(purple, 0.12f)));
+            } else if (isOnline) {
+                int green = 0xFF27B434;
+                statusView.setTextColor(green);
+                statusView.setBackground(Theme.createRoundRectDrawable(dp(10), Theme.multAlpha(green, 0.12f)));
             } else {
                 int subtle = Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, resourcesProvider);
                 statusView.setTextColor(subtle);
@@ -477,6 +697,8 @@ public class EveAdminStudentsFragment extends BaseFragment {
                     EveAdminModels.AdminStudentItem sa = (EveAdminModels.AdminStudentItem) a.object;
                     EveAdminModels.AdminStudentItem sb = (EveAdminModels.AdminStudentItem) b.object;
                     return sa.disabled == sb.disabled
+                            && sa.isPremium == sb.isPremium
+                            && sa.isOnline == sb.isOnline
                             && TextUtils.equals(sa.displayName, sb.displayName)
                             && TextUtils.equals(sa.username, sb.username)
                             && TextUtils.equals(sa.email, sb.email)

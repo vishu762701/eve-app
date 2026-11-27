@@ -263,6 +263,8 @@ import org.telegram.ui.eve.exams.EveExamDialogsMapper;
 import org.telegram.ui.eve.exams.EveExamModels;
 import org.telegram.ui.eve.exams.EveExamRepository;
 import org.telegram.ui.eve.exams.EveExamTestsFragment;
+import org.telegram.ui.eve.exams.EveHomeBannerCarouselView;
+import org.telegram.ui.eve.exams.EveSubExamsFragment;
 import org.telegram.utils.glass.GlassEngine;
 import org.telegram.utils.glass.positions.GlassPositionsMerger;
 
@@ -324,7 +326,34 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     }
 
     private EveExamModels.ExamCatalogResult lastBoundExamCatalogResult;
+    private java.util.List<org.telegram.ui.eve.admin.EveAdminModels.BannerItem> eveHomeBanners = java.util.Collections.emptyList();
+    private final java.util.Set<EveHomeBannerCarouselView> eveBannerCarousels = new java.util.HashSet<>();
     private boolean eveSwipeHandled;
+
+    public java.util.List<org.telegram.ui.eve.admin.EveAdminModels.BannerItem> getEveHomeBanners() {
+        return eveHomeBanners;
+    }
+
+    public void registerEveBannerCarouselView(EveHomeBannerCarouselView view) {
+        if (view != null) {
+            eveBannerCarousels.add(view);
+        }
+    }
+
+    private void loadEveHomeBanners() {
+        if (!isEveExamsMode()) return;
+        EveExamRepository.getInstance().loadActiveBanners((loaded, err) -> {
+            if (!isEveExamsMode() || loaded == null) return;
+            eveHomeBanners = loaded;
+            if (viewPages != null) {
+                for (ViewPage vp : viewPages) {
+                    if (vp != null && vp.dialogsAdapter != null) {
+                        vp.dialogsAdapter.updateList(null);
+                    }
+                }
+            }
+        });
+    }
 
     private void handleEveExamPinSwipe(RecyclerView.ViewHolder viewHolder, DialogCell dialogCell) {
         if (eveSwipeHandled || viewHolder == null || dialogCell == null) {
@@ -2918,7 +2947,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         }
         if (isEveExamsMode()) {
             EveExamRepository.getInstance().addListener(this);
+            eveHomeBanners = EveExamRepository.getInstance().getCachedBanners();
             EveExamRepository.getInstance().loadExams(false);
+            loadEveHomeBanners();
         }
 
         observersGroup = getNotificationCenter().createObserversGroup(this);
@@ -3086,6 +3117,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     @Override
     public void onFragmentDestroy() {
         EveExamRepository.getInstance().removeListener(this);
+        for (EveHomeBannerCarouselView carousel : eveBannerCarousels) {
+            carousel.releaseCarousel();
+        }
+        eveBannerCarousels.clear();
         super.onFragmentDestroy();
         if (observersGroup != null) {
             observersGroup.removeAllObservers();
@@ -6796,6 +6831,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         }
         if (isEveExamsMode()) {
             EveExamRepository.getInstance().loadExams(false);
+            loadEveHomeBanners();
+            for (EveHomeBannerCarouselView carousel : eveBannerCarousels) {
+                carousel.onResumeCarousel();
+            }
         } else if (viewPages != null) {
             for (int a = 0; a < viewPages.length; a++) {
                 viewPages[a].dialogsAdapter.notifyDataSetChanged();
@@ -6980,6 +7019,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     @Override
     public void onPause() {
         super.onPause();
+        for (EveHomeBannerCarouselView carousel : eveBannerCarousels) {
+            carousel.onPauseCarousel();
+        }
         if (storiesBulletin != null) {
             storiesBulletin.hide();
             storiesBulletin = null;
@@ -7607,7 +7649,13 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             }
             Object object = dialogsAdapter.getItem(position);
             if (object instanceof EveExamModels.ExamSummary) {
-                presentFragment(new EveExamTestsFragment((EveExamModels.ExamSummary) object));
+                EveExamModels.ExamSummary tapped = (EveExamModels.ExamSummary) object;
+                List<EveExamModels.ExamSummary> subs = EveExamRepository.getInstance().getSubExamsForParent(tapped.id);
+                if (!subs.isEmpty()) {
+                    presentFragment(new EveSubExamsFragment(tapped));
+                } else {
+                    presentFragment(new EveExamTestsFragment(tapped));
+                }
                 return;
             }
             if (isEveExamsMode() && view instanceof DialogsEmptyCell) {

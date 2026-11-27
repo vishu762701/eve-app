@@ -546,6 +546,37 @@ public final class EveAdminRepository {
         );
     }
 
+    public String createExamWithParent(
+            String token,
+            String examName,
+            String category,
+            int timeLimitMinutes,
+            int questionCount,
+            String testNumber,
+            String negativeMarkingText,
+            String publishMode,
+            String generationPrompt,
+            String parentExamId) throws EveBackendClient.BackendException {
+        JSONObject payload = new JSONObject();
+        try {
+            payload.put("examName", examName);
+            payload.put("category", category);
+            payload.put("timeLimitMinutes", timeLimitMinutes);
+            payload.put("questionCount", questionCount);
+            payload.put("testNumber", testNumber);
+            payload.put("negativeMarkingText", negativeMarkingText);
+            payload.put("publishMode", publishMode);
+            payload.put("generationPrompt", generationPrompt != null ? generationPrompt : "");
+            if (parentExamId != null && !parentExamId.trim().isEmpty()) {
+                payload.put("parentExamId", parentExamId.trim());
+            }
+        } catch (JSONException ignored) {
+        }
+        JSONObject root = client.postJsonRoot("/api/exams", token, payload);
+        JSONObject data = root != null ? root.optJSONObject("data") : null;
+        return data != null ? data.optString("id", "") : "";
+    }
+
     public String createExam(
             String token,
             String examName,
@@ -696,13 +727,55 @@ public final class EveAdminRepository {
         client.deleteJsonRoot("/api/questions/" + encode(questionId), token);
     }
 
-    public List<EveAdminModels.AdminStudentItem> searchStudents(String token, String query, int page, int pageSize) throws EveBackendClient.BackendException {
+    public static final class StudentsPageResult {
+        public final List<EveAdminModels.AdminStudentItem> users;
+        public final int totalCount;
+        public final int premiumCount;
+        public final int onlineCount;
+        public final int bannedCount;
+
+        public StudentsPageResult(
+                List<EveAdminModels.AdminStudentItem> users,
+                int totalCount,
+                int premiumCount,
+                int onlineCount,
+                int bannedCount) {
+            this.users = users != null ? users : Collections.emptyList();
+            this.totalCount = totalCount;
+            this.premiumCount = premiumCount;
+            this.onlineCount = onlineCount;
+            this.bannedCount = bannedCount;
+        }
+    }
+
+    public StudentsPageResult searchStudentsWithSummary(String token, String query, String filter, int page, int pageSize) throws EveBackendClient.BackendException {
         String path = "/api/admin/users?page=" + page + "&pageSize=" + pageSize;
         if (query != null && !query.trim().isEmpty()) {
             path += "&q=" + encode(query.trim());
         }
+        if (filter != null && !filter.trim().isEmpty() && !"all".equalsIgnoreCase(filter.trim())) {
+            path += "&filter=" + encode(filter.trim().toLowerCase(Locale.US));
+        }
         JSONObject root = client.getJsonRoot(path, token);
-        return EveAdminModels.AdminStudentItem.parseList(root.optJSONArray("data"));
+        List<EveAdminModels.AdminStudentItem> list = EveAdminModels.AdminStudentItem.parseList(root.optJSONArray("data"));
+        JSONObject summary = root.optJSONObject("summary");
+        JSONObject pagination = root.optJSONObject("pagination");
+        int total = summary != null ? summary.optInt("total", list.size()) : (pagination != null ? pagination.optInt("total", list.size()) : list.size());
+        int premium = summary != null ? summary.optInt("premium", 0) : 0;
+        int online = summary != null ? summary.optInt("online", 0) : 0;
+        int banned = summary != null ? summary.optInt("banned", 0) : 0;
+        if (summary == null) {
+            for (EveAdminModels.AdminStudentItem s : list) {
+                if (s.isPremium) premium++;
+                if (s.isOnline) online++;
+                if (s.disabled) banned++;
+            }
+        }
+        return new StudentsPageResult(list, total, premium, online, banned);
+    }
+
+    public List<EveAdminModels.AdminStudentItem> searchStudents(String token, String query, int page, int pageSize) throws EveBackendClient.BackendException {
+        return searchStudentsWithSummary(token, query, "all", page, pageSize).users;
     }
 
     public void setStudentDisabled(String token, String userId, boolean disabled) throws EveBackendClient.BackendException {
@@ -880,6 +953,41 @@ public final class EveAdminRepository {
         client.deleteJsonRoot("/api/exams/" + encode(examId), token);
     }
 
+    public JSONObject uploadExamAvatarImage(String token, String examId, byte[] imageBytes, String mimeType) throws EveBackendClient.BackendException {
+        if (imageBytes == null || imageBytes.length == 0) {
+            throw new IllegalArgumentException("Avatar image is empty");
+        }
+        String b64 = android.util.Base64.encodeToString(imageBytes, android.util.Base64.NO_WRAP);
+        JSONObject payload = new JSONObject();
+        try {
+            payload.put("base64", b64);
+            payload.put("mimeType", mimeType != null && !mimeType.trim().isEmpty() ? mimeType : "image/jpeg");
+        } catch (JSONException ignored) {
+        }
+        JSONObject root = client.postJsonRoot("/api/exams/" + encode(examId) + "/avatar", token, payload);
+        return root != null ? root.optJSONObject("data") : null;
+    }
+
+    public JSONObject setExamAvatarEmoji(String token, String examId, String emoji, Integer colorIndex) throws EveBackendClient.BackendException {
+        JSONObject payload = new JSONObject();
+        try {
+            payload.put("avatarEmoji", emoji != null ? emoji.trim() : "");
+            if (colorIndex != null && colorIndex >= 0) {
+                payload.put("avatarColor", colorIndex.intValue());
+            } else {
+                payload.put("avatarColor", JSONObject.NULL);
+            }
+        } catch (JSONException ignored) {
+        }
+        JSONObject root = client.postJsonRoot("/api/exams/" + encode(examId) + "/avatar", token, payload);
+        return root != null ? root.optJSONObject("data") : null;
+    }
+
+    public JSONObject deleteExamAvatar(String token, String examId) throws EveBackendClient.BackendException {
+        JSONObject root = client.deleteJsonRoot("/api/exams/" + encode(examId) + "/avatar", token);
+        return root != null ? root.optJSONObject("data") : null;
+    }
+
     public void removeSyllabus(String token, String examId) throws EveBackendClient.BackendException {
         client.deleteJsonRoot("/api/exams/" + encode(examId) + "/syllabus", token);
     }
@@ -899,8 +1007,58 @@ public final class EveAdminRepository {
     }
 
     public List<EveAdminModels.BannerItem> fetchBanners(String token) throws EveBackendClient.BackendException {
+        try {
+            JSONObject root = client.getJsonRoot("/api/banners/manage", token);
+            return EveAdminModels.BannerItem.parseList(root.optJSONArray("data"));
+        } catch (EveBackendClient.BackendException e) {
+            if (e.httpStatus != 404) {
+                throw e;
+            }
+        }
         JSONObject root = client.getJsonRoot("/api/banners", token);
         return EveAdminModels.BannerItem.parseList(root.optJSONArray("data"));
+    }
+
+    public EveAdminModels.BannerItem uploadBannerMedia(
+            String token,
+            byte[] mediaBytes,
+            String mimeType,
+            String linkUrl,
+            String linkLabel) throws EveBackendClient.BackendException {
+        if (mediaBytes == null || mediaBytes.length == 0) {
+            throw new IllegalArgumentException("Banner file is empty");
+        }
+        String effectiveMime = mimeType != null && !mimeType.trim().isEmpty() ? mimeType.trim() : "image/jpeg";
+        JSONObject root = client.postBinaryRoot("/api/banners", token, effectiveMime, mediaBytes);
+        JSONObject data = root != null ? root.optJSONObject("data") : null;
+        String id = data != null ? data.optString("id", "") : "";
+        String cleanLink = linkUrl != null ? linkUrl.trim() : "";
+        String cleanLabel = linkLabel != null ? linkLabel.trim() : "";
+        if (!id.isEmpty() && (!cleanLink.isEmpty() || !cleanLabel.isEmpty())) {
+            updateBannerLink(token, id, cleanLink, cleanLabel);
+        }
+        if (data == null) {
+            return null;
+        }
+        return new EveAdminModels.BannerItem(
+                id,
+                data.optString("imageUrl", ""),
+                cleanLink,
+                cleanLabel,
+                data.optInt("order", 0),
+                data.optString("mediaType", effectiveMime.startsWith("video/") ? "video" : "image"),
+                data.optBoolean("active", true),
+                data.optString("storagePath", "")
+        );
+    }
+
+    public void setBannerActive(String token, String bannerId, boolean active) throws EveBackendClient.BackendException {
+        JSONObject payload = new JSONObject();
+        try {
+            payload.put("active", active);
+        } catch (JSONException ignored) {
+        }
+        client.putJsonRoot("/api/banners/" + encode(bannerId) + "/status", token, payload);
     }
 
     public void updateBannerLink(String token, String bannerId, String linkUrl, String linkLabel) throws EveBackendClient.BackendException {

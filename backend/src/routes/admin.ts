@@ -70,13 +70,7 @@ adminRoutes.get("/dashboard", async (c) => {
   const [examsResult, testsAgg, usersAgg, attemptsAgg, auditRows, ordersAgg, premiumAgg, reportsAgg] = await Promise.all([
     runSafely("exams", [] as any[], async () => {
       const { results } = await db
-        .prepare(
-          `SELECT id, exam_name, category, time_limit_minutes, question_count, test_number,
-                  negative_marking_text, publish_mode, parent_exam_id, syllabus_file_name,
-                  syllabus_url, image_url
-           FROM exams
-           ORDER BY exam_name ASC`
-        )
+        .prepare("SELECT * FROM exams ORDER BY exam_name ASC")
         .all<any>();
       return results || [];
     }),
@@ -189,6 +183,9 @@ adminRoutes.get("/dashboard", async (c) => {
       syllabusFileName: r.syllabus_file_name || "",
       syllabusUrl: r.syllabus_url || "",
       imageUrl: r.image_url || "",
+      avatarUrl: String(r.avatar_url || r.image_url || "").trim(),
+      avatarEmoji: String(r.avatar_emoji || "").trim(),
+      avatarColor: typeof r.avatar_color === "number" ? r.avatar_color : null,
     };
   });
 
@@ -670,9 +667,13 @@ adminRoutes.get("/users", requirePermission("manage_users"), async (c) => {
   // must never become wildcards or change the predicate.
   const q = raw.toLowerCase().replace(/[!%_]/g, (ch) => "!" + ch);
   const qNoAt = q.startsWith("@") ? q.slice(1) : q;
+  const filterParam = String(c.req.query("filter") || "all").trim().toLowerCase();
+  const filter = ["all", "online", "premium", "banned"].includes(filterParam) ? filterParam : "all";
   const db = c.env.DB;
   const offset = (page - 1) * pageSize;
   const order = " ORDER BY last_active DESC, created_at DESC, id ASC LIMIT ? OFFSET ?";
+  const now = Date.now();
+  const onlineCutoff = now - 5 * 60 * 1000;
 
   try {
     let availableColumns = new Set<string>();
@@ -685,6 +686,16 @@ adminRoutes.get("/users", requirePermission("manage_users"), async (c) => {
       availableColumns = new Set<string>();
     }
 
+    let hasPremiumTable = false;
+    try {
+      const tbl = await db
+        .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'premium_entitlements' LIMIT 1")
+        .first();
+      hasPremiumTable = Boolean(tbl);
+    } catch {
+      hasPremiumTable = false;
+    }
+
     const hasTableInfo = availableColumns.size > 0;
     const hasDisabled = !hasTableInfo || availableColumns.has("disabled");
     const hasUsername = availableColumns.has("username");
@@ -695,52 +706,108 @@ adminRoutes.get("/users", requirePermission("manage_users"), async (c) => {
       : (availableColumns.has("avatar_url") ? "avatar_url" : null);
 
     const searchClauses = [
-      "LOWER(COALESCE(email, '')) LIKE ? ESCAPE '!'",
-      "LOWER(COALESCE(display_name, '')) LIKE ? ESCAPE '!'",
-      "LOWER(COALESCE(eve_id, '')) LIKE ? ESCAPE '!'",
+      "LOWER(COALESCE(users.email, '')) LIKE ? ESCAPE '!'",
+      "LOWER(COALESCE(users.display_name, '')) LIKE ? ESCAPE '!'",
+      "LOWER(COALESCE(users.eve_id, '')) LIKE ? ESCAPE '!'",
     ];
     const params: any[] = q ? [`%${q}%`, `%${q}%`, `%${q}%`] : [];
     if (q && hasUsername) {
-      searchClauses.push("LOWER(COALESCE(username, '')) LIKE ? ESCAPE '!'");
+      searchClauses.push("LOWER(COALESCE(users.username, '')) LIKE ? ESCAPE '!'");
       params.push(`%${qNoAt}%`);
     }
-    const where = q ? ` WHERE ${searchClauses.join(" OR ")}` : "";
+    const whereClauses: string[] = [];
+    if (q) {
+      whereClauses.push(`(${searchClauses.join(" OR ")})`);
+    }
+    const filterParams: any[] = [];
+    const activePremiumSubquery = hasPremiumTable
+      ? `EXISTS (SELECT 1 FROM premium_entitlements pe WHERE pe.user_id = users.id AND pe.status = 'ACTIVE' AND (pe.is_lifetime = 1 OR pe.expires_at IS NULL OR pe.expires_at > ${now}))`
+      : "0";
+    if (filter === "online") {
+      whereClauses.push("users.last_active >= ?");
+      filterParams.push(onlineCutoff);
+    } else if (filter === "banned" && hasDisabled) {
+      whereClauses.push("COALESCE(users.disabled, 0) = 1");
+    } else if (filter === "premium") {
+      if (hasPremiumTable) {
+        whereClauses.push(activePremiumSubquery);
+      } else {
+        whereClauses.push("1 = 0");
+      }
+    }
+
+    const searchWhere = q ? ` WHERE ${searchClauses.join(" OR ")}` : "";
+    const where = whereClauses.length ? ` WHERE ${whereClauses.join(" AND ")}` : "";
+    const fullParams = [...params, ...filterParams];
 
     const totalRow = await db.prepare("SELECT COUNT(*) AS total FROM users" + where)
-      .bind(...params).first<{ total: number }>();
+      .bind(...fullParams).first<{ total: number }>();
     const total = Number(totalRow?.total ?? 0);
     if (!Number.isSafeInteger(total) || total < 0) throw new Error("Invalid user count");
 
+    const fetchSummary = async () => {
+      try {
+        const allUsersRow = await db.prepare("SELECT COUNT(*) AS c FROM users" + searchWhere)
+          .bind(...params).first<{ c: number }>();
+        const onlineRow = await db.prepare(
+          "SELECT COUNT(*) AS c FROM users" + (searchWhere ? `${searchWhere} AND users.last_active >= ?` : " WHERE users.last_active >= ?")
+        ).bind(...params, onlineCutoff).first<{ c: number }>();
+        const bannedRow = hasDisabled
+          ? await db.prepare(
+              "SELECT COUNT(*) AS c FROM users" + (searchWhere ? `${searchWhere} AND COALESCE(users.disabled, 0) = 1` : " WHERE COALESCE(users.disabled, 0) = 1")
+            ).bind(...params).first<{ c: number }>()
+          : { c: 0 };
+        const premiumRow = hasPremiumTable
+          ? await db.prepare(
+              "SELECT COUNT(*) AS c FROM users" + (searchWhere ? `${searchWhere} AND ${activePremiumSubquery}` : ` WHERE ${activePremiumSubquery}`)
+            ).bind(...params).first<{ c: number }>()
+          : { c: 0 };
+        return {
+          total: Number(allUsersRow?.c ?? 0),
+          online: Number(onlineRow?.c ?? 0),
+          banned: Number(bannedRow?.c ?? 0),
+          premium: Number(premiumRow?.c ?? 0),
+        };
+      } catch {
+        return { total, online: 0, banned: 0, premium: 0 };
+      }
+    };
+
     const fetchPage = async (includeDisabled: boolean) => {
       const selectCols = [
-        "id",
-        "eve_id",
-        "email",
-        "display_name",
-        "dob",
-        "category",
-        "created_at",
-        "last_active",
+        "users.id",
+        "users.eve_id",
+        "users.email",
+        "users.display_name",
+        "users.dob",
+        "users.category",
+        "users.created_at",
+        "users.last_active",
       ];
-      if (includeDisabled) selectCols.push("COALESCE(disabled, 0) AS disabled");
-      if (hasUsername) selectCols.push("COALESCE(username, '') AS username");
-      if (hasPhone) selectCols.push("COALESCE(phone, '') AS phone");
-      if (hasBio) selectCols.push("COALESCE(bio, '') AS bio");
-      if (photoColumn) selectCols.push(`COALESCE(${photoColumn}, '') AS photo_url`);
+      if (includeDisabled) selectCols.push("COALESCE(users.disabled, 0) AS disabled");
+      if (hasUsername) selectCols.push("COALESCE(users.username, '') AS username");
+      if (hasPhone) selectCols.push("COALESCE(users.phone, '') AS phone");
+      if (hasBio) selectCols.push("COALESCE(users.bio, '') AS bio");
+      if (photoColumn) selectCols.push(`COALESCE(users.${photoColumn}, '') AS photo_url`);
+      selectCols.push(`(${activePremiumSubquery}) AS is_premium`);
       return db.prepare("SELECT " + selectCols.join(", ") + " FROM users" + where + order)
-        .bind(...params, pageSize, offset).all<any>();
+        .bind(...fullParams, pageSize, offset).all<any>();
     };
-    let rows: any[];
-    try {
-      rows = (await fetchPage(hasDisabled)).results || [];
-    } catch (error: any) {
-      // Compatibility for legacy DB deployments missing the disabled migration;
-      // do not conceal arbitrary database failures with a second query.
-      if (!/no such column:\s*disabled/i.test(String(error?.message || error))) throw error;
-      rows = (await fetchPage(false)).results || [];
-    }
+    const [summary, pageResult] = await Promise.all([
+      fetchSummary(),
+      (async () => {
+        try {
+          return (await fetchPage(hasDisabled)).results || [];
+        } catch (error: any) {
+          if (!/no such column:\s*disabled/i.test(String(error?.message || error))) throw error;
+          return (await fetchPage(false)).results || [];
+        }
+      })(),
+    ]);
+    const rows = pageResult;
     const includeProfileExtras = hasUsername || hasPhone || hasBio || photoColumn !== null;
     const users = rows.map((u) => {
+      const lastAct = Number(u.last_active || 0);
       const item: Record<string, any> = {
         id: u.id,
         eveId: u.eve_id || null,
@@ -749,8 +816,10 @@ adminRoutes.get("/users", requirePermission("manage_users"), async (c) => {
         dob: u.dob || "",
         category: u.category || "General",
         createdAt: u.created_at || 0,
-        lastActive: u.last_active || 0,
+        lastActive: lastAct,
         disabled: Boolean(u.disabled),
+        isPremium: Boolean(u.is_premium),
+        isOnline: lastAct >= onlineCutoff,
       };
       if (includeProfileExtras) {
         if (hasUsername) item.username = u.username || "";
@@ -764,6 +833,7 @@ adminRoutes.get("/users", requirePermission("manage_users"), async (c) => {
     return c.json({
       success: true,
       data: users,
+      summary,
       pagination: {
         page, pageSize, total, totalPages,
         hasNext: page < totalPages,

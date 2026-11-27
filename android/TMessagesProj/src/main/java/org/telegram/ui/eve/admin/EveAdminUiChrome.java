@@ -26,9 +26,11 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.FileLog;
+import org.telegram.messenger.ImageLocation;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.R;
 import org.telegram.messenger.Utilities;
+import org.telegram.ui.eve.auth.EveBackendClient;
 import org.telegram.ui.ActionBar.ActionBar;
 import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.SimpleActionBar;
@@ -430,6 +432,45 @@ public final class EveAdminUiChrome {
         bindAvatar(avatarView, avatarDrawable, student.id, student.displayName, student.photoUrl, sizeDp);
     }
 
+    public static void bindExamAvatar(
+            @NonNull BackupImageView avatarView,
+            @NonNull AvatarDrawable avatarDrawable,
+            @Nullable String examId,
+            @Nullable String examName,
+            @Nullable String avatarUrl,
+            @Nullable String avatarEmoji,
+            int avatarColor,
+            int sizeDp,
+            @Nullable Theme.ResourcesProvider resourcesProvider) {
+        String name = !TextUtils.isEmpty(examName) ? examName.trim() : "Exam";
+        String effectiveSeed = !TextUtils.isEmpty(examId) ? examId : name;
+        long seedHash = effectiveSeed.hashCode();
+        String emoji = avatarEmoji != null ? avatarEmoji.trim() : "";
+        if (!emoji.isEmpty()) {
+            avatarDrawable.setInfo(seedHash, name, null, emoji);
+        } else {
+            String[] parts = name.split("\\s+", 2);
+            String first = parts.length > 0 ? parts[0] : "E";
+            String last = parts.length > 1 ? parts[1] : "";
+            avatarDrawable.setInfo(seedHash, first, last);
+        }
+        if (avatarColor >= 0 && avatarColor < Theme.keys_avatar_background.length) {
+            avatarDrawable.setColor(
+                    Theme.getColor(Theme.keys_avatar_background[avatarColor], resourcesProvider),
+                    Theme.getColor(Theme.keys_avatar_background2[avatarColor], resourcesProvider)
+            );
+        }
+        avatarView.setRoundRadius(dp(sizeDp / 2f));
+        String resolvedUrl = EveBackendClient.resolveMediaUrl(avatarUrl);
+        avatarView.setTag(effectiveSeed + "|" + resolvedUrl + "|" + emoji + "|" + avatarColor);
+        if (!resolvedUrl.isEmpty()) {
+            avatarView.setImage(ImageLocation.getForPath(resolvedUrl), "100_100", avatarDrawable, null);
+        } else {
+            avatarView.setImage(null, "50_50", avatarDrawable, null);
+            avatarView.setImageDrawable(avatarDrawable);
+        }
+    }
+
     public static void bindAvatar(
             @NonNull BackupImageView avatarView,
             @NonNull AvatarDrawable avatarDrawable,
@@ -589,8 +630,16 @@ public final class EveAdminUiChrome {
         }
 
         public void bind(String seed, CharSequence title, CharSequence subtitle, String photoUrl, CharSequence badge, int style) {
+            bind(seed, title, subtitle, photoUrl, "", -1, badge, style);
+        }
+
+        public void bind(String seed, CharSequence title, CharSequence subtitle, String photoUrl, String emoji, int avatarColor, CharSequence badge, int style) {
             this.badgeStyle = style;
-            bindAvatar(avatarView, avatarDrawable, seed, title != null ? title.toString() : "", photoUrl, 44);
+            if (!TextUtils.isEmpty(emoji) || avatarColor >= 0) {
+                bindExamAvatar(avatarView, avatarDrawable, seed, title != null ? title.toString() : "", photoUrl, emoji, avatarColor, 44, resourcesProvider);
+            } else {
+                bindAvatar(avatarView, avatarDrawable, seed, title != null ? title.toString() : "", photoUrl, 44);
+            }
             titleView.setText(title);
             subtitleView.setVisibility(TextUtils.isEmpty(subtitle) ? View.GONE : View.VISIBLE);
             subtitleView.setText(subtitle);
@@ -639,14 +688,22 @@ public final class EveAdminUiChrome {
             public final String title;
             public final String subtitle;
             public final String photoUrl;
+            public final String emoji;
+            public final int avatarColor;
             public final String badge;
             public final int badgeStyle;
 
             public Payload(String seed, String title, String subtitle, String photoUrl, String badge, int badgeStyle) {
+                this(seed, title, subtitle, photoUrl, "", -1, badge, badgeStyle);
+            }
+
+            public Payload(String seed, String title, String subtitle, String photoUrl, String emoji, int avatarColor, String badge, int badgeStyle) {
                 this.seed = seed != null ? seed : "";
                 this.title = title != null ? title : "";
                 this.subtitle = subtitle != null ? subtitle : "";
                 this.photoUrl = photoUrl != null ? photoUrl : "";
+                this.emoji = emoji != null ? emoji : "";
+                this.avatarColor = avatarColor;
                 this.badge = badge != null ? badge : "";
                 this.badgeStyle = badgeStyle;
             }
@@ -666,7 +723,7 @@ public final class EveAdminUiChrome {
             public void bindView(View view, UItem item, boolean divider, UniversalAdapter adapter, UniversalRecyclerView listView) {
                 if (item.object2 instanceof Payload) {
                     Payload p = (Payload) item.object2;
-                    ((AvatarRowCell) view).bind(p.seed, p.title, p.subtitle, p.photoUrl, p.badge, p.badgeStyle);
+                    ((AvatarRowCell) view).bind(p.seed, p.title, p.subtitle, p.photoUrl, p.emoji, p.avatarColor, p.badge, p.badgeStyle);
                 }
             }
 
@@ -684,9 +741,11 @@ public final class EveAdminUiChrome {
                     Payload pa = (Payload) a.object2;
                     Payload pb = (Payload) b.object2;
                     return pa.badgeStyle == pb.badgeStyle
+                            && pa.avatarColor == pb.avatarColor
                             && TextUtils.equals(pa.title, pb.title)
                             && TextUtils.equals(pa.subtitle, pb.subtitle)
                             && TextUtils.equals(pa.photoUrl, pb.photoUrl)
+                            && TextUtils.equals(pa.emoji, pb.emoji)
                             && TextUtils.equals(pa.badge, pb.badge);
                 }
                 return Objects.equals(a.object2, b.object2);

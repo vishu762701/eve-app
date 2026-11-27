@@ -387,6 +387,9 @@ public class DialogCell extends BaseCell implements Theme.Colorable {
         public boolean verified;
         public boolean isMedia;
         public int sent = -1;
+        public String avatarUrl;
+        public String avatarEmoji;
+        public int avatarColor = -1;
     }
 
     private int paintIndex;
@@ -3253,9 +3256,29 @@ public class DialogCell extends BaseCell implements Theme.Colorable {
             dialogMuted = customDialog.muted;
             hasUnmutedTopics = false;
             hasUnmutedCommunityDialogs = false;
-            avatarDrawable.setInfo(customDialog.id, customDialog.name, null);
+            String customEmoji = customDialog.avatarEmoji != null ? customDialog.avatarEmoji.trim() : "";
+            if (!customEmoji.isEmpty()) {
+                avatarDrawable.setInfo(customDialog.id, customDialog.name, null, customEmoji);
+            } else {
+                avatarDrawable.setInfo(customDialog.id, customDialog.name, null);
+            }
+            if (customDialog.avatarColor >= 0 && customDialog.avatarColor < Theme.keys_avatar_background.length) {
+                avatarDrawable.setColor(
+                        Theme.getColor(Theme.keys_avatar_background[customDialog.avatarColor], resourcesProvider),
+                        Theme.getColor(Theme.keys_avatar_background2[customDialog.avatarColor], resourcesProvider)
+                );
+            }
+            String resolvedAvatarUrl = org.telegram.ui.eve.auth.EveBackendClient.resolveMediaUrl(customDialog.avatarUrl);
             if (isShareToStoryCell) {
                 avatarImage.setImage(null, "50_50", repostStoryDrawable, null, 0);
+            } else if (!resolvedAvatarUrl.isEmpty()) {
+                avatarImage.setImage(
+                        org.telegram.messenger.ImageLocation.getForPath(resolvedAvatarUrl),
+                        "100_100",
+                        avatarDrawable,
+                        null,
+                        0
+                );
             } else {
                 avatarImage.setImage(null, "50_50", avatarDrawable, null, 0);
             }

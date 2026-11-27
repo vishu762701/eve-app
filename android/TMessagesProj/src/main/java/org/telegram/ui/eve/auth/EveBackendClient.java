@@ -34,6 +34,23 @@ public final class EveBackendClient {
     public static final String DEFAULT_WORKER_BASE_URL = "https://eve-backend.anyqueairdrop.workers.dev";
     public static final String HEADER_EVE_CLIENT = "X-Eve-Client";
     public static final String EVE_CLIENT_VERSION = "2";
+
+    public static String resolveMediaUrl(String rawUrl) {
+        if (rawUrl == null) {
+            return "";
+        }
+        String trimmed = rawUrl.trim();
+        if (trimmed.isEmpty()) {
+            return "";
+        }
+        if (trimmed.startsWith("https://") || trimmed.startsWith("http://")) {
+            return trimmed;
+        }
+        if (trimmed.startsWith("/")) {
+            return DEFAULT_WORKER_BASE_URL + trimmed;
+        }
+        return "";
+    }
     private static final int CONNECT_TIMEOUT_MS = 20_000;
     private static final int READ_TIMEOUT_MS = 25_000;
 
@@ -358,6 +375,10 @@ public final class EveBackendClient {
     public JSONObject postJsonRoot(String path, String firebaseIdToken, JSONObject body) throws BackendException {
         requireToken(firebaseIdToken, path);
         return executeRootJsonRequest("POST", path, firebaseIdToken, body != null ? body.toString() : "{}");
+    }
+
+    public JSONObject getPublicJsonRoot(String path) throws BackendException {
+        return executeRootJsonRequest("GET", path, null, null);
     }
 
     public JSONObject postBinaryRoot(String path, String firebaseIdToken, String contentType, byte[] payloadBytes) throws BackendException {

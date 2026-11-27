@@ -35,6 +35,8 @@ import org.telegram.ui.Components.UniversalRecyclerView;
 import org.telegram.ui.SettingsActivity;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -58,8 +60,12 @@ public class EveAdminStudentDetailFragment extends BaseFragment {
     private static final int ID_ACT_EXTEND_PREMIUM = 203;
     private static final int ID_ACT_REVOKE_PREMIUM = 204;
 
-    private static final int ID_ATTEMPTS_RETRY = 301;
-    private static final int BASE_ATTEMPT_ID = 1000;
+    private static final int ID_PERF_RETRY = 301;
+    private static final int ID_PERF_TOTAL = 302;
+    private static final int ID_PERF_SCORE = 303;
+    private static final int ID_PERF_ACCURACY = 304;
+    private static final int ID_PERF_PROGRESS = 305;
+    private static final int ID_VIEW_FULL_ATTEMPTS = 306;
 
     private final EveAdminRepository repo = EveAdminRepository.getInstance();
     private final Runnable onStudentMutated;
@@ -320,35 +326,51 @@ public class EveAdminStudentDetailFragment extends BaseFragment {
             items.add(UItem.asShadow(null));
         }
 
-        // Card 3: Test Attempts
-        items.add(UItem.asHeader("Test Attempts" + (attempts.isEmpty() ? "" : " (" + attempts.size() + ")")));
-        if (!attemptsError.isEmpty()) {
+        // Card 3: Performance & Progress
+        items.add(UItem.asHeader("Performance & Progress"));
+        if (!attemptsError.isEmpty() && attempts.isEmpty()) {
             items.add(SettingsActivity.SettingCell.Factory.of(
-                    ID_ATTEMPTS_RETRY,
+                    ID_PERF_RETRY,
                     IconBackgroundColors.RED.top, IconBackgroundColors.RED.bottom,
                     R.drawable.msg_retry,
-                    "Retry Loading Attempts",
+                    "Retry Loading Performance",
                     attemptsError,
                     "Retry"));
         } else if (loadingAttempts) {
             items.add(UItem.asFlicker(FlickerLoadingView.DIALOG_CELL_TYPE));
             items.add(UItem.asFlicker(FlickerLoadingView.DIALOG_CELL_TYPE));
         } else if (attempts.isEmpty()) {
-            items.add(UItem.asShadow("No test attempts yet."));
+            items.add(UItem.asShadow("No test attempts recorded yet for this student."));
         } else {
-            for (int i = 0; i < attempts.size(); i++) {
-                EveAdminModels.StudentAttemptItem a = attempts.get(i);
-                String sub = String.format(Locale.US, "✓ %d • ✗ %d • %s",
-                        a.correct, a.wrong, EveAdminUiChrome.formatDateTime(a.timestamp));
-                String scoreVal = String.format(Locale.US, "%.1f / %d", a.score, a.total);
-                items.add(SettingsActivity.SettingCell.Factory.of(
-                        BASE_ATTEMPT_ID + i,
-                        IconBackgroundColors.CYAN.top, IconBackgroundColors.CYAN.bottom,
-                        R.drawable.msg_stats,
-                        a.examName,
-                        sub,
-                        scoreVal));
-            }
+            PerformanceSummary summary = PerformanceSummary.compute(attempts, student.lastActive);
+            String lastTestPart = summary.latestTestTimestampMs > 0
+                    ? " • Last test " + EveAdminUiChrome.formatDate(summary.latestTestTimestampMs)
+                    : "";
+            items.add(TextDetailCell.Factory.of(
+                    ID_PERF_TOTAL,
+                    summary.totalTests + (summary.totalTests == 1 ? " Test" : " Tests"),
+                    "Total Tests Taken" + lastTestPart));
+            items.add(TextDetailCell.Factory.of(
+                    ID_PERF_SCORE,
+                    String.format(Locale.US, "%.1f Avg  •  %.1f Best", summary.averageScore, summary.bestScore),
+                    "Overall Average & Best Score"));
+            items.add(TextDetailCell.Factory.of(
+                    ID_PERF_ACCURACY,
+                    String.format(Locale.US, "%.1f%% (%d / %d correct)",
+                            summary.accuracyPercent, summary.totalCorrect, summary.totalAttemptedQuestions),
+                    "Overall Accuracy"));
+            items.add(TextDetailCell.Factory.of(
+                    ID_PERF_PROGRESS,
+                    summary.progressHeadline,
+                    summary.progressSubtitle));
+            items.add(UItem.asShadow(null));
+            items.add(SettingsActivity.SettingCell.Factory.of(
+                    ID_VIEW_FULL_ATTEMPTS,
+                    IconBackgroundColors.CYAN.top, IconBackgroundColors.CYAN.bottom,
+                    R.drawable.msg_stats,
+                    "View Full Attempt History (" + attempts.size() + ")",
+                    "Inspect individual scores, accuracy and timestamps",
+                    String.valueOf(attempts.size())));
             items.add(UItem.asShadow(null));
         }
     }
@@ -385,8 +407,11 @@ public class EveAdminStudentDetailFragment extends BaseFragment {
             case ID_ACT_REVOKE_PREMIUM:
                 confirmRevokePremium();
                 break;
-            case ID_ATTEMPTS_RETRY:
+            case ID_PERF_RETRY:
                 loadAttempts();
+                break;
+            case ID_VIEW_FULL_ATTEMPTS:
+                presentFragment(new AttemptHistoryFragment(student.displayName, new ArrayList<>(attempts)));
                 break;
         }
     }
@@ -557,6 +582,210 @@ public class EveAdminStudentDetailFragment extends BaseFragment {
             colors.add(Theme.key_windowBackgroundWhiteGrayText);
             colors.add(Theme.key_text_RedRegular);
             colors.add(Theme.key_windowBackgroundWhiteBlueText);
+        }
+    }
+
+    public static final class PerformanceSummary {
+        public final int totalTests;
+        public final double averageScore;
+        public final double bestScore;
+        public final int totalCorrect;
+        public final int totalAttemptedQuestions;
+        public final double accuracyPercent;
+        public final long latestTestTimestampMs;
+        public final String progressHeadline;
+        public final String progressSubtitle;
+
+        private PerformanceSummary(
+                int totalTests,
+                double averageScore,
+                double bestScore,
+                int totalCorrect,
+                int totalAttemptedQuestions,
+                double accuracyPercent,
+                long latestTestTimestampMs,
+                String progressHeadline,
+                String progressSubtitle) {
+            this.totalTests = totalTests;
+            this.averageScore = averageScore;
+            this.bestScore = bestScore;
+            this.totalCorrect = totalCorrect;
+            this.totalAttemptedQuestions = totalAttemptedQuestions;
+            this.accuracyPercent = accuracyPercent;
+            this.latestTestTimestampMs = latestTestTimestampMs;
+            this.progressHeadline = progressHeadline;
+            this.progressSubtitle = progressSubtitle;
+        }
+
+        public static PerformanceSummary compute(List<EveAdminModels.StudentAttemptItem> attempts, long studentLastActiveMs) {
+            if (attempts == null || attempts.isEmpty()) {
+                return new PerformanceSummary(0, 0.0, 0.0, 0, 0, 0.0, 0L,
+                        "No attempts yet",
+                        "Last active " + EveAdminUiChrome.formatDate(studentLastActiveMs));
+            }
+            List<EveAdminModels.StudentAttemptItem> chronological = new ArrayList<>();
+            for (EveAdminModels.StudentAttemptItem item : attempts) {
+                if (item != null) chronological.add(item);
+            }
+            if (chronological.isEmpty()) {
+                return new PerformanceSummary(0, 0.0, 0.0, 0, 0, 0.0, 0L,
+                        "No attempts yet",
+                        "Last active " + EveAdminUiChrome.formatDate(studentLastActiveMs));
+            }
+            Collections.sort(chronological, new Comparator<EveAdminModels.StudentAttemptItem>() {
+                @Override
+                public int compare(EveAdminModels.StudentAttemptItem a, EveAdminModels.StudentAttemptItem b) {
+                    return Long.compare(a.timestamp, b.timestamp);
+                }
+            });
+
+            int n = chronological.size();
+            double sumScore = 0.0;
+            double maxScore = -Double.MAX_VALUE;
+            int sumCorrect = 0;
+            int sumAttempted = 0;
+            int sumTotalQs = 0;
+            long latestTs = 0L;
+
+            for (EveAdminModels.StudentAttemptItem a : chronological) {
+                sumScore += a.score;
+                if (a.score > maxScore) maxScore = a.score;
+                sumCorrect += Math.max(0, a.correct);
+                sumAttempted += Math.max(0, a.correct) + Math.max(0, a.wrong);
+                sumTotalQs += Math.max(0, a.total);
+                if (a.timestamp > latestTs) latestTs = a.timestamp;
+            }
+            if (maxScore == -Double.MAX_VALUE) maxScore = 0.0;
+
+            double avg = sumScore / n;
+            int denom = sumAttempted > 0 ? sumAttempted : sumTotalQs;
+            double acc = denom > 0 ? (sumCorrect * 100.0) / denom : 0.0;
+
+            long effectiveActiveMs = Math.max(studentLastActiveMs, latestTs);
+            String activeLabel = EveAdminUiChrome.formatDate(effectiveActiveMs);
+
+            String headline;
+            String subtitle;
+            if (n == 1) {
+                headline = "Baseline Set";
+                subtitle = "1 test completed • Last active " + activeLabel;
+            } else {
+                int recentCount = n > 5 ? 5 : Math.max(1, (n + 1) / 2);
+                int earlierCount = n - recentCount;
+                double earlierSum = 0.0;
+                double recentSum = 0.0;
+                for (int i = 0; i < earlierCount; i++) {
+                    earlierSum += chronological.get(i).score;
+                }
+                for (int i = earlierCount; i < n; i++) {
+                    recentSum += chronological.get(i).score;
+                }
+                double earlierAvg = earlierCount > 0 ? earlierSum / earlierCount : avg;
+                double recentAvg = recentCount > 0 ? recentSum / recentCount : avg;
+                double delta = recentAvg - earlierAvg;
+
+                if (delta >= 2.0) {
+                    headline = String.format(Locale.US, "Improving (+%.1f pts)", delta);
+                } else if (delta <= -2.0) {
+                    headline = String.format(Locale.US, "Needs Focus (%.1f pts)", delta);
+                } else {
+                    headline = "Steady Progress";
+                }
+                subtitle = String.format(Locale.US, "Recent %d avg %.1f vs earlier %.1f • Active %s",
+                        recentCount, recentAvg, earlierAvg, activeLabel);
+            }
+
+            return new PerformanceSummary(
+                    n, avg, maxScore, sumCorrect, denom, acc, latestTs, headline, subtitle);
+        }
+    }
+
+    /**
+     * Secondary screen opened only on explicit tap of "View Full Attempt History (N)".
+     */
+    public static final class AttemptHistoryFragment extends BaseFragment {
+        private final String studentName;
+        private final List<EveAdminModels.StudentAttemptItem> attemptItems;
+        private UniversalRecyclerView listView;
+
+        public AttemptHistoryFragment(String studentName, List<EveAdminModels.StudentAttemptItem> attemptItems) {
+            this.studentName = !TextUtils.isEmpty(studentName) ? studentName : "Student";
+            this.attemptItems = attemptItems != null ? attemptItems : Collections.emptyList();
+        }
+
+        @Override
+        protected boolean useSimpleActionBar() {
+            return true;
+        }
+
+        @Override
+        protected boolean useFadeDrawableForActionBar() {
+            return false;
+        }
+
+        @Nullable
+        @Override
+        protected RecyclerListView getListViewForSimpleGlass() {
+            return listView;
+        }
+
+        @Override
+        public boolean isSupportEdgeToEdge() {
+            return true;
+        }
+
+        @Override
+        public boolean drawEdgeNavigationBar() {
+            return false;
+        }
+
+        @Override
+        public View createView(Context context) {
+            setHasOwnBackground(true);
+            EveAdminUiChrome.Chrome chrome = EveAdminUiChrome.setup(
+                    this,
+                    context,
+                    simpleActionBar,
+                    getBaseSimpleGlass(),
+                    glassEngine,
+                    getResourceProvider(),
+                    "Attempt History",
+                    studentName + " • " + attemptItems.size() + " tests",
+                    false,
+                    (items, adapter) -> {
+                        EveAdminUiChrome.addTopSpace(items);
+                        if (attemptItems.isEmpty()) {
+                            items.add(UItem.asShadow("No test attempts recorded."));
+                            return;
+                        }
+                        for (int i = 0; i < attemptItems.size(); i++) {
+                            EveAdminModels.StudentAttemptItem a = attemptItems.get(i);
+                            String sub = String.format(Locale.US, "✓ %d • ✗ %d • %s",
+                                    a.correct, a.wrong, EveAdminUiChrome.formatDateTime(a.timestamp));
+                            String scoreVal = String.format(Locale.US, "%.1f / %d", a.score, a.total);
+                            items.add(SettingsActivity.SettingCell.Factory.of(
+                                    1000 + i,
+                                    IconBackgroundColors.CYAN.top, IconBackgroundColors.CYAN.bottom,
+                                    R.drawable.msg_stats,
+                                    a.examName,
+                                    sub,
+                                    scoreVal));
+                        }
+                    },
+                    (item, view, position, x, y) -> {},
+                    new ActionBar.ActionBarMenuOnItemClick() {
+                        @Override
+                        public void onItemClick(int id) {
+                            if (id == -1) {
+                                finishFragment();
+                            }
+                        }
+                    },
+                    null
+            );
+            listView = chrome.listView;
+            fragmentView = chrome.rootView;
+            return chrome.rootView;
         }
     }
 }

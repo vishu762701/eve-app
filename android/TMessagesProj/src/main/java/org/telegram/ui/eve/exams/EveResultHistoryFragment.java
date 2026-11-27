@@ -36,7 +36,6 @@ import java.util.Locale;
 public class EveResultHistoryFragment extends BaseFragment {
 
     private static final int MENU_SEARCH = 1;
-    private static final int MENU_REFRESH = 2;
 
     private static final int ID_RETRY = 100;
     private static final int BASE_ATTEMPT_ID = 1000;
@@ -45,6 +44,8 @@ public class EveResultHistoryFragment extends BaseFragment {
     private SimpleActionBarMenuItem searchItem;
     private List<EveExamModels.AttemptResult> attempts = Collections.emptyList();
     private final List<EveExamModels.AttemptResult> filteredAttempts = new ArrayList<>();
+    private final EveAdminUiChrome.AutoSyncController autoSync =
+            new EveAdminUiChrome.AutoSyncController(() -> loadHistory(false));
     private boolean loading = true;
     private boolean destroyed = false;
     private String errorMessage = "";
@@ -109,8 +110,6 @@ public class EveResultHistoryFragment extends BaseFragment {
                     public void onItemClick(int id) {
                         if (id == -1) {
                             finishFragment();
-                        } else if (id == MENU_REFRESH) {
-                            loadHistory();
                         }
                     }
                 },
@@ -140,27 +139,46 @@ public class EveResultHistoryFragment extends BaseFragment {
                         }
                     });
             searchItem.setSearchFieldHint("Search exam history");
-            menu.addItem(MENU_REFRESH, R.drawable.msg_retry, getResourceProvider());
         }
 
         fragmentView = chrome.rootView;
-        loadHistory();
+        loadHistory(true);
         return chrome.rootView;
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        autoSync.onResume();
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        autoSync.onPause();
     }
 
     @Override
     public void onFragmentDestroy() {
         destroyed = true;
+        autoSync.destroy();
         super.onFragmentDestroy();
     }
 
     private void loadHistory() {
-        loading = true;
-        errorMessage = "";
-        updateList();
+        loadHistory(true);
+    }
+
+    private void loadHistory(boolean showLoading) {
+        if (showLoading) {
+            loading = true;
+            errorMessage = "";
+            updateList();
+        }
         EveExamRepository.getInstance().loadAttemptHistory((list, err) -> {
             if (destroyed) return;
             loading = false;
+            autoSync.markSynced();
             attempts = list != null ? list : Collections.emptyList();
             errorMessage = err != null ? err : "";
             applyFilter(searchQuery);

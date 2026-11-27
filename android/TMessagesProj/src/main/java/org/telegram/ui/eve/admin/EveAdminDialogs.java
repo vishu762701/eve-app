@@ -788,27 +788,13 @@ public final class EveAdminDialogs {
                                 + "&am=" + amount
                                 + "&cu=INR"
                                 + "&tn=" + Uri.encode(plan);
-                        Bitmap qr = EvePremiumRepository.generateQrBitmap(uri, AndroidUtilities.dp(220));
-                        LinearLayout qrBox = new LinearLayout(activity);
-                        qrBox.setOrientation(LinearLayout.VERTICAL);
-                        qrBox.setGravity(Gravity.CENTER_HORIZONTAL);
-                        int pad = AndroidUtilities.dp(18);
-                        qrBox.setPadding(pad, pad, pad, pad);
-                        if (qr != null) {
-                            ImageView qrView = new ImageView(activity);
-                            qrView.setImageBitmap(qr);
-                            qrBox.addView(qrView, new LinearLayout.LayoutParams(AndroidUtilities.dp(220), AndroidUtilities.dp(220)));
-                        }
-                        TextView note = new TextView(activity);
-                        note.setGravity(Gravity.CENTER);
-                        note.setPadding(0, AndroidUtilities.dp(12), 0, 0);
-                        note.setText("VPA: " + vpa + "\nMerchant: " + (merchant.isEmpty() ? "EVE" : merchant) + "\nAmount: ₹" + amount);
-                        qrBox.addView(note);
-                        new AlertDialog.Builder(activity)
-                                .setTitle("Merchant UPI QR Preview")
-                                .setView(qrBox)
-                                .setPositiveButton("Close", null)
-                                .show();
+                        org.telegram.ui.eve.premium.EvePremiumQrSheet.showAdminPreview(
+                                fragment,
+                                uri,
+                                vpa,
+                                plan,
+                                amount
+                        );
                     })
                     .setNegativeButton("Cancel", null)
                     .show();
@@ -1176,5 +1162,95 @@ public final class EveAdminDialogs {
                 showError(fragment, message);
             }
         };
+    }
+
+    public static void showCreateSubExamDialog(
+            BaseFragment fragment,
+            EveAdminRepository repo,
+            EveAdminModels.AdminExamItem parentExam,
+            Runnable onCreated) {
+        Activity activity = fragment.getParentActivity();
+        if (activity == null || parentExam == null) return;
+        Theme.ResourcesProvider rp = fragment.getResourceProvider();
+
+        LinearLayout container = makeFormContainer(activity);
+        EditText nameInput = addField(activity, container, "Sub-Exam Name (e.g. Tier 1 Maths)", "", InputType.TYPE_CLASS_TEXT, rp);
+        EditText minutesInput = addField(activity, container, "Time Limit (minutes 1-600)", String.valueOf(parentExam.timeLimitMinutes > 0 ? parentExam.timeLimitMinutes : 60), InputType.TYPE_CLASS_NUMBER, rp);
+        EditText countInput = addField(activity, container, "Questions Per Test (1-200)", String.valueOf(parentExam.questionCount > 0 ? parentExam.questionCount : 25), InputType.TYPE_CLASS_NUMBER, rp);
+        EditText negInput = addField(activity, container, "Negative Marking (0, 0.25, 1/3, 0.5)", parentExam.negativeMarkingText, InputType.TYPE_CLASS_TEXT, rp);
+        EditText emojiInput = addField(activity, container, "Sub-Exam Logo Emoji (optional, e.g. 📘 🎯)", "📘", InputType.TYPE_CLASS_TEXT, rp);
+        EditText promptInput = addField(activity, container, "AI Prompt Notes (optional)", "", InputType.TYPE_CLASS_TEXT, rp);
+
+        final String[] modeLabels = new String[] { "Live", "Paused", "Inherit" };
+        final String[] modeValues = new String[] { "live", "paused", "inherit" };
+        final String[] selectedMode = new String[] { "live" };
+        addFieldLabel(activity, container, "Publish Mode", rp);
+        TextView publishPicker = new TextView(activity);
+        publishPicker.setTextSize(15);
+        publishPicker.setPadding(AndroidUtilities.dp(12), AndroidUtilities.dp(10), AndroidUtilities.dp(12), AndroidUtilities.dp(10));
+        publishPicker.setTextColor(Theme.getColor(Theme.key_dialogTextBlack, rp));
+        publishPicker.setBackground(Theme.createRoundRectDrawable(
+                AndroidUtilities.dp(8),
+                Theme.multAlpha(Theme.getColor(Theme.key_dialogTextGray3, rp), 0.10f)));
+        publishPicker.setText("Live  ▾");
+        publishPicker.setOnClickListener(v -> new AlertDialog.Builder(activity, rp)
+                .setTitle("Publish Mode")
+                .setItems(modeLabels, (d, which) -> {
+                    selectedMode[0] = modeValues[which];
+                    publishPicker.setText(modeLabels[which] + "  ▾");
+                })
+                .setNegativeButton("Cancel", null)
+                .show());
+        container.addView(publishPicker, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 4, 0, 8));
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(activity, rp)
+                .setTitle("Add Sub-Exam under " + parentExam.examName)
+                .setView(wrapScroll(activity, container))
+                .setPositiveButton("Create Sub-Exam", (d, w) -> {
+                    String name = text(nameInput);
+                    if (name.isEmpty()) {
+                        showError(fragment, "Sub-exam name cannot be empty.");
+                        return;
+                    }
+                    int minutes = parseIntBounded(minutesInput, 60, 1, 600);
+                    int qCount = parseIntBounded(countInput, 25, 1, 200);
+                    String neg = textOr(negInput, "0");
+                    String emoji = text(emojiInput);
+                    String prompt = text(promptInput);
+                    String mode = selectedMode[0];
+
+                    EveAdminRepository.ResultCallback<EveAdminModels.AdminExamItem> cb = callback(fragment, createdItem -> {
+                        BulletinFactory.of(fragment).createSimpleBulletin(R.raw.contact_check,
+                                "Sub-exam created! Opening details to customize photo or settings.").show();
+                        repo.invalidateCache();
+                        if (onCreated != null) onCreated.run();
+                        if (createdItem != null) {
+                            fragment.presentFragment(new EveAdminExamDetailFragment(createdItem, null, onCreated));
+                        }
+                    });
+                    repo.runWithAdminToken(cb, token -> {
+                        String newId = repo.createExamWithParent(
+                                token, name, parentExam.category, minutes, qCount, "Test 1",
+                                neg, mode, prompt, parentExam.id);
+                        String avEmoji = "";
+                        int avColor = -1;
+                        if (!newId.isEmpty() && !emoji.isEmpty()) {
+                            avColor = Math.abs(newId.hashCode()) % 7;
+                            try {
+                                repo.setExamAvatarEmoji(token, newId, emoji, avColor);
+                                avEmoji = emoji;
+                            } catch (Throwable ignored) {
+                            }
+                        }
+                        EveAdminModels.AdminExamItem item = !newId.isEmpty()
+                                ? new EveAdminModels.AdminExamItem(
+                                        newId, name, parentExam.category, minutes, qCount, "Test 1",
+                                        neg, mode, prompt, parentExam.id, "", "", "", "", avEmoji, avColor)
+                                : null;
+                        repo.postSuccess(cb, item);
+                    });
+                })
+                .setNegativeButton("Cancel", null);
+        fragment.showDialog(builder.create());
     }
 }

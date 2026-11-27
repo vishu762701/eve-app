@@ -197,5 +197,54 @@ public class EveStudentExamExecutionTest {
         org.telegram.ui.eve.exams.EveLeaderboardFragment studentLb =
                 new org.telegram.ui.eve.exams.EveLeaderboardFragment("", "Leaderboard", true);
         assertFalse(studentLb.isAdminInspectionMode());
+
+        // Ascending natural mock test ordering
+        java.util.List<org.telegram.ui.eve.exams.EveExamModels.GeneratedTestSummary> unordered = new java.util.ArrayList<>();
+        unordered.add(new org.telegram.ui.eve.exams.EveExamModels.GeneratedTestSummary("g10", "ex", "SSC", "Test 10", "Test 10", 5000L, "live", 20, 0L));
+        unordered.add(new org.telegram.ui.eve.exams.EveExamModels.GeneratedTestSummary("g2", "ex", "SSC", "Test 2", "Test 2", 2000L, "live", 20, 0L));
+        unordered.add(new org.telegram.ui.eve.exams.EveExamModels.GeneratedTestSummary("g1", "ex", "SSC", "Test 1", "Test 1", 1000L, "live", 20, 0L));
+        unordered.add(new org.telegram.ui.eve.exams.EveExamModels.GeneratedTestSummary("g4", "ex", "SSC", "Mock 4", "Mock 4", 4000L, "live", 20, 0L));
+        unordered.add(new org.telegram.ui.eve.exams.EveExamModels.GeneratedTestSummary("g3", "ex", "SSC", "Mock 3", "Mock 3", 3000L, "live", 20, 0L));
+        java.util.Collections.sort(unordered, org.telegram.ui.eve.exams.EveExamTestsFragment.NATURAL_TEST_COMPARATOR);
+        assertEquals("Test 1", unordered.get(0).testNumber);
+        assertEquals("Test 2", unordered.get(1).testNumber);
+        assertEquals("Mock 3", unordered.get(2).testNumber);
+        assertEquals("Mock 4", unordered.get(3).testNumber);
+        assertEquals("Test 10", unordered.get(4).testNumber);
+
+        // ExamSummary -> CustomDialog carries avatar metadata & resolves relative URLs
+        org.telegram.ui.eve.exams.EveExamModels.ExamSummary examWithAvatar =
+                new org.telegram.ui.eve.exams.EveExamModels.ExamSummary(
+                        "ex-av", "UPSC Prelims", 120, "UPSC", 100, "Test 1", "1/3",
+                        "", "live", 0L, 4, "Test 1", 0, true,
+                        "/api/exams/ex-av/avatar?v=1", "🏛️", 4);
+        org.telegram.ui.Cells.DialogCell.CustomDialog dialog =
+                org.telegram.ui.eve.exams.EveExamDialogsMapper.toCustomDialog(examWithAvatar);
+        assertEquals("/api/exams/ex-av/avatar?v=1", dialog.avatarUrl);
+        assertEquals("🏛️", dialog.avatarEmoji);
+        assertEquals(4, dialog.avatarColor);
+        assertEquals(
+                "https://eve-backend.anyqueairdrop.workers.dev/api/exams/ex-av/avatar?v=1",
+                org.telegram.ui.eve.auth.EveBackendClient.resolveMediaUrl(dialog.avatarUrl)
+        );
+
+        // Exact Home banner carousel height = 2.5x single exam row (72dp * 2.5 = 180dp)
+        assertEquals(
+                Math.round(org.telegram.messenger.AndroidUtilities.dp(72) * 2.5f),
+                org.telegram.ui.eve.exams.EveHomeBannerCarouselView.computeBannerHeightPx()
+        );
+
+        // parseAllExamsCatalog preserves sub-exams while parseExamCatalog keeps top-level exams for Home
+        org.json.JSONArray catalogArr = new org.json.JSONArray("["
+                + "{\"id\":\"parent-1\",\"examName\":\"SSC CGL\",\"publishMode\":\"live\"},"
+                + "{\"id\":\"sub-1\",\"examName\":\"Maths Tier 1\",\"parentExamId\":\"parent-1\",\"publishMode\":\"live\",\"avatarEmoji\":\"📘\",\"avatarColor\":1}"
+                + "]");
+        java.util.List<org.telegram.ui.eve.exams.EveExamModels.ExamSummary> topLevel =
+                org.telegram.ui.eve.exams.EveExamRepository.parseExamCatalog(catalogArr, null);
+        java.util.List<org.telegram.ui.eve.exams.EveExamModels.ExamSummary> allItems =
+                org.telegram.ui.eve.exams.EveExamRepository.parseAllExamsCatalog(catalogArr, null, java.util.Collections.emptySet());
+        assertEquals(1, topLevel.size());
+        assertEquals("parent-1", topLevel.get(0).id);
+        assertEquals(2, allItems.size());
     }
 }

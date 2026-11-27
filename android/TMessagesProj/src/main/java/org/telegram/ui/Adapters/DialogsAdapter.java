@@ -111,7 +111,8 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
             VIEW_TYPE_FORWARD_TO_STORIES_CELL = 21,
             VIEW_TYPE_HEADER_3 = 22,
             VIEW_TYPE_DIALOG_COMMUNITY = 23,
-            VIEW_TYPE_EXAM = 24;
+            VIEW_TYPE_EXAM = 24,
+            VIEW_TYPE_EVE_BANNERS = 25;
 
     private Context mContext;
     private ArchiveHintCell archiveHintCell;
@@ -290,6 +291,13 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
         TL_chatlists.TL_chatlists_chatlistUpdates chatlistUpdates;
         private int emptyType;
         EveExamModels.ExamSummary exam;
+        java.util.List<org.telegram.ui.eve.admin.EveAdminModels.BannerItem> eveBanners;
+
+        public ItemInternal(java.util.List<org.telegram.ui.eve.admin.EveAdminModels.BannerItem> eveBanners) {
+            super(VIEW_TYPE_EVE_BANNERS, false);
+            this.eveBanners = eveBanners != null ? new ArrayList<>(eveBanners) : new ArrayList<>();
+            this.stableId = 90001;
+        }
 
         public ItemInternal(EveExamModels.ExamSummary exam) {
             super(VIEW_TYPE_EXAM, true);
@@ -446,6 +454,9 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
             if (viewType == VIEW_TYPE_EXAM) {
                 return exam != null && itemInternal.exam != null && Objects.equals(exam.id, itemInternal.exam.id);
             }
+            if (viewType == VIEW_TYPE_EVE_BANNERS) {
+                return true;
+            }
             if (viewType == VIEW_TYPE_EMPTY) {
                 return emptyType == itemInternal.emptyType;
             }
@@ -467,8 +478,29 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
                         && exam.timeLimitMinutes == itemInternal.exam.timeLimitMinutes
                         && exam.questionCount == itemInternal.exam.questionCount
                         && exam.liveTestCount == itemInternal.exam.liveTestCount
+                        && exam.isPinned == itemInternal.exam.isPinned
+                        && Objects.equals(exam.avatarUrl, itemInternal.exam.avatarUrl)
+                        && Objects.equals(exam.avatarEmoji, itemInternal.exam.avatarEmoji)
+                        && exam.avatarColor == itemInternal.exam.avatarColor
                         && Objects.equals(exam.nextTestLabel, itemInternal.exam.nextTestLabel)
                         && exam.latestTestTimestampSec == itemInternal.exam.latestTestTimestampSec;
+            }
+            if (viewType == VIEW_TYPE_EVE_BANNERS) {
+                if (eveBanners == null || itemInternal.eveBanners == null || eveBanners.size() != itemInternal.eveBanners.size()) {
+                    return false;
+                }
+                for (int i = 0; i < eveBanners.size(); i++) {
+                    org.telegram.ui.eve.admin.EveAdminModels.BannerItem a = eveBanners.get(i);
+                    org.telegram.ui.eve.admin.EveAdminModels.BannerItem b = itemInternal.eveBanners.get(i);
+                    if (!Objects.equals(a.id, b.id)
+                            || !Objects.equals(a.imageUrl, b.imageUrl)
+                            || !Objects.equals(a.mediaType, b.mediaType)
+                            || !Objects.equals(a.linkUrl, b.linkUrl)
+                            || !Objects.equals(a.linkLabel, b.linkLabel)) {
+                        return false;
+                    }
+                }
+                return true;
             }
             return true;
         }
@@ -724,6 +756,16 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
                 examCell.setDialogCellDelegate(this);
                 examCell.setIsTransitionSupport(isTransitionSupport);
                 view = examCell;
+                break;
+            case VIEW_TYPE_EVE_BANNERS:
+                view = new org.telegram.ui.eve.exams.EveHomeBannerCarouselView(mContext, null);
+                view.setLayoutParams(new RecyclerView.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT
+                ));
+                if (parentFragment != null) {
+                    parentFragment.registerEveBannerCarouselView((org.telegram.ui.eve.exams.EveHomeBannerCarouselView) view);
+                }
                 break;
             case VIEW_TYPE_FORWARD_TO_STORIES_CELL:
             case VIEW_TYPE_DIALOG:
@@ -1126,6 +1168,15 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
                 if (cell.collapsed != collapsedView) {
                     cell.collapsed = collapsedView;
                     cell.requestLayout();
+                }
+                break;
+            }
+            case VIEW_TYPE_EVE_BANNERS: {
+                ItemInternal internal = (i >= 0 && i < itemInternals.size()) ? itemInternals.get(i) : null;
+                org.telegram.ui.eve.exams.EveHomeBannerCarouselView carousel =
+                        (org.telegram.ui.eve.exams.EveHomeBannerCarouselView) holder.itemView;
+                if (internal != null) {
+                    carousel.setBanners(internal.eveBanners);
                 }
                 break;
             }
@@ -1701,6 +1752,12 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
     private void updateItemList() {
         if (parentFragment != null && parentFragment.isEveExamsMode()) {
             itemInternals.clear();
+            java.util.List<org.telegram.ui.eve.admin.EveAdminModels.BannerItem> banners = parentFragment.getEveHomeBanners();
+            String q = parentFragment.getExamSearchQuery();
+            boolean hasQuery = q != null && !q.trim().isEmpty();
+            if (!hasQuery && banners != null && !banners.isEmpty()) {
+                itemInternals.add(new ItemInternal(banners));
+            }
             java.util.List<EveExamModels.ExamSummary> exams = parentFragment.getFilteredEveExams();
             dialogsCount = exams.size();
             if (exams.isEmpty()) {

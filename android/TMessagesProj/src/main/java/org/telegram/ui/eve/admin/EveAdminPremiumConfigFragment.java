@@ -33,6 +33,7 @@ import org.telegram.ui.Components.UItem;
 import org.telegram.ui.Components.UniversalAdapter;
 import org.telegram.ui.Components.UniversalRecyclerView;
 import org.telegram.ui.SettingsActivity;
+import org.telegram.ui.eve.premium.EvePremiumQrSheet;
 import org.telegram.ui.eve.premium.EvePremiumRepository;
 
 import java.util.ArrayList;
@@ -493,39 +494,13 @@ public class EveAdminPremiumConfigFragment extends BaseFragment {
     private void showQrPreviewDialog() {
         Activity activity = getParentActivity();
         if (activity == null) return;
-        Theme.ResourcesProvider rp = getResourceProvider();
 
         String uri = "upi://pay?pa=" + Uri.encode(merchantVpa)
                 + "&pn=" + Uri.encode(merchantName)
                 + "&am=" + priceInr
                 + "&cu=INR&tn=" + Uri.encode(planName);
 
-        Bitmap qr = EvePremiumRepository.generateQrBitmap(uri, dp(220));
-        if (qr == null) {
-            BulletinFactory.of(this).createErrorBulletin("Unable to generate QR preview.").show();
-            return;
-        }
-
-        LinearLayout layout = new LinearLayout(activity);
-        layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setGravity(Gravity.CENTER_HORIZONTAL);
-        layout.setPadding(dp(24), dp(16), dp(24), dp(12));
-
-        ImageView image = new ImageView(activity);
-        image.setImageBitmap(qr);
-        layout.addView(image, LayoutHelper.createLinear(220, 220, Gravity.CENTER_HORIZONTAL));
-
-        TextView caption = new TextView(activity);
-        caption.setGravity(Gravity.CENTER);
-        caption.setText(merchantVpa + "\n₹" + priceInr + " • " + planName);
-        caption.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, rp));
-        layout.addView(caption, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 12, 0, 0));
-
-        AlertDialog.Builder builder = new AlertDialog.Builder(activity, rp);
-        builder.setTitle("UPI QR Preview");
-        builder.setView(layout);
-        builder.setPositiveButton("Close", null);
-        showDialog(builder.create());
+        EvePremiumQrSheet.showAdminPreview(this, uri, merchantVpa, planName, priceInr);
     }
 
     private void saveChanges() {

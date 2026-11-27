@@ -321,6 +321,11 @@ public class EveAdminControlCenterTest {
                 "org.telegram.ui.eve.admin.EveAdminCrashReportsFragment",
                 "org.telegram.ui.eve.admin.EveAdminApiUsageFragment",
                 "org.telegram.ui.eve.admin.EveAdminMaintenanceConfigFragment",
+                "org.telegram.ui.eve.admin.EveAdminBannerEditorFragment",
+                "org.telegram.ui.eve.admin.EveAdminStudentDetailFragment$AttemptHistoryFragment",
+                "org.telegram.ui.eve.premium.EvePremiumQrSheet",
+                "org.telegram.ui.eve.exams.EveHomeBannerCarouselView",
+                "org.telegram.ui.eve.exams.EveSubExamsFragment",
                 "org.telegram.ui.eve.admin.EveAdminUiChrome$AutoSyncController",
                 "org.telegram.ui.eve.admin.EveAdminPollsFragment",
                 "org.telegram.ui.eve.admin.EveAdminPollCreateFragment",
@@ -452,5 +457,63 @@ public class EveAdminControlCenterTest {
 
         EveAdminModels.AdminStudentItem student = repo.fetchStudentById("admin-jwt", "stu-1", "Fallback");
         assertEquals("Riya", student.displayName);
+
+        // Student Performance & Progress aggregation
+        java.util.List<EveAdminModels.StudentAttemptItem> attempts = new java.util.ArrayList<>();
+        attempts.add(new EveAdminModels.StudentAttemptItem("a1", "SSC", 60.0, 100, 65, 20, 1000L));
+        attempts.add(new EveAdminModels.StudentAttemptItem("a2", "SSC", 70.0, 100, 75, 15, 2000L));
+        attempts.add(new EveAdminModels.StudentAttemptItem("a3", "SSC", 90.0, 100, 92, 8, 3000L));
+        org.telegram.ui.eve.admin.EveAdminStudentDetailFragment.PerformanceSummary perf =
+                org.telegram.ui.eve.admin.EveAdminStudentDetailFragment.PerformanceSummary.compute(attempts, 4000L);
+        assertEquals(3, perf.totalTests);
+        assertEquals(90.0, perf.bestScore, 0.01);
+        assertEquals(73.33, perf.averageScore, 0.05);
+        assertTrue(perf.accuracyPercent > 80.0);
+        assertTrue(perf.progressHeadline.contains("Improving"));
+
+        // Exam avatar parsing & endpoints
+        org.json.JSONArray examArr = new org.json.JSONArray("[{"
+                + "\"id\":\"ex-7\",\"examName\":\"Banking PO\",\"category\":\"Banking\","
+                + "\"avatarUrl\":\"/api/exams/ex-7/avatar?v=2\",\"avatarEmoji\":\"🎯\",\"avatarColor\":2"
+                + "}]");
+        java.util.List<EveAdminModels.AdminExamItem> exams = EveAdminModels.AdminExamItem.parseList(examArr);
+        assertEquals(1, exams.size());
+        assertEquals("/api/exams/ex-7/avatar?v=2", exams.get(0).avatarUrl);
+        assertEquals("🎯", exams.get(0).avatarEmoji);
+        assertEquals(2, exams.get(0).avatarColor);
+
+        repo.setExamAvatarEmoji("admin-jwt", "ex-7", "🎯", 2);
+        assertTrue(calls.get(calls.size() - 1).startsWith("POST "));
+        assertTrue(calls.get(calls.size() - 1).endsWith("/api/exams/ex-7/avatar"));
+
+        repo.deleteExamAvatar("admin-jwt", "ex-7");
+        assertTrue(calls.get(calls.size() - 1).startsWith("DELETE "));
+        assertTrue(calls.get(calls.size() - 1).endsWith("/api/exams/ex-7/avatar"));
+
+        // Styled UPI QR generator produces crisp non-null bitmap
+        android.graphics.Bitmap styledQr = org.telegram.ui.eve.premium.EvePremiumRepository.generateQrBitmap(
+                "upi://pay?pa=eve@upi&pn=EVE&am=99&cu=INR&tn=Premium", 320);
+        assertNotNull(styledQr);
+        assertEquals(320, styledQr.getWidth());
+
+        // Banner mediaType & StudentsPageResult summary parsing
+        org.json.JSONArray bannerArr = new org.json.JSONArray("["
+                + "{\"id\":\"b-1\",\"imageUrl\":\"/api/banners/b-1/media\",\"mediaType\":\"video\",\"active\":true,\"linkUrl\":\"\",\"linkLabel\":\"\"},"
+                + "{\"id\":\"b-2\",\"imageUrl\":\"/api/banners/b-2/media\",\"mediaType\":\"image\",\"active\":false,\"linkUrl\":\"https://eve.app\",\"linkLabel\":\"Promo\"}"
+                + "]");
+        java.util.List<EveAdminModels.BannerItem> parsedBanners = EveAdminModels.BannerItem.parseList(bannerArr);
+        assertEquals(2, parsedBanners.size());
+        assertTrue(parsedBanners.get(0).isVideo());
+        assertTrue(parsedBanners.get(0).active);
+        assertFalse(parsedBanners.get(1).isVideo());
+        assertFalse(parsedBanners.get(1).active);
+
+        org.json.JSONArray usersArr = new org.json.JSONArray("["
+                + "{\"id\":\"u-1\",\"displayName\":\"Karan\",\"isPremium\":true,\"isOnline\":true,\"disabled\":false}"
+                + "]");
+        java.util.List<EveAdminModels.AdminStudentItem> parsedUsers = EveAdminModels.AdminStudentItem.parseList(usersArr);
+        assertEquals(1, parsedUsers.size());
+        assertTrue(parsedUsers.get(0).isPremium);
+        assertTrue(parsedUsers.get(0).isOnline);
     }
 }

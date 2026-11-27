@@ -98,6 +98,9 @@ public final class EveAdminModels {
         public final String syllabusFileName;
         public final String syllabusUrl;
         public final String imageUrl;
+        public final String avatarUrl;
+        public final String avatarEmoji;
+        public final int avatarColor;
 
         public AdminExamItem(
                 String id,
@@ -110,7 +113,7 @@ public final class EveAdminModels {
                 String publishMode,
                 String generationPrompt) {
             this(id, examName, category, timeLimitMinutes, questionCount, testNumber,
-                    negativeMarkingText, publishMode, generationPrompt, "", "", "", "");
+                    negativeMarkingText, publishMode, generationPrompt, "", "", "", "", "", "", -1);
         }
 
         public AdminExamItem(
@@ -127,6 +130,28 @@ public final class EveAdminModels {
                 String syllabusFileName,
                 String syllabusUrl,
                 String imageUrl) {
+            this(id, examName, category, timeLimitMinutes, questionCount, testNumber,
+                    negativeMarkingText, publishMode, generationPrompt, parentExamId,
+                    syllabusFileName, syllabusUrl, imageUrl, imageUrl, "", -1);
+        }
+
+        public AdminExamItem(
+                String id,
+                String examName,
+                String category,
+                int timeLimitMinutes,
+                int questionCount,
+                String testNumber,
+                String negativeMarkingText,
+                String publishMode,
+                String generationPrompt,
+                String parentExamId,
+                String syllabusFileName,
+                String syllabusUrl,
+                String imageUrl,
+                String avatarUrl,
+                String avatarEmoji,
+                int avatarColor) {
             this.id = id != null ? id : "";
             this.examName = examName != null ? examName : "Untitled Exam";
             this.category = category != null && !category.isEmpty() ? category : "General";
@@ -140,6 +165,22 @@ public final class EveAdminModels {
             this.syllabusFileName = syllabusFileName != null ? syllabusFileName : "";
             this.syllabusUrl = syllabusUrl != null ? syllabusUrl : "";
             this.imageUrl = imageUrl != null ? imageUrl : "";
+            String resolvedAvatarUrl = avatarUrl != null && !avatarUrl.trim().isEmpty() ? avatarUrl.trim() : this.imageUrl;
+            this.avatarUrl = resolvedAvatarUrl;
+            this.avatarEmoji = avatarEmoji != null ? avatarEmoji.trim() : "";
+            this.avatarColor = avatarColor;
+        }
+
+        public AdminExamItem withAvatar(String nextAvatarUrl, String nextAvatarEmoji, int nextAvatarColor) {
+            String cleanUrl = nextAvatarUrl != null ? nextAvatarUrl.trim() : "";
+            return new AdminExamItem(
+                    id, examName, category, timeLimitMinutes, questionCount, testNumber,
+                    negativeMarkingText, publishMode, generationPrompt, parentExamId,
+                    syllabusFileName, syllabusUrl, cleanUrl, cleanUrl, nextAvatarEmoji, nextAvatarColor);
+        }
+
+        public boolean hasCustomAvatar() {
+            return !avatarUrl.isEmpty() || !avatarEmoji.isEmpty() || avatarColor >= 0;
         }
 
         public boolean isPaused() {
@@ -156,6 +197,10 @@ public final class EveAdminModels {
             for (int i = 0; i < arr.length(); i++) {
                 JSONObject o = arr.optJSONObject(i);
                 if (o == null) continue;
+                String imgUrl = clean(o, "imageUrl", "");
+                String avUrl = clean(o, "avatarUrl", imgUrl);
+                String avEmoji = clean(o, "avatarEmoji", "");
+                int avColor = o.isNull("avatarColor") ? -1 : o.optInt("avatarColor", -1);
                 out.add(new AdminExamItem(
                         clean(o, "id", ""),
                         clean(o, "examName", "Untitled Exam"),
@@ -169,7 +214,10 @@ public final class EveAdminModels {
                         clean(o, "parentExamId", ""),
                         clean(o, "syllabusFileName", ""),
                         clean(o, "syllabusUrl", ""),
-                        clean(o, "imageUrl", "")
+                        imgUrl,
+                        avUrl,
+                        avEmoji,
+                        avColor
                 ));
             }
             return out;
@@ -306,6 +354,8 @@ public final class EveAdminModels {
         public final String photoUrl;
         public final String dob;
         public final long createdAt;
+        public final boolean isPremium;
+        public final boolean isOnline;
 
         public AdminStudentItem(
                 String id,
@@ -315,7 +365,7 @@ public final class EveAdminModels {
                 String category,
                 long lastActive,
                 boolean disabled) {
-            this(id, eveId, email, displayName, category, lastActive, disabled, "", "", "", "", "", 0L);
+            this(id, eveId, email, displayName, category, lastActive, disabled, "", "", "", "", "", 0L, false, false);
         }
 
         public AdminStudentItem(
@@ -332,6 +382,27 @@ public final class EveAdminModels {
                 String photoUrl,
                 String dob,
                 long createdAt) {
+            this(id, eveId, email, displayName, category, lastActive, disabled,
+                    username, phone, bio, photoUrl, dob, createdAt, false,
+                    lastActive > 0L && (System.currentTimeMillis() - lastActive) <= 5 * 60 * 1000L);
+        }
+
+        public AdminStudentItem(
+                String id,
+                String eveId,
+                String email,
+                String displayName,
+                String category,
+                long lastActive,
+                boolean disabled,
+                String username,
+                String phone,
+                String bio,
+                String photoUrl,
+                String dob,
+                long createdAt,
+                boolean isPremium,
+                boolean isOnline) {
             this.id = id != null ? id : "";
             this.eveId = eveId != null ? eveId : "";
             this.email = email != null ? email : "";
@@ -345,34 +416,41 @@ public final class EveAdminModels {
             this.photoUrl = photoUrl != null ? photoUrl.trim() : "";
             this.dob = dob != null ? dob.trim() : "";
             this.createdAt = createdAt;
+            this.isPremium = isPremium;
+            this.isOnline = isOnline;
         }
 
         public AdminStudentItem withDisabled(boolean nextDisabled) {
             return new AdminStudentItem(
                     id, eveId, email, displayName, category, lastActive, nextDisabled,
-                    username, phone, bio, photoUrl, dob, createdAt);
+                    username, phone, bio, photoUrl, dob, createdAt, isPremium, isOnline);
         }
 
         public static List<AdminStudentItem> parseList(JSONArray arr) {
             List<AdminStudentItem> out = new ArrayList<>();
             if (arr == null) return out;
+            long nowMs = System.currentTimeMillis();
             for (int i = 0; i < arr.length(); i++) {
                 JSONObject o = arr.optJSONObject(i);
                 if (o == null) continue;
+                long lastAct = o.optLong("lastActive", 0L);
+                boolean onlineDefault = lastAct > 0L && (nowMs - lastAct) <= 5 * 60 * 1000L;
                 out.add(new AdminStudentItem(
                         clean(o, "id", ""),
                         clean(o, "eveId", ""),
                         clean(o, "email", ""),
                         clean(o, "displayName", "Student"),
                         clean(o, "category", "General"),
-                        o.optLong("lastActive", 0L),
+                        lastAct,
                         o.optBoolean("disabled", false),
                         clean(o, "username", ""),
                         clean(o, "phone", ""),
                         clean(o, "bio", ""),
                         clean(o, "photoUrl", clean(o, "avatarUrl", "")),
                         clean(o, "dob", ""),
-                        o.optLong("createdAt", 0L)
+                        o.optLong("createdAt", 0L),
+                        o.optBoolean("isPremium", false),
+                        o.optBoolean("isOnline", onlineDefault)
                 ));
             }
             return out;
@@ -946,13 +1024,43 @@ public final class EveAdminModels {
         public final String linkUrl;
         public final String linkLabel;
         public final int sortOrder;
+        public final String mediaType;
+        public final boolean active;
+        public final String storagePath;
 
         public BannerItem(String id, String imageUrl, String linkUrl, String linkLabel, int sortOrder) {
+            this(id, imageUrl, linkUrl, linkLabel, sortOrder, inferMediaType("", imageUrl), true, "");
+        }
+
+        public BannerItem(
+                String id,
+                String imageUrl,
+                String linkUrl,
+                String linkLabel,
+                int sortOrder,
+                String mediaType,
+                boolean active,
+                String storagePath) {
             this.id = id != null ? id : "";
             this.imageUrl = imageUrl != null ? imageUrl : "";
             this.linkUrl = linkUrl != null ? linkUrl : "";
             this.linkLabel = linkLabel != null ? linkLabel : "";
             this.sortOrder = sortOrder;
+            this.mediaType = inferMediaType(mediaType, this.imageUrl + " " + (storagePath != null ? storagePath : ""));
+            this.active = active;
+            this.storagePath = storagePath != null ? storagePath : "";
+        }
+
+        public boolean isVideo() {
+            return "video".equalsIgnoreCase(mediaType);
+        }
+
+        private static String inferMediaType(String declared, String urlHint) {
+            if ("video".equalsIgnoreCase(declared)) return "video";
+            if ("image".equalsIgnoreCase(declared)) return "image";
+            String lower = urlHint != null ? urlHint.toLowerCase(Locale.US) : "";
+            if (lower.contains(".mp4") || lower.contains(".webm")) return "video";
+            return "image";
         }
 
         public static List<BannerItem> parseList(JSONArray arr) {
@@ -961,12 +1069,18 @@ public final class EveAdminModels {
             for (int i = 0; i < arr.length(); i++) {
                 JSONObject o = arr.optJSONObject(i);
                 if (o == null) continue;
+                String url = clean(o, "imageUrl", clean(o, "image_url", ""));
+                String sp = clean(o, "storagePath", clean(o, "storage_path", ""));
+                String mType = clean(o, "mediaType", clean(o, "media_type", ""));
                 out.add(new BannerItem(
                         clean(o, "id", ""),
-                        clean(o, "imageUrl", clean(o, "image_url", "")),
+                        url,
                         clean(o, "linkUrl", clean(o, "link_url", "")),
                         clean(o, "linkLabel", clean(o, "link_label", "")),
-                        o.optInt("sortOrder", o.optInt("sort_order", i))
+                        o.optInt("order", o.optInt("sortOrder", o.optInt("sort_order", i))),
+                        inferMediaType(mType, url + " " + sp),
+                        o.optBoolean("active", true),
+                        sp
                 ));
             }
             return out;

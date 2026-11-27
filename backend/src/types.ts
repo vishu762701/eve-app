@@ -65,6 +65,9 @@ export interface ExamRow {
   parent_exam_id?: string;
   publish_mode?: string;
   cutoffs_json?: string;
+  avatar_url?: string;
+  avatar_emoji?: string;
+  avatar_color?: number | null;
 }
 
 export interface QuestionRow {
@@ -204,6 +207,7 @@ export interface HomeBannerRow {
   active: number;
   link_url?: string | null;
   link_label?: string | null;
+  media_type?: string | null;
 }
 
 export interface PollRow {

@@ -12,7 +12,6 @@ import org.telegram.messenger.R;
 import org.telegram.ui.ActionBar.ActionBar;
 import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.BaseFragment;
-import org.telegram.ui.ActionBar.SimpleActionBarMenu;
 import org.telegram.ui.Components.BulletinFactory;
 import org.telegram.ui.Components.FlickerLoadingView;
 import org.telegram.ui.Components.IconBackgroundColors;
@@ -37,7 +36,6 @@ import java.util.Locale;
  */
 public class EveAnnouncementsFragment extends BaseFragment {
 
-    private static final int MENU_REFRESH = 1;
     private static final int ID_RETRY = 100;
     private static final int BASE_POLL_ID = 500;
     private static final int BASE_ANNOUNCEMENT_ID = 1000;
@@ -45,6 +43,8 @@ public class EveAnnouncementsFragment extends BaseFragment {
     private UniversalRecyclerView listView;
     private List<EvePollModel> activePolls = new ArrayList<>();
     private List<EveExamModels.BroadcastItem> announcements = Collections.emptyList();
+    private final EveAdminUiChrome.AutoSyncController autoSync =
+            new EveAdminUiChrome.AutoSyncController(() -> reloadAll(false));
     private boolean loadingPolls = true;
     private boolean loadingBroadcasts = true;
     private boolean destroyed = false;
@@ -101,8 +101,6 @@ public class EveAnnouncementsFragment extends BaseFragment {
                     public void onItemClick(int id) {
                         if (id == -1) {
                             finishFragment();
-                        } else if (id == MENU_REFRESH) {
-                            reloadAll();
                         }
                     }
                 },
@@ -110,32 +108,47 @@ public class EveAnnouncementsFragment extends BaseFragment {
         );
         listView = chrome.listView;
 
-        if (simpleActionBar != null) {
-            SimpleActionBarMenu menu = simpleActionBar.createMenu();
-            menu.addItem(MENU_REFRESH, R.drawable.msg_retry, getResourceProvider());
-        }
-
         fragmentView = chrome.rootView;
-        reloadAll();
+        reloadAll(true);
         return chrome.rootView;
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        autoSync.onResume();
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        autoSync.onPause();
     }
 
     @Override
     public void onFragmentDestroy() {
         destroyed = true;
+        autoSync.destroy();
         super.onFragmentDestroy();
     }
 
     private void reloadAll() {
-        loadingPolls = true;
-        loadingBroadcasts = true;
-        pollsError = "";
-        broadcastsError = "";
-        updateList();
+        reloadAll(true);
+    }
+
+    private void reloadAll(boolean showLoading) {
+        if (showLoading) {
+            loadingPolls = true;
+            loadingBroadcasts = true;
+            pollsError = "";
+            broadcastsError = "";
+            updateList();
+        }
 
         EveExamRepository.getInstance().loadActivePolls((polls, err) -> {
             if (destroyed) return;
             loadingPolls = false;
+            autoSync.markSynced();
             activePolls = polls != null ? new ArrayList<>(polls) : new ArrayList<>();
             pollsError = err != null ? err : "";
             updateList();
@@ -144,6 +157,7 @@ public class EveAnnouncementsFragment extends BaseFragment {
         EveExamRepository.getInstance().loadBroadcasts((list, err) -> {
             if (destroyed) return;
             loadingBroadcasts = false;
+            autoSync.markSynced();
             announcements = list != null ? list : Collections.emptyList();
             broadcastsError = err != null ? err : "";
             updateList();

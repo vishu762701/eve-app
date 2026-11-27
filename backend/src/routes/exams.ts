@@ -6,6 +6,7 @@ import { deletionInfo, deleteUnused } from '../services/deletion';
 
 import { Hono } from "hono";
 import { requireAdmin, requirePermission } from "../middleware/authMiddleware";
+import { AssetStorage } from "../storage";
 import { SupabaseStorage } from "../supabase";
 import { AuthUser, EmojiPlacementPublic, Env, ExamRow } from "../types";
 import { prepareAdminAuditLog, recordAdminAction, runBatch } from "../util/auditLog";
@@ -118,6 +119,9 @@ function mapExamRow(row: ExamRow, emojiPlacement?: EmojiPlacementPublic) {
     syllabusFileName: row.syllabus_file_name || "",
     generationPrompt: row.generation_prompt || "",
     imageUrl: row.image_url || "",
+    avatarUrl: String(row.avatar_url || row.image_url || "").trim(),
+    avatarEmoji: String(row.avatar_emoji || "").trim(),
+    avatarColor: typeof row.avatar_color === "number" ? row.avatar_color : null,
     lastGeneratedDate: row.last_generated_date || "",
     lastGenerationStatus: row.last_generation_status || "",
     lastGenerationError: row.last_generation_error || "",
@@ -519,10 +523,15 @@ examRoutes.delete("/:id", requirePermission("manage_exams"), async (c) => {
   const dependencies = await deletionInfo(db, id, 'exam');
   if (!dependencies.canDelete) return c.json({ success: false, error: dependencies.message, code: dependencies.code, dependencies, requestId: c.res.headers.get('X-Request-ID') }, 409);
 
-  const exam = await db.prepare("SELECT syllabus_url FROM exams WHERE id = ?").bind(id).first<ExamRow>();
+  const exam = await db.prepare("SELECT * FROM exams WHERE id = ?").bind(id).first<ExamRow>();
   if (!await deleteUnused(db, id, 'exam', user)) {
     const current = await deletionInfo(db, id, 'exam');
     return c.json({ success: false, error: current.message || 'Record changed. Refresh before retrying.', code: current.code || 'DELETE_RECORD_CHANGED', dependencies: current, requestId: c.res.headers.get('X-Request-ID') }, 409);
+  }
+
+  const avatarKey = extractExamAvatarKey(String(exam?.avatar_url || exam?.image_url || ""));
+  if (avatarKey) {
+    try { await new AssetStorage(c.env).deleteFiles([avatarKey]); } catch {}
   }
 
   const path = exam?.syllabus_url?.split('/eve-media/')[1];
@@ -698,4 +707,315 @@ examRoutes.delete("/:id/syllabus", requirePermission("manage_syllabus"), async (
     return c.json({ success: true, message: 'Syllabus removed from the exam. Media cleanup was not completed; check System Monitor.' });
   }
   return c.json({ success: true });
+});
+
+const MAX_EXAM_AVATAR_BYTES = 5 * 1024 * 1024;
+const ALLOWED_AVATAR_MIMES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+
+async function getExamColumnNames(db: D1Database): Promise<Set<string>> {
+  const cols = new Set<string>();
+  try {
+    const { results } = await db.prepare("PRAGMA table_info(exams)").all<{ name: string }>();
+    for (const row of results || []) {
+      if (row?.name) cols.add(row.name);
+    }
+  } catch {}
+  return cols;
+}
+
+function detectExamAvatarImage(
+  bytes: Uint8Array,
+  declaredMime?: string
+): { mime: string; ext: string } | null {
+  if (bytes.length < 12 || bytes.length > MAX_EXAM_AVATAR_BYTES) return null;
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return { mime: "image/jpeg", ext: "jpg" };
+  }
+  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {
+    return { mime: "image/png", ext: "png" };
+  }
+  if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x38) {
+    return { mime: "image/gif", ext: "gif" };
+  }
+  if (
+    bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
+    bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50
+  ) {
+    return { mime: "image/webp", ext: "webp" };
+  }
+  const cleanMime = String(declaredMime || "").split(";")[0].trim().toLowerCase();
+  if (ALLOWED_AVATAR_MIMES.has(cleanMime)) {
+    const ext = cleanMime === "image/png" ? "png" : cleanMime === "image/webp" ? "webp" : cleanMime === "image/gif" ? "gif" : "jpg";
+    return { mime: cleanMime, ext };
+  }
+  return null;
+}
+
+function extractExamAvatarKey(rawUrl: string): string {
+  const value = (rawUrl || "").trim();
+  if (!value) return "";
+  if (value.startsWith("r2://")) {
+    return value.slice("r2://".length).replace(/^\/+/, "");
+  }
+  if (value.includes("/eve-media/")) {
+    return value.split("/eve-media/")[1]?.split("?")[0]?.replace(/^\/+/, "") || "";
+  }
+  if (value.includes("/avatar")) {
+    try {
+      const parsed = new URL(value, "https://eve.local");
+      const keyParam = parsed.searchParams.get("k");
+      if (keyParam && keyParam.startsWith("exam-avatars/")) {
+        return keyParam;
+      }
+    } catch {}
+  }
+  return "";
+}
+
+// GET /api/exams/:id/avatar - Public asset reader for R2/Worker-hosted exam avatars
+examRoutes.get("/:id/avatar", async (c) => {
+  const id = c.req.param("id") || "";
+  const db = c.env.DB;
+  const row = await db.prepare("SELECT * FROM exams WHERE id = ?").bind(id).first<ExamRow>();
+  if (!row) {
+    return c.json({ success: false, error: "Exam not found" }, 404);
+  }
+  const storedUrl = String(row.avatar_url || row.image_url || "").trim();
+  const key = extractExamAvatarKey(storedUrl) || extractExamAvatarKey(c.req.url);
+  if (!key) {
+    return c.json({ success: false, error: "Avatar image not set" }, 404);
+  }
+  const storage = new AssetStorage(c.env);
+  const asset = await storage.getObjectBytes(key);
+  if (!asset) {
+    return c.json({ success: false, error: "Avatar media not found" }, 404);
+  }
+  return c.body(asset.body.buffer.slice(asset.body.byteOffset, asset.body.byteOffset + asset.body.byteLength) as ArrayBuffer, 200, {
+    "Content-Type": asset.contentType || "image/jpeg",
+    "Cache-Control": "public, max-age=86400",
+  });
+});
+
+// POST /api/exams/:id/avatar - Set uploaded photo/GIF/WebP OR emoji+color avatar (Admin)
+examRoutes.post("/:id/avatar", requirePermission("manage_exams"), async (c) => {
+  const user = c.get("user");
+  const id = c.req.param("id") || "";
+  const db = c.env.DB;
+  const existing = await db.prepare("SELECT * FROM exams WHERE id = ?").bind(id).first<ExamRow>();
+  if (!existing) {
+    return c.json({ success: false, error: "Exam not found" }, 404);
+  }
+
+  const cols = await getExamColumnNames(db);
+  const hasAvatarUrl = cols.has("avatar_url");
+  const hasAvatarEmoji = cols.has("avatar_emoji");
+  const hasAvatarColor = cols.has("avatar_color");
+  const oldKey = extractExamAvatarKey(String(existing.avatar_url || existing.image_url || ""));
+
+  const contentType = (c.req.header("content-type") || "").toLowerCase();
+  let imageBytes: Uint8Array | null = null;
+  let declaredMime = "";
+  let parsedBody: Record<string, unknown> | null = null;
+
+  if (contentType.includes("multipart/form-data")) {
+    const formData = await c.req.formData();
+    const fileValue: unknown = formData.get("file");
+    if (fileValue && typeof fileValue === "object" && "arrayBuffer" in fileValue && typeof fileValue.arrayBuffer === "function") {
+      const file = fileValue as File;
+      declaredMime = file.type || "";
+      imageBytes = new Uint8Array(await file.arrayBuffer());
+    } else {
+      return c.json({ success: false, error: "No avatar image file provided" }, 400);
+    }
+  } else if (contentType.startsWith("image/")) {
+    declaredMime = contentType.split(";")[0];
+    imageBytes = new Uint8Array(await c.req.arrayBuffer());
+  } else {
+    const rawJson = await c.req.json().catch(() => null);
+    if (!rawJson || typeof rawJson !== "object" || Array.isArray(rawJson)) {
+      return c.json({ success: false, error: "Provide an avatar image or emoji payload" }, 400);
+    }
+    parsedBody = rawJson as Record<string, unknown>;
+    if (typeof parsedBody.base64 === "string" && parsedBody.base64.trim()) {
+      const rawB64 = parsedBody.base64.trim();
+      const commaIdx = rawB64.indexOf(",");
+      const b64Clean = rawB64.startsWith("data:") && commaIdx > 0 ? rawB64.slice(commaIdx + 1) : rawB64;
+      if (b64Clean.length > Math.ceil(MAX_EXAM_AVATAR_BYTES * 4 / 3) + 16) {
+        return c.json({ success: false, error: "Avatar image exceeds 5MB limit" }, 400);
+      }
+      try {
+        const bin = atob(b64Clean);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        imageBytes = bytes;
+      } catch {
+        return c.json({ success: false, error: "Invalid base64 image encoding" }, 400);
+      }
+      declaredMime = typeof parsedBody.mimeType === "string" ? parsedBody.mimeType : "";
+    }
+  }
+
+  const storage = new AssetStorage(c.env);
+
+  // Branch 1: Image/GIF/WebP upload
+  if (imageBytes !== null) {
+    if (imageBytes.byteLength > MAX_EXAM_AVATAR_BYTES) {
+      return c.json({ success: false, error: "Avatar image exceeds 5MB limit" }, 400);
+    }
+    const detected = detectExamAvatarImage(imageBytes, declaredMime);
+    if (!detected) {
+      return c.json({ success: false, error: "Supported avatar formats: JPEG, PNG, WebP, GIF (max 5MB)" }, 400);
+    }
+
+    const storagePath = `exam-avatars/${id}/${crypto.randomUUID()}.${detected.ext}`;
+    const storedLocation = await storage.uploadFile(storagePath, imageBytes, detected.mime);
+    const avatarUrl = storedLocation.startsWith("r2://")
+      ? `/api/exams/${encodeURIComponent(id)}/avatar?k=${encodeURIComponent(storagePath)}&v=${Date.now()}`
+      : storedLocation;
+
+    const sets: string[] = ["image_url = ?"];
+    const binds: Array<string | number | null> = [avatarUrl];
+    if (hasAvatarUrl) {
+      sets.push("avatar_url = ?");
+      binds.push(avatarUrl);
+    }
+    if (hasAvatarEmoji) {
+      sets.push("avatar_emoji = ''");
+    }
+    if (hasAvatarColor) {
+      sets.push("avatar_color = NULL");
+    }
+    binds.push(id);
+
+    const updateStmt = db.prepare(`UPDATE exams SET ${sets.join(", ")} WHERE id = ?`).bind(...binds);
+    const { stmt: auditStmt } = prepareAdminAuditLog(db, user, {
+      actionType: "EXAM_AVATAR_UPDATED",
+      description: `Uploaded ${detected.ext.toUpperCase()} avatar for exam '${existing.exam_name}'`,
+      targetType: "exam",
+      targetId: id,
+      metadata: { mode: "image", mime: detected.mime },
+    });
+
+    try {
+      const results = await db.batch([updateStmt, auditStmt]);
+      if ((results[0]?.meta?.changes ?? 0) !== 1) {
+        throw new Error("Exam update not confirmed");
+      }
+    } catch {
+      try { await storage.deleteFiles([storagePath]); } catch {}
+      return c.json({ success: false, error: "Could not save exam avatar; please retry" }, 409);
+    }
+
+    if (oldKey && oldKey !== storagePath) {
+      try { await storage.deleteFiles([oldKey]); } catch {}
+    }
+
+    return c.json({
+      success: true,
+      data: {
+        avatarUrl,
+        avatarEmoji: "",
+        avatarColor: null,
+      },
+    });
+  }
+
+  // Branch 2: Emoji / Color Avatar
+  if (!hasAvatarEmoji && !hasAvatarColor) {
+    return c.json({ success: false, error: "Exam avatar emoji columns require migration 0033 first" }, 503);
+  }
+  const emojiRaw = typeof parsedBody?.avatarEmoji === "string" ? parsedBody.avatarEmoji.trim() : "";
+  if (emojiRaw.length > 32) {
+    return c.json({ success: false, error: "avatarEmoji must be 32 characters or fewer" }, 400);
+  }
+  let avatarColor: number | null = null;
+  if (parsedBody?.avatarColor !== undefined && parsedBody.avatarColor !== null && parsedBody.avatarColor !== "") {
+    const num = Number(parsedBody.avatarColor);
+    if (!Number.isInteger(num) || num < 0 || num > 31) {
+      return c.json({ success: false, error: "avatarColor must be an integer between 0 and 31" }, 400);
+    }
+    avatarColor = num;
+  }
+  if (!emojiRaw && avatarColor === null) {
+    return c.json({ success: false, error: "Provide avatarEmoji or avatarColor (use DELETE to reset)" }, 400);
+  }
+
+  const sets: string[] = ["image_url = ''"];
+  const binds: Array<string | number | null> = [];
+  if (hasAvatarUrl) {
+    sets.push("avatar_url = ''");
+  }
+  if (hasAvatarEmoji) {
+    sets.push("avatar_emoji = ?");
+    binds.push(emojiRaw);
+  }
+  if (hasAvatarColor) {
+    sets.push("avatar_color = ?");
+    binds.push(avatarColor);
+  }
+  binds.push(id);
+
+  const updateStmt = db.prepare(`UPDATE exams SET ${sets.join(", ")} WHERE id = ?`).bind(...binds);
+  const { stmt: auditStmt } = prepareAdminAuditLog(db, user, {
+    actionType: "EXAM_AVATAR_UPDATED",
+    description: `Set emoji/color avatar for exam '${existing.exam_name}'`,
+    targetType: "exam",
+    targetId: id,
+    metadata: { mode: "emoji", avatarEmoji: emojiRaw, avatarColor },
+  });
+  await db.batch([updateStmt, auditStmt]);
+
+  if (oldKey) {
+    try { await storage.deleteFiles([oldKey]); } catch {}
+  }
+
+  return c.json({
+    success: true,
+    data: {
+      avatarUrl: "",
+      avatarEmoji: emojiRaw,
+      avatarColor,
+    },
+  });
+});
+
+// DELETE /api/exams/:id/avatar - Reset exam avatar back to default initials (Admin)
+examRoutes.delete("/:id/avatar", requirePermission("manage_exams"), async (c) => {
+  const user = c.get("user");
+  const id = c.req.param("id") || "";
+  const db = c.env.DB;
+  const existing = await db.prepare("SELECT * FROM exams WHERE id = ?").bind(id).first<ExamRow>();
+  if (!existing) {
+    return c.json({ success: false, error: "Exam not found" }, 404);
+  }
+
+  const cols = await getExamColumnNames(db);
+  const oldKey = extractExamAvatarKey(String(existing.avatar_url || existing.image_url || ""));
+
+  const sets: string[] = ["image_url = ''"];
+  if (cols.has("avatar_url")) sets.push("avatar_url = ''");
+  if (cols.has("avatar_emoji")) sets.push("avatar_emoji = ''");
+  if (cols.has("avatar_color")) sets.push("avatar_color = NULL");
+
+  const updateStmt = db.prepare(`UPDATE exams SET ${sets.join(", ")} WHERE id = ?`).bind(id);
+  const { stmt: auditStmt } = prepareAdminAuditLog(db, user, {
+    actionType: "EXAM_AVATAR_DELETED",
+    description: `Reset avatar for exam '${existing.exam_name}'`,
+    targetType: "exam",
+    targetId: id,
+  });
+  await db.batch([updateStmt, auditStmt]);
+
+  if (oldKey) {
+    try { await new AssetStorage(c.env).deleteFiles([oldKey]); } catch {}
+  }
+
+  return c.json({
+    success: true,
+    data: {
+      avatarUrl: "",
+      avatarEmoji: "",
+      avatarColor: null,
+    },
+  });
 });

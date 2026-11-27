@@ -28,6 +28,10 @@ export class AssetStorage {
     return this.supabase.getPublicUrl(storageKey);
   }
 
+  async uploadFile(path: string, data: ArrayBuffer | Uint8Array, contentType: string): Promise<string> {
+    return this.putObject(path, data, contentType);
+  }
+
   async putObject(path: string, data: ArrayBuffer | Uint8Array, contentType: string): Promise<string> {
     const cleanPath = path.replace(/^\/+/, "");
     if (this.env.EMOJI_BUCKET) {

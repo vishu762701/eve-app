@@ -215,18 +215,32 @@ public class EveAdminExamsFragment extends BaseFragment {
         filteredExams.clear();
         String q = searchQuery != null ? searchQuery.trim().toLowerCase(Locale.US) : "";
         for (EveAdminModels.AdminExamItem exam : exams) {
-            if (q.isEmpty()
-                    || exam.examName.toLowerCase(Locale.US).contains(q)
+            boolean isTopLevel = exam.parentExamId.trim().isEmpty();
+            if (q.isEmpty()) {
+                if (isTopLevel) {
+                    filteredExams.add(exam);
+                }
+            } else if (exam.examName.toLowerCase(Locale.US).contains(q)
                     || exam.category.toLowerCase(Locale.US).contains(q)) {
                 filteredExams.add(exam);
             }
         }
         if (simpleActionBar != null) {
             simpleActionBar.setSubtitle(q.isEmpty()
-                    ? exams.size() + " exams"
+                    ? filteredExams.size() + " exams"
                     : filteredExams.size() + " matching");
         }
         updateList();
+    }
+
+    private int countSubExams(String parentId) {
+        int count = 0;
+        for (EveAdminModels.AdminExamItem e : exams) {
+            if (parentId.equals(e.parentExamId.trim())) {
+                count++;
+            }
+        }
+        return count;
     }
 
     private void updateList() {
@@ -280,16 +294,28 @@ public class EveAdminExamsFragment extends BaseFragment {
                 iconBg = IconBackgroundColors.GREEN;
                 iconRes = R.drawable.msg_folders;
             }
+            int subCount = exam.parentExamId.trim().isEmpty() ? countSubExams(exam.id) : 0;
+            String subTag = subCount > 0 ? (" • " + subCount + (subCount == 1 ? " sub-exam" : " sub-exams")) : "";
+            String parentTag = !exam.parentExamId.trim().isEmpty() ? "Sub-exam • " : "";
             String syllabusTag = !exam.syllabusFileName.isEmpty() ? " • PDF: " + exam.syllabusFileName : "";
-            String sub = String.format(Locale.US, "%s • %d min • %d Qs%s",
-                    exam.category, exam.timeLimitMinutes, exam.questionCount, syllabusTag);
-            items.add(SettingsActivity.SettingCell.Factory.of(
+            String sub = String.format(Locale.US, "%s%s • %d min • %d Qs%s%s",
+                    parentTag, exam.category, exam.timeLimitMinutes, exam.questionCount, subTag, syllabusTag);
+            items.add(EveAdminUiChrome.AvatarRowCell.Factory.of(
                     BASE_EXAM_ID + i,
-                    iconBg.top, iconBg.bottom,
-                    iconRes,
-                    exam.examName,
-                    sub,
-                    statusLabel));
+                    exam,
+                    new EveAdminUiChrome.AvatarRowCell.Payload(
+                            exam.id,
+                            exam.examName,
+                            sub,
+                            exam.avatarUrl,
+                            exam.avatarEmoji,
+                            exam.avatarColor,
+                            statusLabel,
+                            exam.isArchived()
+                                    ? EveAdminUiChrome.AvatarRowCell.BADGE_NEUTRAL
+                                    : (exam.isPaused()
+                                            ? EveAdminUiChrome.AvatarRowCell.BADGE_RED
+                                            : EveAdminUiChrome.AvatarRowCell.BADGE_GREEN))));
         }
     }
 

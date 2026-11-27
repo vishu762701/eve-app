@@ -2232,47 +2232,11 @@ public class PremiumPreviewFragment extends BaseFragment implements Notification
                 BulletinFactory.of(PremiumPreviewFragment.this).createErrorBulletin(error != null ? error : "Unable to start checkout.").show();
                 return;
             }
-            LinearLayout box = new LinearLayout(activity);
-            box.setOrientation(LinearLayout.VERTICAL);
-            int pad = dp(16);
-            box.setPadding(pad, pad, pad, pad);
-
-            TextView info = new TextView(activity);
-            info.setText("Order: " + order.orderId + "\nPlan: " + order.planName + "\nAmount: ₹" + order.amount);
-            box.addView(info);
-
-            Bitmap qrBmp = org.telegram.ui.eve.premium.EvePremiumRepository.generateQrBitmap(order.qrData, dp(200));
-            if (qrBmp != null) {
-                ImageView iv = new ImageView(activity);
-                iv.setImageBitmap(qrBmp);
-                iv.setPadding(0, dp(12), 0, dp(12));
-                box.addView(iv, LayoutHelper.createLinear(200, 200, Gravity.CENTER_HORIZONTAL));
-            }
-
-            AlertDialog.Builder b = new AlertDialog.Builder(activity, resourceProvider)
-                    .setTitle(getString(R.string.EvePremiumPayUpi))
-                    .setView(box)
-                    .setPositiveButton("Verify Status", (d, w) ->
-                            org.telegram.ui.eve.premium.EvePremiumRepository.getInstance().checkOrderStatus(order.orderId, (st, stErr) -> {
-                                if (st != null && st.isPremium) {
-                                    BulletinFactory.of(PremiumPreviewFragment.this).createSimpleBulletin(R.raw.info, "EVE Premium activated!").show();
-                                    loadEvePremiumData();
-                                } else {
-                                    BulletinFactory.of(PremiumPreviewFragment.this).createSimpleBulletin(R.raw.info,
-                                            st != null ? "Order status: " + st.status : (stErr != null ? stErr : "Pending server verification.")).show();
-                                }
-                            }))
-                    .setNegativeButton(getString(R.string.Close), null);
-            if (!order.upiUri.isEmpty()) {
-                b.setNeutralButton("Open UPI App", (d, w) -> {
-                    try {
-                        activity.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(order.upiUri)));
-                    } catch (Throwable t) {
-                        BulletinFactory.of(PremiumPreviewFragment.this).createErrorBulletin("No UPI app found on device.").show();
-                    }
-                });
-            }
-            showDialog(b.create());
+            org.telegram.ui.eve.premium.EvePremiumQrSheet.showStudentCheckout(
+                    PremiumPreviewFragment.this,
+                    order,
+                    this::loadEvePremiumData
+            );
         });
     }
 
