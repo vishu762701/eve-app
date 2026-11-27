@@ -188,7 +188,7 @@ public final class EveAnimatedEmojiHelper {
                 true,
                 rp
         );
-        field.setAllowEmojisForNonPremium(true);
+        field.allowEmojisForNonPremium(true);
         if (field.getEditText() != null) {
             field.getEditText().setHint(hint);
             field.getEditText().setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15.5f);

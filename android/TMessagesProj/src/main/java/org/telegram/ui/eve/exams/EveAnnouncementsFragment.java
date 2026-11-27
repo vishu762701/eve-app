@@ -43,6 +43,7 @@ import org.telegram.ui.Components.UniversalRecyclerView;
 import org.telegram.ui.SettingsActivity;
 import org.telegram.ui.eve.admin.EveAnimatedEmojiHelper;
 import org.telegram.ui.eve.admin.EveAdminUiChrome;
+import org.telegram.ui.eve.auth.EveBackendClient;
 import org.telegram.ui.eve.polls.EvePollModel;
 import org.telegram.ui.eve.polls.EveTelegramPollCardView;
 
