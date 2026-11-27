@@ -294,33 +294,42 @@ public class EveAdminExamPromptFragment extends BaseFragment {
         busy = true;
         updateList();
 
-        repo.runWithAdminToken(new EveAdminRepository.ResultCallback<EveAdminModels.AdminExamItem>() {
-            @Override
-            public void onSuccess(EveAdminModels.AdminExamItem updated) {
-                if (destroyed) return;
-                busy = false;
-                if (updated != null) {
-                    replaceCurrentExam(updated);
-                }
-                repo.invalidateCache();
-                BulletinFactory.of(EveAdminExamPromptFragment.this)
-                        .createSimpleBulletin(R.raw.contact_check, "Syllabus PDF uploaded").show();
-                if (onChanged != null) onChanged.run();
-                updateList();
-            }
+        final EveAdminRepository.ResultCallback<EveAdminModels.AdminExamItem> cb =
+                new EveAdminRepository.ResultCallback<EveAdminModels.AdminExamItem>() {
+                    @Override
+                    public void onSuccess(EveAdminModels.AdminExamItem updated) {
+                        if (destroyed) return;
+                        busy = false;
+                        if (updated != null) {
+                            replaceCurrentExam(updated);
+                        }
+                        repo.invalidateCache();
+                        BulletinFactory.of(EveAdminExamPromptFragment.this)
+                                .createSimpleBulletin(R.raw.contact_check, "Syllabus attached: " + exam.syllabusFileName).show();
+                        if (onChanged != null) onChanged.run();
+                        updateList();
+                    }
 
-            @Override
-            public void onError(String message, int httpStatus) {
-                if (destroyed) return;
-                busy = false;
-                updateList();
-                BulletinFactory.of(EveAdminExamPromptFragment.this)
-                        .createErrorBulletin(message != null ? message : "Syllabus upload failed.").show();
+                    @Override
+                    public void onError(String message, int httpStatus) {
+                        if (destroyed) return;
+                        busy = false;
+                        updateList();
+                        BulletinFactory.of(EveAdminExamPromptFragment.this)
+                                .createErrorBulletin(message != null ? message : "Syllabus upload failed.").show();
+                    }
+                };
+        repo.runWithAdminToken(cb, token -> {
+            final byte[] bytes;
+            try {
+                bytes = readUriBytes(activity, uri, MAX_SYLLABUS_BYTES);
+            } catch (Exception ex) {
+                repo.postError(cb, ex.getMessage() != null ? ex.getMessage() : "Could not read selected PDF.", 0);
+                return;
             }
-        }, token -> {
-            byte[] bytes = readUriBytes(activity, uri, MAX_SYLLABUS_BYTES);
             if (bytes == null || bytes.length == 0) {
-                throw new IllegalArgumentException("Could not read selected PDF or file exceeds 18MB.");
+                repo.postError(cb, "Could not read selected PDF or file exceeds 18MB.", 0);
+                return;
             }
             String fileName = resolveFileName(activity, uri);
             JSONObject data = repo.uploadExamSyllabusPdf(token, exam.id, fileName, bytes);
@@ -331,28 +340,7 @@ public class EveAdminExamPromptFragment extends BaseFragment {
                     exam.testNumber, exam.negativeMarkingText, exam.publishMode, exam.generationPrompt,
                     exam.parentExamId, savedName, url, exam.imageUrl, exam.avatarUrl, exam.avatarEmoji,
                     exam.avatarColor, exam.aiPrompt, exam.aiLanguage, exam.aiDifficulty);
-            repo.postSuccess(new EveAdminRepository.ResultCallback<EveAdminModels.AdminExamItem>() {
-                @Override
-                public void onSuccess(EveAdminModels.AdminExamItem d) {
-                    if (destroyed) return;
-                    busy = false;
-                    replaceCurrentExam(d);
-                    repo.invalidateCache();
-                    BulletinFactory.of(EveAdminExamPromptFragment.this)
-                            .createSimpleBulletin(R.raw.contact_check, "Syllabus attached: " + savedName).show();
-                    if (onChanged != null) onChanged.run();
-                    updateList();
-                }
-
-                @Override
-                public void onError(String message, int httpStatus) {
-                    if (destroyed) return;
-                    busy = false;
-                    updateList();
-                    BulletinFactory.of(EveAdminExamPromptFragment.this)
-                            .createErrorBulletin(message != null ? message : "Upload failed.").show();
-                }
-            }, updated);
+            repo.postSuccess(cb, updated);
         });
     }
 
