@@ -19,7 +19,6 @@ import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.BottomSheet;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.ImageUpdater;
-import org.telegram.ui.Components.ThemeBind;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -107,8 +106,10 @@ public final class EveTelegramAvatarPicker {
         if (sheet.getItemViews().size() > 1) {
             BottomSheet.BottomSheetCell deleteCell = sheet.getItemViews().get(1);
             if (deleteCell != null && deleteCell.getTextView() != null && deleteCell.getImageView() != null) {
-                ThemeBind.textColor(deleteCell.getTextView(), Theme.key_text_RedBold);
-                ThemeBind.colorFilter(deleteCell.getImageView(), Theme.key_text_RedRegular, android.graphics.PorterDuff.Mode.MULTIPLY);
+                deleteCell.getTextView().setTextColor(Theme.getColor(Theme.key_text_RedBold, parentFragment.getResourceProvider()));
+                deleteCell.getImageView().setColorFilter(new android.graphics.PorterDuffColorFilter(
+                        Theme.getColor(Theme.key_text_RedRegular, parentFragment.getResourceProvider()),
+                        android.graphics.PorterDuff.Mode.MULTIPLY));
             }
         }
     }
@@ -211,7 +212,7 @@ public final class EveTelegramAvatarPicker {
     }
 
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
-        imageUpdater.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        imageUpdater.onRequestPermissionsResultFragment(requestCode, permissions, grantResults);
     }
 
     public void destroy() {

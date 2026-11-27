@@ -226,7 +226,7 @@ public class EveAdminFlaggedQuestionFixFragment extends BaseFragment {
         if (loadingQuestion) {
             items.add(UItem.asHeader("Loading Question Details"));
             for (int i = 0; i < 4; i++) {
-                items.add(UItem.asFlicker(FlickerLoadingView.TEXT_CELL_TYPE));
+                items.add(UItem.asFlicker(FlickerLoadingView.DIALOG_CELL_TYPE));
             }
             return;
         }
@@ -257,14 +257,13 @@ public class EveAdminFlaggedQuestionFixFragment extends BaseFragment {
                 null));
 
         if (!TextUtils.isEmpty(report.questionId)) {
-            SettingsActivity.SettingCellFactory redAction = SettingsActivity.SettingCell.Factory.of(
+            items.add(SettingsActivity.SettingCell.Factory.of(
                     ID_DELETE_QUESTION,
                     IconBackgroundColors.RED.top, IconBackgroundColors.RED.bottom,
                     R.drawable.msg_delete,
                     "Delete Bad Question",
                     "Removes this question and resolves pending reports",
-                    null);
-            items.add(redAction);
+                    null));
         }
         items.add(UItem.asShadow(null));
     }
@@ -511,7 +510,7 @@ public class EveAdminFlaggedQuestionFixFragment extends BaseFragment {
                 row.setPadding(dp(8), dp(8), dp(8), dp(8));
 
                 CheckBox2 check = new CheckBox2(context, 21, rp);
-                check.setColor(Theme.key_radioBackgroundChecked, Theme.key_checkboxSquare_unchecked, Theme.key_checkboxCheck);
+                check.setColor(Theme.key_radioBackgroundChecked, Theme.key_radioBackground, Theme.key_checkboxCheck);
                 check.setDrawUnchecked(true);
                 check.setDrawBackgroundAsArc(10);
                 check.setChecked(i == 0, false);

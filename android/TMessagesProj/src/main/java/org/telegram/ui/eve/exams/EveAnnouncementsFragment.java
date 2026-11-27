@@ -557,12 +557,12 @@ public class EveAnnouncementsFragment extends BaseFragment {
             }
 
             @Override
-            public ChannelDatePillCell createView(Context context, RecyclerListView listView, int currentAccount, Theme.ResourcesProvider resourcesProvider) {
+            public ChannelDatePillCell createView(Context context, RecyclerListView listView, int currentAccount, int classGuid, Theme.ResourcesProvider resourcesProvider) {
                 return new ChannelDatePillCell(context, resourcesProvider);
             }
 
             @Override
-            public void bindView(View view, UItem item, boolean divider, UniversalAdapter adapter, RecyclerListView listView) {
+            public void bindView(View view, UItem item, boolean divider, UniversalAdapter adapter, UniversalRecyclerView listView) {
                 ((ChannelDatePillCell) view).bind(item.text != null ? item.text.toString() : "");
             }
 
@@ -707,12 +707,12 @@ public class EveAnnouncementsFragment extends BaseFragment {
             }
 
             @Override
-            public ChannelPostBubbleView createView(Context context, RecyclerListView listView, int currentAccount, Theme.ResourcesProvider resourcesProvider) {
+            public ChannelPostBubbleView createView(Context context, RecyclerListView listView, int currentAccount, int classGuid, Theme.ResourcesProvider resourcesProvider) {
                 return new ChannelPostBubbleView(context, resourcesProvider);
             }
 
             @Override
-            public void bindView(View view, UItem item, boolean divider, UniversalAdapter adapter, RecyclerListView listView) {
+            public void bindView(View view, UItem item, boolean divider, UniversalAdapter adapter, UniversalRecyclerView listView) {
                 ((ChannelPostBubbleView) view).bind((Payload) item.object);
             }
 
