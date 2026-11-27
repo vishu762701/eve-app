@@ -1510,10 +1510,21 @@ public final class EveAdminRepository {
     }
 
     public void createPoll(String token, String question, List<String> options) throws EveBackendClient.BackendException {
-        createPoll(token, question, options, true);
+        createPoll(token, question, options, true, true, -1, "");
     }
 
     public void createPoll(String token, String question, List<String> options, boolean active) throws EveBackendClient.BackendException {
+        createPoll(token, question, options, active, true, -1, "");
+    }
+
+    public void createPoll(
+            String token,
+            String question,
+            List<String> options,
+            boolean active,
+            boolean isQuiz,
+            int correctOptionIndex,
+            String explanation) throws EveBackendClient.BackendException {
         JSONObject payload = new JSONObject();
         try {
             payload.put("question", question);
@@ -1527,6 +1538,11 @@ public final class EveAdminRepository {
             }
             payload.put("options", arr);
             payload.put("active", active);
+            payload.put("isQuiz", isQuiz);
+            payload.put("correctOptionIndex", correctOptionIndex);
+            if (explanation != null && !explanation.trim().isEmpty()) {
+                payload.put("explanation", explanation.trim());
+            }
         } catch (JSONException ignored) {
         }
         client.postJsonRoot("/api/polls", token, payload);
@@ -1566,10 +1582,27 @@ public final class EveAdminRepository {
     }
 
     public void sendBroadcast(String token, String title, String message) throws EveBackendClient.BackendException {
+        sendBroadcast(token, title, message, "", "", 0, "");
+    }
+
+    public void sendBroadcast(
+            String token,
+            String title,
+            String message,
+            String stickerDocId,
+            String stickerAccessHash,
+            int stickerDcId,
+            String stickerEmoji) throws EveBackendClient.BackendException {
         JSONObject payload = new JSONObject();
         try {
             payload.put("title", title);
             payload.put("message", message);
+            if (stickerDocId != null && !stickerDocId.trim().isEmpty()) {
+                payload.put("stickerDocId", stickerDocId.trim());
+                payload.put("stickerAccessHash", stickerAccessHash != null ? stickerAccessHash.trim() : "");
+                payload.put("stickerDcId", Math.max(0, stickerDcId));
+                payload.put("stickerEmoji", stickerEmoji != null ? stickerEmoji.trim() : "");
+            }
         } catch (JSONException ignored) {
         }
         client.postJsonRoot("/api/broadcasts", token, payload);

@@ -38,16 +38,14 @@ public class EveAdminControlCenterActivity extends BaseFragment {
     private static final int ID_ADMIN_SIGN_IN = 1002;
 
     private static final int ID_MOD_EXAMS = 1101;
-    private static final int ID_MOD_AI_STUDIO = 1102;
+    private static final int ID_MOD_ANNOUNCEMENTS_QUIZZES = 1102;
+    private static final int ID_MOD_BANNERS = 1103;
     private static final int ID_MOD_CONTENT_COMMS = 1601;
 
     private static final int ID_MOD_STUDENTS = 1301;
     private static final int ID_MOD_PREMIUM_HUB = 1501;
 
     private static final int ID_MAINTENANCE_SWITCH = 1400;
-    private static final int ID_MOD_ANALYTICS = 1401;
-    private static final int ID_MOD_API_USAGE = 1402;
-    private static final int ID_MOD_CRASH_SECURITY = 1403;
     private static final int ID_MOD_APP_CONFIG = 1404;
     private static final int ID_MOD_INSIGHTS_SYSTEM = 1405;
     private static final int ID_MOD_ADMINS = 1801;
@@ -302,37 +300,44 @@ public class EveAdminControlCenterActivity extends BaseFragment {
                         ID_MOD_EXAMS,
                         IconBackgroundColors.ORANGE.top, IconBackgroundColors.ORANGE.bottom,
                         R.drawable.msg_folders,
-                        "Exams & Auto-Generation",
+                        "Exams",
                         hasSnapshot
-                                ? (snapshot.publishedExams + " live • " + snapshot.draftExams + " paused • Cutoffs & Syllabus PDF")
+                                ? (snapshot.publishedExams + " live • " + snapshot.draftExams + " paused • Cutoffs, AI & Syllabus")
                                 : "Exams, sub-exams, cutoffs, syllabus PDF, AI & banks",
                         hasSnapshot ? String.valueOf(snapshot.totalExams) : null));
-                items.add(SettingsActivity.SettingCell.Factory.of(
-                        ID_MOD_AI_STUDIO,
-                        IconBackgroundColors.PURPLE.top, IconBackgroundColors.PURPLE.bottom,
-                        R.drawable.msg_send,
-                        "AI Prompt Studio",
-                        "Master prompts, language, difficulty & generate mock tests",
-                        null));
             }
             if (canContent) {
+                items.add(SettingsActivity.SettingCell.Factory.of(
+                        ID_MOD_ANNOUNCEMENTS_QUIZZES,
+                        IconBackgroundColors.BLUE.top, IconBackgroundColors.BLUE.bottom,
+                        R.drawable.msg_send,
+                        "Announcements & Quizzes",
+                        "Broadcast channel, stickers, emojis & student quizzes",
+                        null));
+                items.add(SettingsActivity.SettingCell.Factory.of(
+                        ID_MOD_BANNERS,
+                        IconBackgroundColors.PURPLE.top, IconBackgroundColors.PURPLE.bottom,
+                        R.drawable.msg_photos,
+                        "Home Banners",
+                        "Video & image carousel links, ordering & media",
+                        null));
                 items.add(SettingsActivity.SettingCell.Factory.of(
                         ID_MOD_CONTENT_COMMS,
                         IconBackgroundColors.RED.top, IconBackgroundColors.RED.bottom,
                         R.drawable.settings_sounds,
-                        "Content & Moderation",
-                        "Home banners, broadcasts, polls, flags & feedback",
+                        "Moderation & Legal",
+                        "Flagged questions, student feedback & legal pages",
                         hasSnapshot && snapshot.pendingReports > 0 ? String.valueOf(snapshot.pendingReports) : null));
             }
             items.add(UItem.asShadow(null));
         }
 
-        // Card 2: People & Premium
+        // Card 2: People & Revenue
         boolean canUsers = !hasSnapshot || EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_USERS);
         boolean canPremium = !hasSnapshot || EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_PREMIUM);
         boolean canAdmins = !hasSnapshot || EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_ADMINS_RIGHTS);
         if (canUsers || canPremium || canAdmins) {
-            items.add(UItem.asHeader("People & Premium"));
+            items.add(UItem.asHeader("People & Revenue"));
             if (canUsers) {
                 items.add(SettingsActivity.SettingCell.Factory.of(
                         ID_MOD_STUDENTS,
@@ -352,7 +357,7 @@ public class EveAdminControlCenterActivity extends BaseFragment {
                         ID_MOD_PREMIUM_HUB,
                         0xFFB659FF, 0xFF617CFF,
                         R.drawable.settings_premium,
-                        "Manage Premium",
+                        "Premium & Payments",
                         premSub,
                         hasSnapshot && snapshot.pendingTransactions > 0 ? String.valueOf(snapshot.pendingTransactions) : null));
             }
@@ -376,44 +381,23 @@ public class EveAdminControlCenterActivity extends BaseFragment {
             items.add(UItem.asCheck(ID_MAINTENANCE_SWITCH, "Maintenance Mode").setChecked(maintenanceActive));
         }
         items.add(SettingsActivity.SettingCell.Factory.of(
-                ID_MOD_ANALYTICS,
+                ID_MOD_INSIGHTS_SYSTEM,
                 IconBackgroundColors.CYAN.top, IconBackgroundColors.CYAN.bottom,
                 R.drawable.msg_stats,
-                "Analytics & Charts",
+                "Analytics & Health",
                 hasSnapshot
-                        ? (snapshot.completedAttempts + " attempts • Avg " + String.format(Locale.US, "%.1f", snapshot.averageScorePct))
-                        : "Score trends, 7d/30d filters & question accuracy",
-                null));
-        items.add(SettingsActivity.SettingCell.Factory.of(
-                ID_MOD_API_USAGE,
-                IconBackgroundColors.PURPLE.top, IconBackgroundColors.PURPLE.bottom,
-                R.drawable.msg_send,
-                "API Usage & AI Provider",
-                "AI requests, latency & provider settings",
-                null));
-        items.add(SettingsActivity.SettingCell.Factory.of(
-                ID_MOD_CRASH_SECURITY,
-                IconBackgroundColors.RED.top, IconBackgroundColors.RED.bottom,
-                R.drawable.msg_warning,
-                "Crash & Security Monitor",
-                "Live crash signatures & security audit signals",
+                        ? (snapshot.completedAttempts + " attempts • Avg " + String.format(Locale.US, "%.1f", snapshot.averageScorePct) + " • Crashes & Jobs")
+                        : "Exam analytics, crashes, AI cost & D1/KV health",
                 null));
         if (canConfig) {
             items.add(SettingsActivity.SettingCell.Factory.of(
                     ID_MOD_APP_CONFIG,
                     IconBackgroundColors.BLUE_DEEP.top, IconBackgroundColors.BLUE_DEEP.bottom,
                     R.drawable.msg_settings,
-                    "App Config",
-                    "Min supported version, maintenance note & defaults",
+                    "App & AI Settings",
+                    "Min supported version, AI prompts & system config",
                     null));
         }
-        items.add(SettingsActivity.SettingCell.Factory.of(
-                ID_MOD_INSIGHTS_SYSTEM,
-                IconBackgroundColors.GREEN.top, IconBackgroundColors.GREEN.bottom,
-                R.drawable.msg_select,
-                "System Health & Jobs",
-                "D1/KV/AI health probe & generation job queue",
-                null));
         if (!hasSnapshot || EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_VIEW_ANALYTICS_LOGS)) {
             items.add(SettingsActivity.SettingCell.Factory.of(
                     ID_MOD_AUDIT,
@@ -441,11 +425,14 @@ public class EveAdminControlCenterActivity extends BaseFragment {
             case ID_MOD_EXAMS:
                 presentFragment(new EveAdminExamsFragment());
                 break;
-            case ID_MOD_AI_STUDIO:
-                openAiPromptStudio();
+            case ID_MOD_ANNOUNCEMENTS_QUIZZES:
+                presentFragment(new EveAdminBroadcastsFragment());
+                break;
+            case ID_MOD_BANNERS:
+                presentFragment(new EveAdminBannersFragment());
                 break;
             case ID_MOD_CONTENT_COMMS:
-                presentFragment(new EveAdminContentAndCommsFragment(profile));
+                presentFragment(new EveAdminContentAndCommsFragment(profile, true));
                 break;
             case ID_MOD_STUDENTS:
                 presentFragment(new EveAdminStudentsFragment());
@@ -456,21 +443,8 @@ public class EveAdminControlCenterActivity extends BaseFragment {
             case ID_MAINTENANCE_SWITCH:
                 confirmAndToggleMaintenance(view);
                 break;
-            case ID_MOD_ANALYTICS:
-                presentFragment(new EveAdminExamAnalyticsFragment());
-                break;
-            case ID_MOD_API_USAGE:
-                presentFragment(new EveAdminApiUsageFragment());
-                break;
-            case ID_MOD_CRASH_SECURITY:
-                presentFragment(new EveAdminCrashReportsFragment(profile));
-                break;
             case ID_MOD_APP_CONFIG:
-                presentFragment(new EveAdminMaintenanceConfigFragment(appConfig, () -> {
-                    appConfig = repo.getCachedAppConfig();
-                    loadLiveAppConfig();
-                    refreshDashboard();
-                }));
+                openAppAndAiSettingsMenu();
                 break;
             case ID_MOD_INSIGHTS_SYSTEM:
                 presentFragment(new EveAdminInsightsAndSystemFragment(profile));
@@ -540,6 +514,29 @@ public class EveAdminControlCenterActivity extends BaseFragment {
         });
         builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
         showDialog(builder.create());
+    }
+
+    private void openAppAndAiSettingsMenu() {
+        Activity activity = getParentActivity();
+        if (activity == null) return;
+        new AlertDialog.Builder(activity, getResourceProvider())
+                .setTitle("App & AI Settings")
+                .setItems(new String[] {
+                        "App Configuration & Defaults",
+                        "AI Prompt Studio"
+                }, (d, which) -> {
+                    if (which == 0) {
+                        presentFragment(new EveAdminMaintenanceConfigFragment(appConfig, () -> {
+                            appConfig = repo.getCachedAppConfig();
+                            loadLiveAppConfig();
+                            refreshDashboard();
+                        }));
+                    } else {
+                        openAiPromptStudio();
+                    }
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
     }
 
     private void openAiPromptStudio() {

@@ -89,6 +89,15 @@ public class EveExamsMainScreenTest {
         List<EveExamModels.ExamSummary> filtered = EveExamDialogsMapper.filterExams(parsed, "upsc");
         assertEquals(1, filtered.size());
         assertEquals("ex-upsc", filtered.get(0).id);
+
+        // Search strictly excludes Sub-Exams even if passed in, and excludes test label/number matches.
+        List<EveExamModels.ExamSummary> allIncludingSub = EveExamRepository.parseAllExamsCatalog(
+                exams, tests, Collections.emptySet());
+        List<EveExamModels.ExamSummary> onlyMainSsc = EveExamDialogsMapper.filterExams(allIncludingSub, "SSC");
+        assertEquals(1, onlyMainSsc.size());
+        assertEquals("ex-ssc", onlyMainSsc.get(0).id);
+        assertTrue(EveExamDialogsMapper.filterExams(allIncludingSub, "Quant Drill").isEmpty());
+        assertTrue(EveExamDialogsMapper.filterExams(allIncludingSub, "Full Mock 2").isEmpty());
     }
 
     @Test

@@ -36,10 +36,16 @@ public class EveAdminContentAndCommsFragment extends BaseFragment {
     private static final int ID_FEEDBACK_POSTS = 205;
 
     private final EveAdminModels.AdminProfile profile;
+    private final boolean moderationAndLegalOnly;
     private UniversalRecyclerView listView;
 
     public EveAdminContentAndCommsFragment(EveAdminModels.AdminProfile profile) {
+        this(profile, false);
+    }
+
+    public EveAdminContentAndCommsFragment(EveAdminModels.AdminProfile profile, boolean moderationAndLegalOnly) {
         this.profile = profile;
+        this.moderationAndLegalOnly = moderationAndLegalOnly;
     }
 
     @Override
@@ -84,7 +90,7 @@ public class EveAdminContentAndCommsFragment extends BaseFragment {
                 getBaseSimpleGlass(),
                 glassEngine,
                 getResourceProvider(),
-                "Content & Moderation",
+                moderationAndLegalOnly ? "Moderation & Legal" : "Content & Moderation",
                 null,
                 true,
                 this::fillItems,
@@ -108,14 +114,16 @@ public class EveAdminContentAndCommsFragment extends BaseFragment {
         EveAdminUiChrome.addTopSpace(items);
 
         if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_CONTENT)) {
-            items.add(UItem.asHeader("Home & Pages"));
-            items.add(SettingsActivity.SettingCell.Factory.of(
-                    ID_BANNERS,
-                    IconBackgroundColors.ORANGE.top, IconBackgroundColors.ORANGE.bottom,
-                    R.drawable.msg_photos,
-                    "Home Screen Banners",
-                    "View, edit links, reorder or remove banners",
-                    null));
+            items.add(UItem.asHeader(moderationAndLegalOnly ? "Legal Pages" : "Home & Pages"));
+            if (!moderationAndLegalOnly) {
+                items.add(SettingsActivity.SettingCell.Factory.of(
+                        ID_BANNERS,
+                        IconBackgroundColors.ORANGE.top, IconBackgroundColors.ORANGE.bottom,
+                        R.drawable.msg_photos,
+                        "Home Screen Banners",
+                        "View, edit links, reorder or remove banners",
+                        null));
+            }
             items.add(SettingsActivity.SettingCell.Factory.of(
                     ID_APP_CONTENT_ABOUT,
                     IconBackgroundColors.CYAN.top, IconBackgroundColors.CYAN.bottom,
@@ -141,9 +149,9 @@ public class EveAdminContentAndCommsFragment extends BaseFragment {
         }
 
         if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MODERATE_FEEDBACK)
-                || EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_SEND_BROADCASTS)) {
-            items.add(UItem.asHeader("Broadcasts, Polls & Moderation"));
-            if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_SEND_BROADCASTS)) {
+                || (!moderationAndLegalOnly && EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_SEND_BROADCASTS))) {
+            items.add(UItem.asHeader(moderationAndLegalOnly ? "Moderation & Feedback" : "Broadcasts, Quizzes & Moderation"));
+            if (!moderationAndLegalOnly && EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_SEND_BROADCASTS)) {
                 items.add(SettingsActivity.SettingCell.Factory.of(
                         ID_SEND_BROADCAST,
                         IconBackgroundColors.RED.top, IconBackgroundColors.RED.bottom,
@@ -160,13 +168,15 @@ public class EveAdminContentAndCommsFragment extends BaseFragment {
                         null));
             }
             if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MODERATE_FEEDBACK)) {
-                items.add(SettingsActivity.SettingCell.Factory.of(
-                        ID_POLLS,
-                        IconBackgroundColors.PURPLE.top, IconBackgroundColors.PURPLE.bottom,
-                        R.drawable.msg_list,
-                        "Manage Student Polls",
-                        "Create Telegram-style polls & inspect live votes",
-                        null));
+                if (!moderationAndLegalOnly) {
+                    items.add(SettingsActivity.SettingCell.Factory.of(
+                            ID_POLLS,
+                            IconBackgroundColors.PURPLE.top, IconBackgroundColors.PURPLE.bottom,
+                            R.drawable.msg_list,
+                            "Manage Student Quizzes",
+                            "Create Telegram-style quizzes & inspect live results",
+                            null));
+                }
                 items.add(SettingsActivity.SettingCell.Factory.of(
                         ID_FLAGGED_REPORTS,
                         IconBackgroundColors.ORANGE_DEEP.top, IconBackgroundColors.ORANGE_DEEP.bottom,

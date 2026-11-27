@@ -711,5 +711,28 @@ public class EveAdminControlCenterTest {
         assertEquals(true, updatePayload.getBoolean("autoGenEnabled"));
         assertEquals("08:00", updatePayload.getString("autoGenTime"));
         assertEquals(145.0, updatePayload.getJSONObject("cutoffs").getDouble("General"), 0.01);
+
+        // 4. Quiz creation payload & Broadcast sticker payload + PollModel reveal contract
+        repo.createPoll("tok", "Capital of Japan?", java.util.Arrays.asList("Seoul", "Tokyo", "Kyoto"), true, true, 1, "Tokyo is the capital.");
+        JSONObject quizPayload = new JSONObject(bodies.get("POST https://eve-backend.anyqueairdrop.workers.dev/api/polls"));
+        assertTrue(quizPayload.getBoolean("isQuiz"));
+        assertEquals(1, quizPayload.getInt("correctOptionIndex"));
+        assertEquals("Tokyo is the capital.", quizPayload.getString("explanation"));
+
+        repo.sendBroadcast("tok", "Title", "Body [tg_emoji:12345:🔥]", "999888", "777", 2, "🎉");
+        JSONObject bcastPayload = new JSONObject(bodies.get("POST https://eve-backend.anyqueairdrop.workers.dev/api/broadcasts"));
+        assertEquals("999888", bcastPayload.getString("stickerDocId"));
+        assertEquals("777", bcastPayload.getString("stickerAccessHash"));
+        assertEquals(2, bcastPayload.getInt("stickerDcId"));
+        assertEquals("🎉", bcastPayload.getString("stickerEmoji"));
+
+        org.telegram.ui.eve.polls.EvePollModel preVoteQuiz = new org.telegram.ui.eve.polls.EvePollModel(
+                "q-1", "Capital?", java.util.Arrays.asList("Seoul", "Tokyo"),
+                Collections.emptyMap(), 0, true, 100L, 0L, "admin", null, true, -1, null, "");
+        org.telegram.ui.eve.polls.EvePollModel postVoteQuiz = preVoteQuiz.withRecordedVote(0, 1, Boolean.FALSE, "Tokyo is the capital.");
+        assertEquals(Integer.valueOf(0), postVoteQuiz.myVoteIndex);
+        assertEquals(1, postVoteQuiz.correctOptionIndex);
+        assertEquals(Boolean.FALSE, postVoteQuiz.isCorrect);
+        assertEquals("Tokyo is the capital.", postVoteQuiz.explanation);
     }
 }

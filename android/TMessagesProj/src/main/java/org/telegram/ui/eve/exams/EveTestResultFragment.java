@@ -36,6 +36,7 @@ import org.telegram.ui.Components.UItem;
 import org.telegram.ui.Components.UniversalAdapter;
 import org.telegram.ui.Components.UniversalRecyclerView;
 import org.telegram.ui.SettingsActivity;
+import org.telegram.ui.eve.admin.EveAnimatedEmojiHelper;
 import org.telegram.ui.eve.admin.EveAdminUiChrome;
 import org.telegram.ui.eve.auth.EveAuthManager;
 import org.telegram.ui.eve.auth.EveUserProfile;
@@ -834,17 +835,19 @@ public class EveTestResultFragment extends BaseFragment {
             statusPill.setPadding(dp(8), dp(3), dp(8), dp(3));
             headerRow.addView(statusPill, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT));
 
-            qText = new TextView(context);
+            qText = EveAnimatedEmojiHelper.createEmojiTextView(context);
             qText.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
             qText.setLineSpacing(dp(3), 1f);
-            addView(qText, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 8));
+            addView(qText, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 10));
 
-            yourAns = new TextView(context);
-            yourAns.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
-            addView(yourAns, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 4));
+            yourAns = EveAnimatedEmojiHelper.createEmojiTextView(context);
+            yourAns.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13.5f);
+            yourAns.setPadding(dp(10), dp(8), dp(10), dp(8));
+            addView(yourAns, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 6));
 
-            correctAns = new TextView(context);
-            correctAns.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
+            correctAns = EveAnimatedEmojiHelper.createEmojiTextView(context);
+            correctAns.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13.5f);
+            correctAns.setPadding(dp(10), dp(8), dp(10), dp(8));
             correctAns.setTextColor(0xFF2E9E5B);
             addView(correctAns, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 8));
 
@@ -854,9 +857,10 @@ public class EveTestResultFragment extends BaseFragment {
             expToggleBtn.setPadding(0, dp(2), 0, dp(6));
             addView(expToggleBtn, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT));
 
-            expView = new TextView(context);
+            expView = EveAnimatedEmojiHelper.createEmojiTextView(context);
             expView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
-            expView.setLineSpacing(dp(2), 1f);
+            expView.setPadding(dp(12), dp(10), dp(12), dp(10));
+            expView.setLineSpacing(dp(3), 1f);
             addView(expView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 10));
 
             LinearLayout qActions = new LinearLayout(context);
@@ -884,34 +888,37 @@ public class EveTestResultFragment extends BaseFragment {
                 statusText = LocaleController.getString(R.string.EveUnattempted);
                 statusColor = Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, resourcesProvider);
             } else if (ans.isCorrect()) {
-                statusText = LocaleController.getString(R.string.EveCorrect);
+                statusText = "\u2713 " + LocaleController.getString(R.string.EveCorrect);
                 statusColor = 0xFF2E9E5B;
             } else {
-                statusText = LocaleController.getString(R.string.EveWrong);
+                statusText = "\u2717 " + LocaleController.getString(R.string.EveWrong);
                 statusColor = 0xFFD93025;
             }
             String timeMeta = ans.timeTakenSeconds > 0 ? (" • " + ans.timeTakenSeconds + "s") : "";
             qHeader.setText("Question " + ans.number + (ans.topic.isEmpty() ? "" : " • " + ans.topic) + timeMeta);
             statusPill.setText(statusText);
-            qText.setText(ans.getLocalizedQuestion(hi));
+            EveAnimatedEmojiHelper.bindText(qText, ans.getLocalizedQuestion(hi));
 
+            String yourPrefix = ans.isUnattempted() ? "" : (ans.isCorrect() ? "\u2713 " : "\u2717 ");
             String yourText = ans.isUnattempted()
                     ? "-"
                     : (ans.selected + (!ans.getLocalizedSelectedText(hi).isEmpty() ? " — " + ans.getLocalizedSelectedText(hi) : ""));
-            yourAns.setText(LocaleController.getString(R.string.EveYourAnswer) + ": " + yourText);
+            EveAnimatedEmojiHelper.bindText(yourAns, yourPrefix + LocaleController.getString(R.string.EveYourAnswer) + ": " + yourText);
             yourAns.setTextColor(statusColor);
+            yourAns.setBackground(Theme.createRoundRectDrawable(dp(10), Theme.multAlpha(statusColor, 0.11f)));
 
-            correctAns.setText(LocaleController.getString(R.string.EveCorrectAnswer) + ": "
+            EveAnimatedEmojiHelper.bindText(correctAns, "\u2713 " + LocaleController.getString(R.string.EveCorrectAnswer) + ": "
                     + ans.correct
                     + (!ans.getLocalizedCorrectText(hi).isEmpty() ? " — " + ans.getLocalizedCorrectText(hi) : ""));
+            correctAns.setBackground(Theme.createRoundRectDrawable(dp(10), Theme.multAlpha(0xFF2E9E5B, 0.11f)));
 
             String explanation = ans.getLocalizedExplanation(hi);
             if (!explanation.trim().isEmpty()) {
                 expToggleBtn.setVisibility(VISIBLE);
-                expToggleBtn.setText(expanded ? "Hide Explanation ▲" : "Show Explanation ▼");
+                expToggleBtn.setText(expanded ? "\uD83D\uDCA1 Hide Explanation \u25B2" : "\uD83D\uDCA1 View Explanation \u25BC");
                 expToggleBtn.setOnClickListener(onToggleExp);
                 expView.setVisibility(expanded ? VISIBLE : GONE);
-                expView.setText(LocaleController.getString(R.string.EveExplanation) + ":\n" + explanation);
+                EveAnimatedEmojiHelper.bindText(expView, "\uD83D\uDCA1 " + LocaleController.getString(R.string.EveExplanation) + "\n" + explanation);
             } else {
                 expToggleBtn.setVisibility(GONE);
                 expView.setVisibility(GONE);
@@ -935,7 +942,8 @@ public class EveTestResultFragment extends BaseFragment {
             statusPill.setBackground(Theme.createRoundRectDrawable(dp(8), Theme.multAlpha(statusColor, 0.14f)));
             qText.setTextColor(black);
             expToggleBtn.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText4, resourcesProvider));
-            expView.setTextColor(grayText);
+            expView.setTextColor(black);
+            expView.setBackground(Theme.createRoundRectDrawable(dp(10), Theme.multAlpha(accent, 0.08f)));
 
             bookmarkBtn.setBackground(Theme.createRoundRectDrawable(dp(8), bookmarked ? accent : grayBg));
             bookmarkBtn.setTextColor(bookmarked ? Theme.getColor(Theme.key_featuredStickers_buttonText, resourcesProvider) : black);

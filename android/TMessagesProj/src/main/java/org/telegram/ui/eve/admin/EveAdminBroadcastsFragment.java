@@ -6,11 +6,11 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
-import android.text.InputType;
 import android.text.TextUtils;
+import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
-import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -18,14 +18,21 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.DocumentObject;
+import org.telegram.messenger.ImageLocation;
+import org.telegram.messenger.MessageObject;
 import org.telegram.messenger.R;
+import org.telegram.tgnet.TLRPC;
 import org.telegram.ui.ActionBar.ActionBar;
 import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.BaseFragment;
+import org.telegram.ui.ActionBar.BottomSheet;
 import org.telegram.ui.ActionBar.SimpleActionBarMenu;
 import org.telegram.ui.ActionBar.Theme;
+import org.telegram.ui.Components.BackupImageView;
 import org.telegram.ui.Components.BulletinFactory;
-import org.telegram.ui.Components.EditTextBoldCursor;
+import org.telegram.ui.Components.EditTextEmoji;
+import org.telegram.ui.Components.EmojiView;
 import org.telegram.ui.Components.FlickerLoadingView;
 import org.telegram.ui.Components.IconBackgroundColors;
 import org.telegram.ui.Components.LayoutHelper;
@@ -49,6 +56,7 @@ public class EveAdminBroadcastsFragment extends BaseFragment {
     private static final int ID_RETRY = 101;
     private static final int ID_CHANNEL_AVATAR = 102;
     private static final int ID_CHANNEL_NAME = 103;
+    private static final int ID_STUDENT_QUIZZES = 104;
     private static final int BASE_ITEM_ID = 1000;
 
     private final EveAdminRepository repo = EveAdminRepository.getInstance();
@@ -313,8 +321,15 @@ public class EveAdminBroadcastsFragment extends BaseFragment {
                 IconBackgroundColors.BLUE.top, IconBackgroundColors.BLUE.bottom,
                 R.drawable.msg_edit,
                 "Channel Display Name",
-                chName,
+                EveAnimatedEmojiHelper.stripMarkupToPlainText(chName),
                 "Edit"));
+        items.add(SettingsActivity.SettingCell.Factory.of(
+                ID_STUDENT_QUIZZES,
+                IconBackgroundColors.PURPLE.top, IconBackgroundColors.PURPLE.bottom,
+                R.drawable.msg_list,
+                "Manage Student Quizzes",
+                "Create Telegram-style quizzes with answer key & explanation",
+                null));
         items.add(UItem.asShadow("Shown as a pinned verified channel at the top of the student Home screen."));
 
         if (!errorText.isEmpty()) {
@@ -372,6 +387,10 @@ public class EveAdminBroadcastsFragment extends BaseFragment {
             showEditChannelNameDialog();
             return;
         }
+        if (item.id == ID_STUDENT_QUIZZES) {
+            presentFragment(new EveAdminPollsFragment());
+            return;
+        }
         int idx = item.id - BASE_ITEM_ID;
         if (idx >= 0 && idx < broadcasts.size()) {
             showBroadcastDetail(broadcasts.get(idx));
@@ -385,31 +404,27 @@ public class EveAdminBroadcastsFragment extends BaseFragment {
         String currentName = appConfig != null && !TextUtils.isEmpty(appConfig.announcementChannelName)
                 ? appConfig.announcementChannelName : "Announcements";
 
-        LinearLayout box = new LinearLayout(activity);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dp(20), dp(10), dp(20), dp(4));
+        EveAnimatedEmojiHelper.SheetHost host = new EveAnimatedEmojiHelper.SheetHost(activity, "Edit Channel Name", rp);
+        EditTextEmoji input = EveAnimatedEmojiHelper.createEditTextEmoji(
+                activity, host.root, this, "Channel display name", currentName, false, rp);
+        host.formColumn.addView(input, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 14));
 
-        EditTextBoldCursor input = new EditTextBoldCursor(activity);
-        input.setHint("Channel display name");
-        input.setText(currentName);
-        input.setSelection(currentName.length());
-        input.setSingleLine(true);
-        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS);
-        input.setCursorSize(dp(20));
-        input.setCursorWidth(1.5f);
-        input.setTextColor(Theme.getColor(Theme.key_dialogTextBlack, rp));
-        input.setHintTextColor(Theme.getColor(Theme.key_dialogTextHint, rp));
-        box.addView(input, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+        LinearLayout actions = new LinearLayout(activity);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        TextView cancelBtn = buildSheetButton(activity, "Cancel", false, rp);
+        TextView saveBtn = buildSheetButton(activity, "Save", true, rp);
+        actions.addView(cancelBtn, LayoutHelper.createLinear(0, 42, 1f, 0, 0, 8, 0));
+        actions.addView(saveBtn, LayoutHelper.createLinear(0, 42, 1f, 8, 0, 0, 0));
+        host.formColumn.addView(actions, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
 
-        AlertDialog.Builder builder = new AlertDialog.Builder(activity, rp);
-        builder.setTitle("Edit Channel Name");
-        builder.setView(box);
-        builder.setPositiveButton("Save", (d, w) -> {
-            String nextName = input.getText() != null ? input.getText().toString().trim() : "";
+        cancelBtn.setOnClickListener(v -> host.sheet.dismiss());
+        saveBtn.setOnClickListener(v -> {
+            String nextName = EveAnimatedEmojiHelper.encode(input.getText()).trim();
             if (nextName.isEmpty()) {
                 BulletinFactory.of(this).createErrorBulletin("Channel name cannot be empty.").show();
                 return;
             }
+            host.sheet.dismiss();
             EveAdminRepository.ResultCallback<EveAdminModels.AppConfigModel> cb =
                     new EveAdminRepository.ResultCallback<EveAdminModels.AppConfigModel>() {
                         @Override
@@ -430,8 +445,13 @@ public class EveAdminBroadcastsFragment extends BaseFragment {
                     };
             repo.runWithAdminToken(cb, token -> repo.postSuccess(cb, repo.updateAnnouncementChannelName(token, nextName)));
         });
-        builder.setNegativeButton("Cancel", null);
-        showDialog(builder.create());
+
+        host.sheet.setOnShowListener(d -> input.onResume());
+        host.sheet.setOnDismissListener(d -> {
+            input.onPause();
+            input.onDestroy();
+        });
+        showDialog(host.sheet);
     }
 
     private void uploadChannelAvatar(byte[] bytes, String mimeType) {
@@ -485,36 +505,107 @@ public class EveAdminBroadcastsFragment extends BaseFragment {
         if (activity == null) return;
         Theme.ResourcesProvider rp = getResourceProvider();
 
-        LinearLayout box = new LinearLayout(activity);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dp(22), dp(12), dp(22), dp(8));
+        EveAnimatedEmojiHelper.SheetHost host = new EveAnimatedEmojiHelper.SheetHost(activity, "Send Broadcast Notification", rp);
 
-        EditText titleInput = new EditText(activity);
-        titleInput.setHint("Broadcast Title");
-        titleInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
-        titleInput.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, rp));
-        titleInput.setHintTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteHintText, rp));
-        box.addView(titleInput, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 10));
+        EditTextEmoji titleInput = EveAnimatedEmojiHelper.createEditTextEmoji(
+                activity, host.root, this, "Broadcast Title", "", false, rp);
+        host.formColumn.addView(titleInput, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 10));
 
-        EditText msgInput = new EditText(activity);
-        msgInput.setHint("Notification message (FCM + EVE Announcements)");
-        msgInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
-        msgInput.setMinLines(4);
-        msgInput.setGravity(Gravity.TOP | Gravity.START);
-        msgInput.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, rp));
-        msgInput.setHintTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteHintText, rp));
-        box.addView(msgInput, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+        EditTextEmoji msgInput = EveAnimatedEmojiHelper.createEditTextEmoji(
+                activity, host.root, this, "Notification message (FCM + EVE Announcements)", "", true, rp);
+        host.formColumn.addView(msgInput, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 12));
 
-        AlertDialog.Builder builder = new AlertDialog.Builder(activity, rp);
-        builder.setTitle("Send Broadcast Notification");
-        builder.setView(box);
-        builder.setPositiveButton("Send Broadcast", (d, w) -> {
-            String title = titleInput.getText().toString().trim();
-            String msg = msgInput.getText().toString().trim();
+        if (titleInput.getEditText() != null) {
+            titleInput.getEditText().setOnFocusChangeListener((v, hasFocus) -> {
+                if (hasFocus && msgInput.isPopupShowing()) msgInput.hidePopup(true);
+            });
+        }
+        if (msgInput.getEditText() != null) {
+            msgInput.getEditText().setOnFocusChangeListener((v, hasFocus) -> {
+                if (hasFocus && titleInput.isPopupShowing()) titleInput.hidePopup(true);
+            });
+        }
+
+        // Optional Animated Telegram Sticker attachment strip
+        final TLRPC.Document[] pickedSticker = new TLRPC.Document[1];
+        final String[] pickedStickerEmoji = new String[] { "" };
+
+        LinearLayout stickerRow = new LinearLayout(activity);
+        stickerRow.setOrientation(LinearLayout.HORIZONTAL);
+        stickerRow.setGravity(Gravity.CENTER_VERTICAL);
+        stickerRow.setPadding(dp(10), dp(8), dp(10), dp(8));
+        stickerRow.setBackground(Theme.createRoundRectDrawable(
+                dp(10), Theme.multAlpha(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, rp), 0.08f)));
+
+        BackupImageView stickerPreview = new BackupImageView(activity);
+        stickerPreview.setAspectFit(true);
+        stickerPreview.setVisibility(View.GONE);
+        stickerRow.addView(stickerPreview, LayoutHelper.createLinear(44, 44, 0, 0, 10, 0));
+
+        TextView stickerLabel = new TextView(activity);
+        stickerLabel.setText("Attach Animated Sticker (Optional)");
+        stickerLabel.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13.5f);
+        stickerLabel.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText4, rp));
+        stickerRow.addView(stickerLabel, LayoutHelper.createLinear(0, LayoutHelper.WRAP_CONTENT, 1f));
+
+        TextView clearStickerBtn = new TextView(activity);
+        clearStickerBtn.setText("Remove");
+        clearStickerBtn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12.5f);
+        clearStickerBtn.setTypeface(AndroidUtilities.bold());
+        clearStickerBtn.setTextColor(Theme.getColor(Theme.key_text_RedRegular, rp));
+        clearStickerBtn.setPadding(dp(8), dp(4), dp(8), dp(4));
+        clearStickerBtn.setVisibility(View.GONE);
+        clearStickerBtn.setOnClickListener(v -> {
+            pickedSticker[0] = null;
+            pickedStickerEmoji[0] = "";
+            stickerPreview.setVisibility(View.GONE);
+            clearStickerBtn.setVisibility(View.GONE);
+            stickerLabel.setText("Attach Animated Sticker (Optional)");
+            stickerLabel.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText4, rp));
+        });
+        stickerRow.addView(clearStickerBtn, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT));
+
+        stickerRow.setOnClickListener(v -> openAnimatedStickerPicker(activity, rp, (doc, emoji) -> {
+            pickedSticker[0] = doc;
+            pickedStickerEmoji[0] = emoji != null ? emoji : "";
+            stickerPreview.setVisibility(View.VISIBLE);
+            clearStickerBtn.setVisibility(View.VISIBLE);
+            stickerLabel.setText("Animated sticker attached" + (!pickedStickerEmoji[0].isEmpty() ? " " + pickedStickerEmoji[0] : ""));
+            stickerLabel.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, rp));
+            try {
+                stickerPreview.setImage(
+                        ImageLocation.getForDocument(doc),
+                        "44_44",
+                        DocumentObject.getSvgThumb(doc, Theme.key_windowBackgroundGray, 0.25f),
+                        null);
+            } catch (Throwable ignored) {
+            }
+        }));
+        host.formColumn.addView(stickerRow, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 14));
+
+        LinearLayout actions = new LinearLayout(activity);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        TextView cancelBtn = buildSheetButton(activity, "Cancel", false, rp);
+        TextView sendBtn = buildSheetButton(activity, "Send Broadcast", true, rp);
+        actions.addView(cancelBtn, LayoutHelper.createLinear(0, 42, 1f, 0, 0, 8, 0));
+        actions.addView(sendBtn, LayoutHelper.createLinear(0, 42, 1f, 8, 0, 0, 0));
+        host.formColumn.addView(actions, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+
+        cancelBtn.setOnClickListener(v -> host.sheet.dismiss());
+        sendBtn.setOnClickListener(v -> {
+            String title = EveAnimatedEmojiHelper.encode(titleInput.getText()).trim();
+            String msg = EveAnimatedEmojiHelper.encode(msgInput.getText()).trim();
             if (title.isEmpty() || msg.isEmpty()) {
                 BulletinFactory.of(this).createErrorBulletin("Title and message are required.").show();
                 return;
             }
+            TLRPC.Document doc = pickedSticker[0];
+            String docId = doc != null ? String.valueOf(doc.id) : "";
+            String accessHash = doc != null ? String.valueOf(doc.access_hash) : "";
+            int dcId = doc != null ? Math.max(0, doc.dc_id) : 0;
+            String stEmoji = pickedStickerEmoji[0];
+            host.sheet.dismiss();
+
             EveAdminRepository.ResultCallback<Void> cb = new EveAdminRepository.ResultCallback<Void>() {
                 @Override
                 public void onSuccess(Void data) {
@@ -532,22 +623,100 @@ public class EveAdminBroadcastsFragment extends BaseFragment {
                 }
             };
             repo.runWithAdminToken(cb, token -> {
-                repo.sendBroadcast(token, title, msg);
+                repo.sendBroadcast(token, title, msg, docId, accessHash, dcId, stEmoji);
                 repo.postSuccess(cb, null);
             });
         });
-        builder.setNegativeButton("Cancel", null);
-        showDialog(builder.create());
+
+        host.sheet.setOnShowListener(d -> {
+            titleInput.onResume();
+            msgInput.onResume();
+        });
+        host.sheet.setOnDismissListener(d -> {
+            titleInput.onPause();
+            msgInput.onPause();
+            titleInput.onDestroy();
+            msgInput.onDestroy();
+        });
+        showDialog(host.sheet);
+    }
+
+    private interface StickerPickCallback {
+        void onPicked(TLRPC.Document doc, String emoji);
+    }
+
+    private void openAnimatedStickerPicker(
+            @NonNull Activity activity,
+            @Nullable Theme.ResourcesProvider rp,
+            @NonNull StickerPickCallback callback) {
+        BottomSheet pickerSheet = new BottomSheet(activity, false, rp);
+        pickerSheet.setApplyTopPadding(false);
+        pickerSheet.setApplyBottomPadding(false);
+
+        FrameLayout container = new FrameLayout(activity) {
+            @Override
+            protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+                int w = MeasureSpec.getSize(widthMeasureSpec);
+                int h = Math.max(dp(340), Math.round(AndroidUtilities.displaySize.y * 0.62f));
+                super.onMeasure(
+                        MeasureSpec.makeMeasureSpec(w, MeasureSpec.EXACTLY),
+                        MeasureSpec.makeMeasureSpec(h, MeasureSpec.EXACTLY));
+            }
+        };
+        EmojiView emojiView = new EmojiView(
+                this, false, true, false, activity, false, null, null, true, rp, false, false);
+        emojiView.setDelegate(new EmojiView.EmojiViewDelegate() {
+            @Override
+            public void onStickerSelected(
+                    View view,
+                    TLRPC.Document sticker,
+                    String query,
+                    Object parent,
+                    MessageObject.SendAnimationData sendAnimationData,
+                    boolean notify,
+                    int scheduleDate,
+                    int scheduleRepeatPeriod) {
+                if (sticker == null) return;
+                String emoji = MessageObject.findAnimatedEmojiEmoticon(sticker, "");
+                pickerSheet.dismiss();
+                callback.onPicked(sticker, emoji);
+            }
+        });
+        container.addView(emojiView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
+        pickerSheet.setCustomView(container);
+        pickerSheet.setOnDismissListener(d -> {
+            try {
+                emojiView.onDestroy();
+            } catch (Throwable ignored) {
+            }
+        });
+        showDialog(pickerSheet);
+    }
+
+    private TextView buildSheetButton(Context context, String label, boolean primary, Theme.ResourcesProvider rp) {
+        TextView tv = new TextView(context);
+        tv.setText(label);
+        tv.setGravity(Gravity.CENTER);
+        tv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
+        tv.setTypeface(AndroidUtilities.bold());
+        int accent = Theme.getColor(Theme.key_featuredStickers_addButton, rp);
+        tv.setBackground(Theme.createRoundRectDrawable(
+                dp(10),
+                primary ? accent : Theme.multAlpha(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, rp), 0.14f)));
+        tv.setTextColor(primary
+                ? Theme.getColor(Theme.key_featuredStickers_buttonText, rp)
+                : Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, rp));
+        return tv;
     }
 
     private void showBroadcastDetail(EveAdminModels.BroadcastItem b) {
         Activity activity = getParentActivity();
         if (activity == null) return;
-        String detail = b.message
+        String detail = EveAnimatedEmojiHelper.stripMarkupToPlainText(b.message)
                 + "\n\nSent by: " + (!TextUtils.isEmpty(b.sentBy) ? b.sentBy : "Admin")
                 + "\nTime: " + EveAdminUiChrome.formatDateTime(b.sentAt);
         AlertDialog.Builder builder = new AlertDialog.Builder(activity, getResourceProvider());
-        builder.setTitle(b.title);
+        builder.setTitle(EveAnimatedEmojiHelper.stripMarkupToPlainText(b.title));
         builder.setMessage(detail);
         builder.setPositiveButton("Close", null);
         builder.setNeutralButton("Delete", (d, w) -> confirmDeleteBroadcast(b));

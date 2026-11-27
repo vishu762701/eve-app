@@ -168,6 +168,10 @@ export interface NotificationRow {
   sent_by: string;
   type: string;
   target_category?: string;
+  sticker_doc_id?: string | null;
+  sticker_access_hash?: string | null;
+  sticker_dc_id?: number | null;
+  sticker_emoji?: string | null;
 }
 
 export interface FeedbackMessageRow {
@@ -223,6 +227,9 @@ export interface PollRow {
   ends_at: number;
   active: number;
   created_by: string;
+  is_quiz?: number | null;
+  correct_option_index?: number | null;
+  explanation?: string | null;
 }
 
 export interface GeneratedTestRow {

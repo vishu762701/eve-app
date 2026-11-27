@@ -43,7 +43,7 @@ public final class EveExamDialogsMapper {
         String normalized = query == null ? "" : query.trim().toLowerCase(Locale.US);
         List<EveExamModels.ExamSummary> matched = new ArrayList<>();
         for (EveExamModels.ExamSummary exam : source) {
-            if (exam == null || exam.isPaused()) {
+            if (exam == null || exam.isPaused() || !exam.isMainExam()) {
                 continue;
             }
             if (normalized.isEmpty()) {
@@ -51,9 +51,7 @@ public final class EveExamDialogsMapper {
                 continue;
             }
             if (containsIgnoreCase(exam.examName, normalized)
-                    || containsIgnoreCase(exam.category, normalized)
-                    || containsIgnoreCase(exam.nextTestLabel, normalized)
-                    || containsIgnoreCase(exam.testNumber, normalized)) {
+                    || containsIgnoreCase(exam.category, normalized)) {
                 matched.add(exam);
             }
         }
@@ -98,7 +96,8 @@ public final class EveExamDialogsMapper {
     public static DialogCell.CustomDialog toCustomDialog(EveExamModels.ExamSummary exam) {
         DialogCell.CustomDialog custom = new DialogCell.CustomDialog();
         custom.id = stableDialogIdForExam(exam.id);
-        custom.name = exam.examName.trim().isEmpty() ? "Untitled Exam" : exam.examName.trim();
+        String plainName = org.telegram.ui.eve.admin.EveAnimatedEmojiHelper.stripMarkupToPlainText(exam.examName).trim();
+        custom.name = plainName.isEmpty() ? "Untitled Exam" : plainName;
         custom.message = buildExamSubtitle(exam);
         custom.unread_count = exam.liveTestCount;
         custom.date = exam.latestTestTimestampSec;
@@ -118,9 +117,9 @@ public final class EveExamDialogsMapper {
             EveExamRepository.AnnouncementChannelSummary summary) {
         DialogCell.CustomDialog custom = new DialogCell.CustomDialog();
         String name = summary != null && !summary.channelName.trim().isEmpty()
-                ? summary.channelName.trim() : "Announcements";
+                ? org.telegram.ui.eve.admin.EveAnimatedEmojiHelper.stripMarkupToPlainText(summary.channelName).trim() : "Announcements";
         String preview = summary != null && !summary.latestPreview.trim().isEmpty()
-                ? summary.latestPreview.trim() : "Broadcasts & live polls";
+                ? org.telegram.ui.eve.admin.EveAnimatedEmojiHelper.stripMarkupToPlainText(summary.latestPreview).trim() : "Broadcasts & live quizzes";
         custom.id = -90002;
         custom.name = name;
         custom.message = preview;

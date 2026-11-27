@@ -210,21 +210,6 @@ public class EveAdminInsightsAndSystemFragment extends BaseFragment {
         }
         items.add(UItem.asShadow(null));
 
-        if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_CONFIG)) {
-            items.add(UItem.asHeader("App Configuration"));
-            String cfgSummary = appConfig != null
-                    ? (appConfig.maintenanceMode ? "MAINTENANCE ON" : "Online") + " • Min v" + appConfig.minSupportedVersionCode + " • Default: " + appConfig.defaultPublishMode
-                    : "Configure Maintenance Mode & Min Version";
-            items.add(SettingsActivity.SettingCell.Factory.of(
-                    ID_APP_CONFIG,
-                    IconBackgroundColors.BLUE_DEEP.top, IconBackgroundColors.BLUE_DEEP.bottom,
-                    R.drawable.msg_settings,
-                    "Maintenance Mode & App Config",
-                    cfgSummary,
-                    null));
-            items.add(UItem.asShadow(null));
-        }
-
         if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_VIEW_ANALYTICS_LOGS)) {
             items.add(UItem.asHeader("System Health"));
             items.add(SettingsActivity.SettingCell.Factory.of(

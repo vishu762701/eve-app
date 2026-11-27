@@ -1633,6 +1633,10 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
         }
 
         protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+            if (parentFragment != null && parentFragment.isEveExamsMode()) {
+                super.onMeasure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(0, MeasureSpec.EXACTLY));
+                return;
+            }
             int size = itemInternals.size();
             boolean hasArchive = folderId == 0 && dialogsType == 0 && MessagesController.getInstance(currentAccount).dialogs_dict.get(DialogObject.makeFolderDialogId(1)) != null;
             View parent = (View) getParent();
@@ -1788,7 +1792,7 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
             }
             java.util.List<EveExamModels.ExamSummary> exams = parentFragment.getFilteredEveExams();
             dialogsCount = exams.size();
-            if (exams.isEmpty() && channel == null) {
+            if (exams.isEmpty() && (hasQuery || channel == null)) {
                 isEmpty = true;
                 itemInternals.add(new ItemInternal(VIEW_TYPE_EMPTY, dialogsEmptyType()));
             } else {
@@ -1796,7 +1800,6 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
                 for (int k = 0; k < exams.size(); k++) {
                     itemInternals.add(new ItemInternal(exams.get(k)));
                 }
-                itemInternals.add(new ItemInternal(VIEW_TYPE_LAST_EMPTY));
             }
             return;
         }

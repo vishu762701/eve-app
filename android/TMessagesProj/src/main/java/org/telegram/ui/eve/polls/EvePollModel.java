@@ -11,8 +11,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Shared immutable poll model rendered by {@link EveTelegramPollCardView} for both
- * Student Announcements & Polls and Admin Polls Manager.
+ * Shared immutable Telegram Quiz/Poll model rendered by {@link EveTelegramPollCardView}
+ * for both Student Announcements & Quizzes and Admin Quizzes Manager.
  */
 public final class EvePollModel {
 
@@ -27,6 +27,11 @@ public final class EvePollModel {
     public final String createdBy;
     @Nullable
     public final Integer myVoteIndex;
+    public final boolean isQuiz;
+    public final int correctOptionIndex;
+    @Nullable
+    public final Boolean isCorrect;
+    public final String explanation;
 
     public EvePollModel(
             String id,
@@ -39,6 +44,25 @@ public final class EvePollModel {
             long endsAt,
             String createdBy,
             @Nullable Integer myVoteIndex) {
+        this(id, question, options, voteCounts, totalVotes, active, createdAt, endsAt, createdBy,
+                myVoteIndex, true, -1, null, "");
+    }
+
+    public EvePollModel(
+            String id,
+            String question,
+            List<String> options,
+            Map<Integer, Integer> voteCounts,
+            int totalVotes,
+            boolean active,
+            long createdAt,
+            long endsAt,
+            String createdBy,
+            @Nullable Integer myVoteIndex,
+            boolean isQuiz,
+            int correctOptionIndex,
+            @Nullable Boolean isCorrect,
+            String explanation) {
         this.id = id != null ? id : "";
         this.question = question != null ? question : "";
         this.options = options != null ? Collections.unmodifiableList(new ArrayList<>(options)) : Collections.emptyList();
@@ -49,6 +73,10 @@ public final class EvePollModel {
         this.endsAt = endsAt;
         this.createdBy = createdBy != null ? createdBy : "";
         this.myVoteIndex = myVoteIndex;
+        this.isQuiz = isQuiz;
+        this.correctOptionIndex = correctOptionIndex;
+        this.isCorrect = isCorrect;
+        this.explanation = explanation != null ? explanation : "";
     }
 
     public static EvePollModel fromAdminItem(EveAdminModels.PollItem item) {
@@ -62,7 +90,11 @@ public final class EvePollModel {
                 item.createdAt,
                 item.endsAt,
                 item.createdBy,
-                null
+                null,
+                item.isQuiz,
+                item.correctOptionIndex,
+                null,
+                item.explanation
         );
     }
 
@@ -91,14 +123,32 @@ public final class EvePollModel {
     }
 
     public EvePollModel withRecordedVote(int optionIndex) {
-        if (optionIndex < 0 || optionIndex >= options.size() || myVoteIndex != null) {
+        return withRecordedVote(optionIndex, correctOptionIndex, isCorrect, explanation);
+    }
+
+    public EvePollModel withRecordedVote(
+            int optionIndex,
+            int revealedCorrectOptionIndex,
+            @Nullable Boolean revealedIsCorrect,
+            String revealedExplanation) {
+        if (optionIndex < 0 || optionIndex >= options.size()) {
             return this;
         }
         Map<Integer, Integer> updated = new HashMap<>(voteCounts);
-        updated.put(optionIndex, getOptionVotes(optionIndex) + 1);
+        int nextTotal = totalVotes;
+        if (myVoteIndex == null) {
+            updated.put(optionIndex, getOptionVotes(optionIndex) + 1);
+            nextTotal = totalVotes + 1;
+        }
+        int finalCorrect = revealedCorrectOptionIndex >= 0 ? revealedCorrectOptionIndex : correctOptionIndex;
+        Boolean finalIsCorrect = revealedIsCorrect != null
+                ? revealedIsCorrect
+                : (isQuiz && finalCorrect >= 0 ? Boolean.valueOf(optionIndex == finalCorrect) : isCorrect);
+        String finalExp = (revealedExplanation != null && !revealedExplanation.isEmpty()) ? revealedExplanation : explanation;
         return new EvePollModel(
-                id, question, options, updated, totalVotes + 1,
-                active, createdAt, endsAt, createdBy, optionIndex
+                id, question, options, updated, nextTotal,
+                active, createdAt, endsAt, createdBy, optionIndex,
+                isQuiz, finalCorrect, finalIsCorrect, finalExp
         );
     }
 }

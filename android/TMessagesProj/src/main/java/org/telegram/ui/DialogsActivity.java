@@ -4495,6 +4495,34 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                         return usedDy;
                     }
 
+                    if (isEveExamsMode()) {
+                        int itemCount = viewPage.dialogsAdapter != null ? viewPage.dialogsAdapter.getItemCount() : 0;
+                        int firstPos = viewPage.layoutManager.findFirstVisibleItemPosition();
+                        int lastPos = viewPage.layoutManager.findLastVisibleItemPosition();
+                        if (itemCount > 0 && firstPos == 0 && lastPos == itemCount - 1) {
+                            View firstChild = viewPage.layoutManager.findViewByPosition(0);
+                            View lastChild = viewPage.layoutManager.findViewByPosition(lastPos);
+                            int viewportBottom = viewPage.listView.getMeasuredHeight() - viewPage.listView.getPaddingBottom();
+                            if (firstChild != null && lastChild != null && viewportBottom > pTop) {
+                                int totalContentHeight = lastChild.getBottom() - firstChild.getTop();
+                                int availableViewport = viewportBottom - pTop;
+                                if (totalContentHeight <= availableViewport) {
+                                    viewPage.listView.setOverScrollMode(View.OVER_SCROLL_NEVER);
+                                    if (firstChild.getTop() >= pTop) {
+                                        return 0;
+                                    }
+                                    if (dy > 0) {
+                                        return 0;
+                                    }
+                                    int maxRecoverDy = -(pTop - firstChild.getTop());
+                                    if (measuredDy < maxRecoverDy) {
+                                        measuredDy = maxRecoverDy;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     int scrolled = super.scrollVerticallyBy(measuredDy, recycler, state);
                     if (scrolled == 0 && dy < 0 && isDragging && !rightSlidingDialogContainer.hasFragment() && hasStories && progressToActionMode == 0) {
                         setStoriesOvercroll(viewPage, 0);
@@ -7348,6 +7376,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     }
 
     private void showSearch(boolean show, boolean startFromDownloads, boolean animated, boolean forceNotOnlyDialogs) {
+        if (show && isEveExamsMode()) {
+            return;
+        }
         animatorSearchVisible.setValue(show, animated);
 
         if (!show) {

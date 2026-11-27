@@ -10,6 +10,52 @@ import { batchReadRows, getReadDb } from "../util/d1Session";
 
 export const pollRoutes = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
 
+async function hasPollQuizColumns(db: D1Database): Promise<boolean> {
+  try {
+    const { results } = await db.prepare("PRAGMA table_info(polls)").all<{ name?: string }>();
+    const names = new Set((results || []).map((r) => String(r?.name || "")));
+    return names.has("is_quiz") && names.has("correct_option_index") && names.has("explanation");
+  } catch {
+    return false;
+  }
+}
+
+function buildPollResponse(
+  p: PollRow,
+  options: string[],
+  voteCounts: Record<string, number>,
+  userVote: number | null,
+  isAdmin: boolean
+) {
+  const isQuiz = p.is_quiz === undefined || p.is_quiz === null ? true : Boolean(p.is_quiz);
+  const rawCorrect = Number.isSafeInteger(Number(p.correct_option_index))
+    ? Number(p.correct_option_index)
+    : -1;
+  const hasValidCorrect = isQuiz && rawCorrect >= 0 && rawCorrect < options.length;
+  const hasVoted = userVote !== null;
+  const canRevealAnswer = hasVoted || isAdmin;
+  const correctOptionIndex = hasValidCorrect && canRevealAnswer ? rawCorrect : null;
+  const isCorrect = hasValidCorrect && hasVoted ? userVote === rawCorrect : null;
+  const rawExplanation = typeof p.explanation === "string" ? p.explanation : "";
+  const explanation = canRevealAnswer ? rawExplanation : "";
+
+  return {
+    id: p.id,
+    question: p.question,
+    options,
+    createdAt: p.created_at,
+    endsAt: p.ends_at,
+    active: Boolean(p.active),
+    createdBy: p.created_by,
+    voteCounts,
+    userVote,
+    isQuiz,
+    correctOptionIndex,
+    isCorrect,
+    explanation,
+  };
+}
+
 async function getVoteCountsForPoll(db: D1Database, pollId: string, optionsCount: number): Promise<Record<string, number>> {
   const counts: Record<string, number> = {};
   for (let i = 0; i < optionsCount; i++) {
@@ -68,6 +114,7 @@ pollRoutes.get("/", async (c) => {
     userVoteByPoll.set(v.poll_id, Number(v.option_index));
   }
 
+  const isAdmin = user?.isAdmin === true;
   const list: any[] = [];
   for (const p of polls || []) {
     let options: string[] = [];
@@ -80,17 +127,8 @@ pollRoutes.get("/", async (c) => {
     for (let i = 0; i < options.length; i++) {
       voteCounts[String(i)] = rawCounts[i] || 0;
     }
-    list.push({
-      id: p.id,
-      question: p.question,
-      options,
-      createdAt: p.created_at,
-      endsAt: p.ends_at,
-      active: Boolean(p.active),
-      createdBy: p.created_by,
-      voteCounts,
-      userVote: userVoteByPoll.has(p.id) ? userVoteByPoll.get(p.id) : null,
-    });
+    const userVote = userVoteByPoll.has(p.id) ? (userVoteByPoll.get(p.id) ?? null) : null;
+    list.push(buildPollResponse(p, options, voteCounts, userVote, isAdmin));
   }
 
   return c.json({ success: true, data: list });
@@ -99,6 +137,8 @@ pollRoutes.get("/", async (c) => {
 // GET /api/polls/active - Get current active poll
 pollRoutes.get("/active", async (c) => {
   const db = c.env.DB;
+  const user = c.get("user");
+  const isAdmin = user?.isAdmin === true;
   const now = Date.now();
 
   const { results: polls } = await db
@@ -114,25 +154,26 @@ pollRoutes.get("/active", async (c) => {
     } catch (_e) {}
 
     const voteCounts = await getVoteCountsForPoll(db, p.id, options.length);
+    let userVote: number | null = null;
+    if (user?.uid) {
+      const myVoteRow = await db
+        .prepare("SELECT option_index FROM poll_votes WHERE poll_id = ? AND user_id = ?")
+        .bind(p.id, user.uid)
+        .first<{ option_index: number }>();
+      if (myVoteRow && Number.isSafeInteger(Number(myVoteRow.option_index))) {
+        userVote = Number(myVoteRow.option_index);
+      }
+    }
     return c.json({
       success: true,
-      data: {
-        id: p.id,
-        question: p.question,
-        options,
-        createdAt: p.created_at,
-        endsAt: p.ends_at,
-        active: Boolean(p.active),
-        createdBy: p.created_by,
-        voteCounts,
-      },
+      data: buildPollResponse(p, options, voteCounts, userVote, isAdmin),
     });
   }
 
   return c.json({ success: true, data: null });
 });
 
-// POST /api/polls - Create poll (Admin)
+// POST /api/polls - Create poll / quiz (Admin)
 pollRoutes.post("/", requirePermission("moderate_feedback"), async (c) => {
   const user = c.get("user");
   const body = await c.req.json().catch(() => ({}));
@@ -141,32 +182,73 @@ pollRoutes.post("/", requirePermission("moderate_feedback"), async (c) => {
   const options = optionsRaw.map((o) => String(o).trim()).filter(Boolean);
   const endsAt = Number(body.endsAt) || 0;
   const active = body.active !== false ? 1 : 0;
+  const isQuiz = body.isQuiz !== false;
+  const explanation = typeof body.explanation === "string" ? body.explanation.trim().slice(0, 500) : "";
 
   if (!question || options.length < 2) {
     return c.json({ success: false, error: "Question and at least 2 options are required" }, 400);
   }
 
+  let correctOptionIndex = -1;
+  if (
+    isQuiz &&
+    body.correctOptionIndex !== undefined &&
+    body.correctOptionIndex !== null &&
+    body.correctOptionIndex !== ""
+  ) {
+    if (!Number.isSafeInteger(body.correctOptionIndex) ||
+        (body.correctOptionIndex !== -1 &&
+          (body.correctOptionIndex < 0 || body.correctOptionIndex >= options.length))) {
+      return c.json({
+        success: false,
+        error: "correctOptionIndex must match one of the options",
+      }, 400);
+    }
+    correctOptionIndex = body.correctOptionIndex;
+  }
+
   const id = crypto.randomUUID();
   const now = Date.now();
   const db = c.env.DB;
+  const hasQuizCols = await hasPollQuizColumns(db);
 
-  const insertStmt = db
-    .prepare(
-      "INSERT INTO polls (id, question, options_json, created_at, ends_at, active, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)"
-    )
-    .bind(id, question, JSON.stringify(options), now, endsAt, active, user.email);
+  const insertStmt = hasQuizCols
+    ? db
+        .prepare(
+          "INSERT INTO polls (id, question, options_json, created_at, ends_at, active, created_by, is_quiz, correct_option_index, explanation) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        )
+        .bind(
+          id,
+          question,
+          JSON.stringify(options),
+          now,
+          endsAt,
+          active,
+          user.email,
+          isQuiz ? 1 : 0,
+          correctOptionIndex,
+          explanation
+        )
+    : db
+        .prepare(
+          "INSERT INTO polls (id, question, options_json, created_at, ends_at, active, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)"
+        )
+        .bind(id, question, JSON.stringify(options), now, endsAt, active, user.email);
 
   const { stmt: auditStmt } = prepareAdminAuditLog(db, user, {
     actionType: "POLL_CREATED",
-    description: `Created poll '${question}'`,
+    description: `Created ${isQuiz ? "quiz" : "poll"} '${question}'`,
     targetType: "poll",
     targetId: id,
-    metadata: { question },
+    metadata: { question, isQuiz, hasCorrectOption: correctOptionIndex >= 0 },
   });
 
   await db.batch([insertStmt, auditStmt]);
 
-  return c.json({ success: true, data: { id } }, 201);
+  return c.json({
+    success: true,
+    data: { id, isQuiz, correctOptionIndex, explanation },
+  }, 201);
 });
 
 // PUT /api/polls/:id/status - Toggle poll active status (Admin)
@@ -279,5 +361,23 @@ pollRoutes.post("/:id/vote", async (c) => {
     return c.json({ success: false, error: "This poll is closed or you have already voted." }, 409);
   }
 
-  return c.json({ success: true });
+  const isQuiz = poll.is_quiz === undefined || poll.is_quiz === null ? true : Boolean(poll.is_quiz);
+  const rawCorrect = Number.isSafeInteger(Number(poll.correct_option_index))
+    ? Number(poll.correct_option_index)
+    : -1;
+  const hasValidCorrect = isQuiz && rawCorrect >= 0 && rawCorrect < options.length;
+  const correctOptionIndex = hasValidCorrect ? rawCorrect : null;
+  const isCorrect = hasValidCorrect ? optionIndex === rawCorrect : null;
+  const explanation = typeof poll.explanation === "string" ? poll.explanation : "";
+
+  return c.json({
+    success: true,
+    data: {
+      optionIndex,
+      isQuiz,
+      correctOptionIndex,
+      isCorrect,
+      explanation,
+    },
+  });
 });

@@ -351,8 +351,8 @@ public final class EveAdminUiChrome {
      * cancelling cleanly on pause/destroy without ever blocking loaded UI.
      */
     public static final class AutoSyncController {
-        public static final long DEFAULT_MIN_RESUME_INTERVAL_MS = 15_000L;
-        public static final long DEFAULT_PERIODIC_INTERVAL_MS = 25_000L;
+        public static final long DEFAULT_MIN_RESUME_INTERVAL_MS = 60_000L;
+        public static final long DEFAULT_PERIODIC_INTERVAL_MS = 120_000L;
 
         private final long minResumeIntervalMs;
         private final long periodicIntervalMs;

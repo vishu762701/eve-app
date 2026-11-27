@@ -11,6 +11,23 @@ import { getActiveEmojiPlacements } from "./emoji";
 
 export const broadcastRoutes = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
 
+async function hasNotificationStickerColumns(db: D1Database): Promise<boolean> {
+  try {
+    const { results } = await db
+      .prepare("PRAGMA table_info(notifications)")
+      .all<{ name?: string }>();
+    const names = new Set((results || []).map((r) => String(r?.name || "")));
+    return (
+      names.has("sticker_doc_id") &&
+      names.has("sticker_access_hash") &&
+      names.has("sticker_dc_id") &&
+      names.has("sticker_emoji")
+    );
+  } catch {
+    return false;
+  }
+}
+
 // GET /api/broadcasts - List broadcast notifications
 broadcastRoutes.get("/", async (c) => {
   const db = c.env.DB;
@@ -49,6 +66,14 @@ broadcastRoutes.get("/", async (c) => {
     ...(canSendBroadcasts ? { sentBy: r.sent_by } : {}),
     type: r.type,
     targetCategory: r.target_category || "All Users",
+    ...(r.sticker_doc_id
+      ? {
+          stickerDocId: String(r.sticker_doc_id),
+          stickerAccessHash: String(r.sticker_access_hash || ""),
+          stickerDcId: Number(r.sticker_dc_id || 0),
+          stickerEmoji: String(r.sticker_emoji || ""),
+        }
+      : {}),
     ...(broadcastPlacements.has(r.id) ? { emoji: broadcastPlacements.get(r.id) } : {}),
   }));
 
@@ -69,12 +94,26 @@ broadcastRoutes.post("/", requirePermission("send_broadcasts"), async (c) => {
       typeof rawTarget !== "string" || !rawTarget.trim() || rawTarget.length > 100) {
     return c.json({ success: false, error: "Invalid broadcast title, message, type or audience" }, 400);
   }
+  const stickerDocId = typeof body.stickerDocId === "string" ? body.stickerDocId.trim() : "";
+  const stickerAccessHash = typeof body.stickerAccessHash === "string" ? body.stickerAccessHash.trim() : "";
+  const stickerDcId = body.stickerDcId === undefined || body.stickerDcId === null ? 0 : Number(body.stickerDcId);
+  const stickerEmoji = typeof body.stickerEmoji === "string" ? body.stickerEmoji.trim().slice(0, 32) : "";
+  if (
+    stickerDocId &&
+    (!/^-?[0-9]{1,32}$/.test(stickerDocId) ||
+      (stickerAccessHash && !/^-?[0-9]{1,32}$/.test(stickerAccessHash)) ||
+      !Number.isSafeInteger(stickerDcId) ||
+      stickerDcId < 0)
+  ) {
+    return c.json({ success: false, error: "Invalid Telegram sticker reference" }, 400);
+  }
   const type = rawType.trim();
   const targetCategory = rawTarget.trim();
   if (targetCategory !== "All Users") {
     return c.json({ success: false, error: "Category-targeted delivery is unavailable. Only All Users is supported." }, 422);
   }
   const db = c.env.DB;
+  const hasStickerColumns = await hasNotificationStickerColumns(db);
 
   const id = crypto.randomUUID();
   const now = Date.now();
@@ -82,17 +121,35 @@ broadcastRoutes.post("/", requirePermission("send_broadcasts"), async (c) => {
   // The canonical migrations already define target_category. Never run DDL
   // or try a second INSERT after an arbitrary transactional failure.
   try {
-    const insertStmt = db
-      .prepare(
-        "INSERT INTO notifications (id, title, message, sent_at, sent_by, type, target_category) VALUES (?, ?, ?, ?, ?, ?, ?)"
-      )
-      .bind(id, title, message, now, user.email, type, targetCategory);
+    const insertStmt = hasStickerColumns
+      ? db
+          .prepare(
+            "INSERT INTO notifications (id, title, message, sent_at, sent_by, type, target_category, sticker_doc_id, sticker_access_hash, sticker_dc_id, sticker_emoji) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+          )
+          .bind(
+            id,
+            title,
+            message,
+            now,
+            user.email,
+            type,
+            targetCategory,
+            stickerDocId,
+            stickerAccessHash,
+            stickerDcId,
+            stickerEmoji
+          )
+      : db
+          .prepare(
+            "INSERT INTO notifications (id, title, message, sent_at, sent_by, type, target_category) VALUES (?, ?, ?, ?, ?, ?, ?)"
+          )
+          .bind(id, title, message, now, user.email, type, targetCategory);
     const { stmt: auditStmt } = prepareAdminAuditLog(db, user, {
       actionType: "BROADCAST_SENT",
       description: `Sent broadcast '${title}'`,
       targetType: "broadcast",
       targetId: id,
-      metadata: { title, type, targetCategory },
+      metadata: { title, type, targetCategory, hasSticker: Boolean(stickerDocId) },
     });
 
     const results = await db.batch([insertStmt, auditStmt]);
@@ -109,7 +166,17 @@ broadcastRoutes.post("/", requirePermission("send_broadcasts"), async (c) => {
     }, 503);
   }
 
-  return c.json({ success: true, data: { id, title, message, sentAt: now, targetCategory } }, 201);
+  return c.json({
+    success: true,
+    data: {
+      id,
+      title,
+      message,
+      sentAt: now,
+      targetCategory,
+      ...(stickerDocId ? { stickerDocId, stickerAccessHash, stickerDcId, stickerEmoji } : {}),
+    },
+  }, 201);
 });
 
 // DELETE /api/broadcasts/:id - Delete single broadcast (Admin)

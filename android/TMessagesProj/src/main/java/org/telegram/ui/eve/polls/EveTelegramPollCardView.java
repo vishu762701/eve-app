@@ -30,6 +30,7 @@ import org.telegram.ui.Components.RecyclerListView;
 import org.telegram.ui.Components.UItem;
 import org.telegram.ui.Components.UniversalAdapter;
 import org.telegram.ui.Components.UniversalRecyclerView;
+import org.telegram.ui.eve.admin.EveAnimatedEmojiHelper;
 import org.telegram.ui.eve.admin.EveAdminUiChrome;
 
 import java.util.ArrayList;
@@ -58,6 +59,7 @@ public class EveTelegramPollCardView extends FrameLayout implements Theme.Colora
     private final TextView questionView;
     private final TextView subtitleView;
     private final LinearLayout optionsContainer;
+    private final TextView explanationView;
     private final View footerDivider;
     private final TextView footerView;
     private final View adminDivider;
@@ -86,7 +88,7 @@ public class EveTelegramPollCardView extends FrameLayout implements Theme.Colora
         bubbleContainer.setPadding(dp(16), dp(14), dp(16), dp(12));
         addView(bubbleContainer, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
 
-        questionView = new TextView(context);
+        questionView = EveAnimatedEmojiHelper.createEmojiTextView(context);
         questionView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16);
         questionView.setTypeface(AndroidUtilities.bold());
         questionView.setLineSpacing(dp(2), 1f);
@@ -99,6 +101,13 @@ public class EveTelegramPollCardView extends FrameLayout implements Theme.Colora
         optionsContainer = new LinearLayout(context);
         optionsContainer.setOrientation(LinearLayout.VERTICAL);
         bubbleContainer.addView(optionsContainer, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+
+        explanationView = EveAnimatedEmojiHelper.createEmojiTextView(context);
+        explanationView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
+        explanationView.setLineSpacing(dp(2.5f), 1f);
+        explanationView.setPadding(dp(12), dp(9), dp(12), dp(9));
+        explanationView.setVisibility(GONE);
+        bubbleContainer.addView(explanationView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 10, 0, 2));
 
         footerDivider = new View(context);
         bubbleContainer.addView(footerDivider, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 1, 0, 8, 0, 8));
@@ -156,30 +165,38 @@ public class EveTelegramPollCardView extends FrameLayout implements Theme.Colora
         this.studentListener = studentListener;
         this.adminListener = adminListener;
 
-        questionView.setText(poll.question);
+        EveAnimatedEmojiHelper.bindText(questionView, poll.question);
 
         long now = System.currentTimeMillis();
         boolean isOpen = poll.isOpen(now);
         boolean showResults = adminPreviewMode || !isOpen || poll.myVoteIndex != null;
+        String kindLabel = poll.isQuiz ? "Quiz" : "Poll";
         if (isOpen) {
-            subtitleView.setText(adminPreviewMode ? "Poll • Active (Live Results)" : "Poll • Active");
+            subtitleView.setText(adminPreviewMode ? kindLabel + " • Active (Live Results)" : kindLabel + " • Active");
         } else {
-            subtitleView.setText("Final results • Closed");
+            subtitleView.setText(kindLabel + " • Final results");
         }
 
-        String animKey = poll.id + ":" + showResults + ":" + poll.totalVotes + ":" + poll.myVoteIndex;
+        String animKey = poll.id + ":" + showResults + ":" + poll.totalVotes + ":" + poll.myVoteIndex + ":" + poll.correctOptionIndex;
         boolean shouldAnimate = showResults && !TextUtils.equals(animKey, lastAnimatedPollKey);
         lastAnimatedPollKey = animKey;
 
         rebuildOptions(showResults);
 
+        if (showResults && !TextUtils.isEmpty(poll.explanation)) {
+            explanationView.setVisibility(VISIBLE);
+            EveAnimatedEmojiHelper.bindText(explanationView, "\uD83D\uDCA1 Explanation\n" + poll.explanation);
+        } else {
+            explanationView.setVisibility(GONE);
+        }
+
         String votesLabel;
         if (poll.totalVotes <= 0) {
-            votesLabel = "No votes yet";
+            votesLabel = "No answers yet";
         } else if (poll.totalVotes == 1) {
-            votesLabel = "1 vote";
+            votesLabel = "1 answer";
         } else {
-            votesLabel = poll.totalVotes + " votes";
+            votesLabel = poll.totalVotes + " answers";
         }
         String dateLabel = poll.createdAt > 0L ? (" • " + EveAdminUiChrome.formatDate(poll.createdAt)) : "";
         footerView.setText(votesLabel + dateLabel);
@@ -188,7 +205,7 @@ public class EveTelegramPollCardView extends FrameLayout implements Theme.Colora
         adminDivider.setVisibility(showAdmin ? VISIBLE : GONE);
         adminActionsRow.setVisibility(showAdmin ? VISIBLE : GONE);
         if (showAdmin) {
-            toggleActiveBtn.setText(poll.active ? "Close Poll" : "Reopen Poll");
+            toggleActiveBtn.setText(poll.active ? "Close Quiz" : "Reopen Quiz");
         }
 
         updateColors();
@@ -220,10 +237,25 @@ public class EveTelegramPollCardView extends FrameLayout implements Theme.Colora
                 ratio = 0.03f;
             }
             boolean isChosen = poll.myVoteIndex != null && poll.myVoteIndex == i;
-            boolean isAccentOption = isChosen || (adminPreviewMode && optVotes > 0 && optVotes == winningVotes);
+            boolean hasCorrectKey = poll.isQuiz && poll.correctOptionIndex >= 0 && poll.correctOptionIndex < poll.options.size();
+            boolean isCorrectOption = hasCorrectKey && poll.correctOptionIndex == i;
+            boolean isWrongChosen = hasCorrectKey && isChosen && !isCorrectOption;
+            boolean isAccentOption = isCorrectOption || (!hasCorrectKey && (isChosen || (adminPreviewMode && optVotes > 0 && optVotes == winningVotes)));
             boolean isSubmittingThis = !showResults && submittingOptionIndex == i;
 
-            OptionRowHolder holder = new OptionRowHolder(ctx, showResults, percent, ratio, isChosen, isAccentOption, isSubmittingThis, optText, optVotes);
+            int quizState = OptionRowHolder.STATE_NEUTRAL;
+            if (showResults && hasCorrectKey) {
+                if (isCorrectOption) {
+                    quizState = OptionRowHolder.STATE_CORRECT;
+                } else if (isWrongChosen) {
+                    quizState = OptionRowHolder.STATE_WRONG;
+                }
+            } else if (showResults && isChosen) {
+                quizState = OptionRowHolder.STATE_CHOSEN;
+            }
+
+            OptionRowHolder holder = new OptionRowHolder(
+                    ctx, showResults, percent, ratio, isChosen, isAccentOption, isSubmittingThis, quizState, optText, optVotes);
             holder.rowRoot.setOnClickListener(v -> {
                 if (!showResults && submittingOptionIndex < 0 && studentListener != null) {
                     studentListener.onVoteOption(poll, optionIdx);
@@ -278,6 +310,8 @@ public class EveTelegramPollCardView extends FrameLayout implements Theme.Colora
 
         questionView.setTextColor(blackText);
         subtitleView.setTextColor(grayText);
+        explanationView.setTextColor(blackText);
+        explanationView.setBackground(Theme.createRoundRectDrawable(dp(10), Theme.multAlpha(accentColor, 0.08f)));
         footerDivider.setBackgroundColor(Theme.multAlpha(dividerColor, 0.65f));
         footerView.setTextColor(grayText);
         adminDivider.setBackgroundColor(Theme.multAlpha(dividerColor, 0.65f));
@@ -310,6 +344,11 @@ public class EveTelegramPollCardView extends FrameLayout implements Theme.Colora
     }
 
     private final class OptionRowHolder {
+        static final int STATE_NEUTRAL = 0;
+        static final int STATE_CHOSEN = 1;
+        static final int STATE_CORRECT = 2;
+        static final int STATE_WRONG = 3;
+
         final LinearLayout rowRoot;
         final PollCircleIndicator indicatorView;
         @Nullable final RadialProgressView spinnerView;
@@ -320,6 +359,7 @@ public class EveTelegramPollCardView extends FrameLayout implements Theme.Colora
         final boolean showResults;
         final boolean isChosen;
         final boolean isAccentOption;
+        final int quizState;
 
         OptionRowHolder(
                 Context ctx,
@@ -329,11 +369,13 @@ public class EveTelegramPollCardView extends FrameLayout implements Theme.Colora
                 boolean isChosen,
                 boolean isAccentOption,
                 boolean isSubmitting,
+                int quizState,
                 String label,
                 int voteCount) {
             this.showResults = showResults;
             this.isChosen = isChosen;
             this.isAccentOption = isAccentOption;
+            this.quizState = quizState;
 
             rowRoot = new LinearLayout(ctx);
             rowRoot.setOrientation(LinearLayout.VERTICAL);
@@ -347,7 +389,7 @@ public class EveTelegramPollCardView extends FrameLayout implements Theme.Colora
             topRow.setGravity(Gravity.CENTER_VERTICAL);
             rowRoot.addView(topRow, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
 
-            indicatorView = new PollCircleIndicator(ctx, showResults, isChosen);
+            indicatorView = new PollCircleIndicator(ctx, showResults, isChosen || quizState == STATE_CORRECT || quizState == STATE_WRONG, quizState == STATE_WRONG);
             percentView = new TextView(ctx);
             percentView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
             percentView.setTypeface(AndroidUtilities.bold());
@@ -356,7 +398,7 @@ public class EveTelegramPollCardView extends FrameLayout implements Theme.Colora
             if (showResults) {
                 percentView.setText(percent + "%");
                 topRow.addView(percentView, LayoutHelper.createLinear(44, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_VERTICAL));
-                if (isChosen) {
+                if (isChosen || quizState == STATE_CORRECT || quizState == STATE_WRONG) {
                     topRow.addView(indicatorView, LayoutHelper.createLinear(18, 18, Gravity.CENTER_VERTICAL, 0, 0, 8, 0));
                 }
                 spinnerView = null;
@@ -370,8 +412,8 @@ public class EveTelegramPollCardView extends FrameLayout implements Theme.Colora
                 topRow.addView(indicatorView, LayoutHelper.createLinear(20, 20, Gravity.CENTER_VERTICAL, 0, 0, 12, 0));
             }
 
-            labelView = new TextView(ctx);
-            labelView.setText(label);
+            labelView = EveAnimatedEmojiHelper.createEmojiTextView(ctx);
+            EveAnimatedEmojiHelper.bindText(labelView, label);
             labelView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
             labelView.setLineSpacing(dp(2), 1f);
             topRow.addView(labelView, LayoutHelper.createLinear(0, LayoutHelper.WRAP_CONTENT, 1f, Gravity.CENTER_VERTICAL));
@@ -402,26 +444,37 @@ public class EveTelegramPollCardView extends FrameLayout implements Theme.Colora
             int grayText = Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, resourcesProvider);
             int accent = Theme.getColor(Theme.key_featuredStickers_addButton, resourcesProvider);
             int dividerColor = Theme.getColor(Theme.key_divider, resourcesProvider);
+            int green = 0xFF2E9E5B;
+            int red = 0xFFD93025;
 
-            labelView.setTextColor(blackText);
-            percentView.setTextColor(isChosen ? accent : blackText);
+            int activeColor = quizState == STATE_CORRECT
+                    ? green
+                    : (quizState == STATE_WRONG ? red : accent);
+
+            labelView.setTextColor(quizState == STATE_CORRECT ? green : (quizState == STATE_WRONG ? red : blackText));
+            percentView.setTextColor(quizState != STATE_NEUTRAL ? activeColor : blackText);
             countView.setTextColor(grayText);
-            indicatorView.setColors(accent, grayText);
-            progressView.setColors(accent, isAccentOption ? accent : Theme.multAlpha(grayText, 0.55f), Theme.multAlpha(dividerColor, 0.55f));
+            indicatorView.setColors(activeColor, grayText);
+            int barColor = quizState == STATE_CORRECT
+                    ? green
+                    : (quizState == STATE_WRONG ? red : (isAccentOption ? accent : Theme.multAlpha(grayText, 0.55f)));
+            progressView.setColors(activeColor, barColor, Theme.multAlpha(dividerColor, 0.55f));
         }
     }
 
     private static final class PollCircleIndicator extends View {
         private final boolean showResults;
         private final boolean isChosen;
+        private final boolean drawCross;
         private final Paint ringPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint fillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint checkPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
-        PollCircleIndicator(Context context, boolean showResults, boolean isChosen) {
+        PollCircleIndicator(Context context, boolean showResults, boolean isChosen, boolean drawCross) {
             super(context);
             this.showResults = showResults;
             this.isChosen = isChosen;
+            this.drawCross = drawCross;
             ringPaint.setStyle(Paint.Style.STROKE);
             ringPaint.setStrokeWidth(dp(1.6f));
             fillPaint.setStyle(Paint.Style.FILL);
@@ -447,8 +500,14 @@ public class EveTelegramPollCardView extends FrameLayout implements Theme.Colora
                 canvas.drawCircle(cx, cy, r, ringPaint);
             } else if (isChosen) {
                 canvas.drawCircle(cx, cy, r, fillPaint);
-                canvas.drawLine(cx - r * 0.42f, cy + r * 0.02f, cx - r * 0.08f, cy + r * 0.36f, checkPaint);
-                canvas.drawLine(cx - r * 0.08f, cy + r * 0.36f, cx + r * 0.44f, cy - r * 0.28f, checkPaint);
+                if (drawCross) {
+                    float d = r * 0.36f;
+                    canvas.drawLine(cx - d, cy - d, cx + d, cy + d, checkPaint);
+                    canvas.drawLine(cx + d, cy - d, cx - d, cy + d, checkPaint);
+                } else {
+                    canvas.drawLine(cx - r * 0.42f, cy + r * 0.02f, cx - r * 0.08f, cy + r * 0.36f, checkPaint);
+                    canvas.drawLine(cx - r * 0.08f, cy + r * 0.36f, cx + r * 0.44f, cy - r * 0.28f, checkPaint);
+                }
             }
         }
     }
@@ -562,6 +621,8 @@ public class EveTelegramPollCardView extends FrameLayout implements Theme.Colora
                     && pa.submittingOptionIndex == pb.submittingOptionIndex
                     && pa.poll.active == pb.poll.active
                     && pa.poll.totalVotes == pb.poll.totalVotes
+                    && pa.poll.correctOptionIndex == pb.poll.correctOptionIndex
+                    && TextUtils.equals(pa.poll.explanation, pb.poll.explanation)
                     && Objects.equals(pa.poll.myVoteIndex, pb.poll.myVoteIndex)
                     && TextUtils.equals(pa.poll.question, pb.poll.question)
                     && Objects.equals(pa.poll.options, pb.poll.options)

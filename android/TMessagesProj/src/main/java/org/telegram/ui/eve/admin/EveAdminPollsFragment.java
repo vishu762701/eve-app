@@ -96,8 +96,8 @@ public class EveAdminPollsFragment extends BaseFragment {
                 getBaseSimpleGlass(),
                 glassEngine,
                 getResourceProvider(),
-                "Student Polls",
-                polls.isEmpty() ? "Loading..." : polls.size() + " poll(s)",
+                "Student Quizzes",
+                polls.isEmpty() ? "Loading..." : polls.size() + " quiz(zes)",
                 true,
                 this::fillItems,
                 this::onClick,
@@ -182,7 +182,7 @@ public class EveAdminPollsFragment extends BaseFragment {
         if (!errorText.isEmpty() && polls.isEmpty()) {
             simpleActionBar.setSubtitle("Unable to load");
         } else {
-            simpleActionBar.setSubtitle(polls.size() + " poll(s)");
+            simpleActionBar.setSubtitle(polls.size() + " quiz(zes)");
         }
     }
 
@@ -200,7 +200,7 @@ public class EveAdminPollsFragment extends BaseFragment {
                     ID_RETRY,
                     IconBackgroundColors.RED.top, IconBackgroundColors.RED.bottom,
                     R.drawable.msg_retry,
-                    "Retry Loading Polls",
+                    "Retry Loading Quizzes",
                     errorText,
                     "Retry"));
             items.add(UItem.asShadow(null));
@@ -214,8 +214,8 @@ public class EveAdminPollsFragment extends BaseFragment {
         }
 
         if (polls.isEmpty()) {
-            items.add(UItem.asHeader("Student Polls"));
-            items.add(UItem.asShadow("No polls yet. Tap + in the top bar to create one."));
+            items.add(UItem.asHeader("Student Quizzes"));
+            items.add(UItem.asShadow("No quizzes yet. Tap + in the top bar to create a Telegram Quiz."));
             return;
         }
 
@@ -254,7 +254,8 @@ public class EveAdminPollsFragment extends BaseFragment {
             if (p.id.equals(poll.id)) {
                 optimistic.add(new EveAdminModels.PollItem(
                         p.id, p.question, p.options, targetActive, p.totalVotes,
-                        p.voteCounts, p.createdAt, p.endsAt, p.createdBy));
+                        p.voteCounts, p.createdAt, p.endsAt, p.createdBy,
+                        p.isQuiz, p.correctOptionIndex, p.explanation));
             } else {
                 optimistic.add(p);
             }

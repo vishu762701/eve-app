@@ -28,6 +28,8 @@ public final class EveLocalDiskCache {
 
     private static final String CACHE_DIR_NAME = "eve_swr_cache";
     private static final String FILE_EXT = ".json";
+    public static final long DEFAULT_MAX_DISK_BYTES = 10L * 1024L * 1024L;
+    private static final long MAX_SINGLE_ENTRY_BYTES = 4L * 1024L * 1024L;
 
     public static final class CacheEntry {
         public final String key;
@@ -52,6 +54,7 @@ public final class EveLocalDiskCache {
     private final ExecutorService diskWriter = Executors.newSingleThreadExecutor();
     @Nullable
     private final File explicitDir;
+    private final long maxDiskBytes;
 
     public static EveLocalDiskCache getInstance() {
         EveLocalDiskCache local = instance;
@@ -59,7 +62,7 @@ public final class EveLocalDiskCache {
             synchronized (EveLocalDiskCache.class) {
                 local = instance;
                 if (local == null) {
-                    local = new EveLocalDiskCache(null);
+                    local = new EveLocalDiskCache(null, DEFAULT_MAX_DISK_BYTES);
                     instance = local;
                 }
             }
@@ -68,7 +71,12 @@ public final class EveLocalDiskCache {
     }
 
     public EveLocalDiskCache(@Nullable File customCacheDir) {
+        this(customCacheDir, DEFAULT_MAX_DISK_BYTES);
+    }
+
+    public EveLocalDiskCache(@Nullable File customCacheDir, long maxDiskBytes) {
         this.explicitDir = customCacheDir;
+        this.maxDiskBytes = Math.max(128L, maxDiskBytes);
     }
 
     @Nullable
@@ -243,6 +251,9 @@ public final class EveLocalDiskCache {
                 envelope.put("updatedAt", entry.updatedAtMs);
                 envelope.put("payload", entry.payload);
                 byte[] bytes = envelope.toString().getBytes(StandardCharsets.UTF_8);
+                if (bytes.length > MAX_SINGLE_ENTRY_BYTES) {
+                    return;
+                }
                 try (FileOutputStream fos = new FileOutputStream(tmp, false)) {
                     fos.write(bytes);
                     fos.flush();
@@ -259,11 +270,72 @@ public final class EveLocalDiskCache {
                         tmp.delete();
                     }
                 }
+                target.setLastModified(System.currentTimeMillis());
+                trimDiskCacheLocked(dir);
             } catch (Throwable ignored) {
                 if (tmp.exists()) {
                     tmp.delete();
                 }
             }
+        }
+    }
+
+    public long totalDiskBytes() {
+        File dir = resolveCacheDir();
+        if (dir == null || !dir.exists()) {
+            return 0L;
+        }
+        File[] files = dir.listFiles();
+        if (files == null) {
+            return 0L;
+        }
+        long total = 0L;
+        for (File f : files) {
+            if (f != null && f.isFile() && f.getName().endsWith(FILE_EXT)) {
+                total += Math.max(0L, f.length());
+            }
+        }
+        return total;
+    }
+
+    private void trimDiskCacheLocked(@NonNull File dir) {
+        try {
+            File[] files = dir.listFiles();
+            if (files == null || files.length == 0) {
+                return;
+            }
+            java.util.List<File> cachedFiles = new java.util.ArrayList<>();
+            long totalBytes = 0L;
+            for (File f : files) {
+                if (f == null || !f.isFile()) {
+                    continue;
+                }
+                if (f.getName().endsWith(".tmp")) {
+                    if (System.currentTimeMillis() - f.lastModified() > 60_000L) {
+                        f.delete();
+                    }
+                    continue;
+                }
+                if (f.getName().endsWith(FILE_EXT)) {
+                    cachedFiles.add(f);
+                    totalBytes += Math.max(0L, f.length());
+                }
+            }
+            if (totalBytes <= maxDiskBytes) {
+                return;
+            }
+            java.util.Collections.sort(cachedFiles, java.util.Comparator.comparingLong(File::lastModified));
+            long targetBytes = (maxDiskBytes * 80L) / 100L;
+            for (File victim : cachedFiles) {
+                if (totalBytes <= targetBytes) {
+                    break;
+                }
+                long len = Math.max(0L, victim.length());
+                if (victim.delete()) {
+                    totalBytes = Math.max(0L, totalBytes - len);
+                }
+            }
+        } catch (Throwable ignored) {
         }
     }
 

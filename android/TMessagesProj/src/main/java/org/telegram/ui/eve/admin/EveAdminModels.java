@@ -1301,9 +1301,12 @@ public final class EveAdminModels {
         public final long createdAt;
         public final long endsAt;
         public final String createdBy;
+        public final boolean isQuiz;
+        public final int correctOptionIndex;
+        public final String explanation;
 
         public PollItem(String id, String question, List<String> options, boolean active, int totalVotes) {
-            this(id, question, options, active, totalVotes, null, 0L, 0L, "");
+            this(id, question, options, active, totalVotes, null, 0L, 0L, "", true, -1, "");
         }
 
         public PollItem(
@@ -1316,6 +1319,22 @@ public final class EveAdminModels {
                 long createdAt,
                 long endsAt,
                 String createdBy) {
+            this(id, question, options, active, totalVotes, voteCounts, createdAt, endsAt, createdBy, true, -1, "");
+        }
+
+        public PollItem(
+                String id,
+                String question,
+                List<String> options,
+                boolean active,
+                int totalVotes,
+                java.util.Map<Integer, Integer> voteCounts,
+                long createdAt,
+                long endsAt,
+                String createdBy,
+                boolean isQuiz,
+                int correctOptionIndex,
+                String explanation) {
             this.id = id != null ? id : "";
             this.question = question != null ? question : "";
             this.options = options != null ? Collections.unmodifiableList(new ArrayList<>(options)) : Collections.emptyList();
@@ -1327,6 +1346,9 @@ public final class EveAdminModels {
             this.createdAt = createdAt;
             this.endsAt = endsAt;
             this.createdBy = createdBy != null ? createdBy : "";
+            this.isQuiz = isQuiz;
+            this.correctOptionIndex = correctOptionIndex;
+            this.explanation = explanation != null ? explanation : "";
         }
 
         public int getVotesForOption(int index) {
@@ -1361,6 +1383,10 @@ public final class EveAdminModels {
                     sumVotes = Math.max(0, o.optInt("totalVotes", 0));
                 }
                 int total = o.has("totalVotes") && vc == null ? Math.max(0, o.optInt("totalVotes", sumVotes)) : sumVotes;
+                boolean isQuiz = o.optBoolean("isQuiz", o.optInt("is_quiz", 1) == 1);
+                int correctIdx = (o.has("correctOptionIndex") && !o.isNull("correctOptionIndex"))
+                        ? o.optInt("correctOptionIndex", -1)
+                        : (o.has("correct_option_index") && !o.isNull("correct_option_index") ? o.optInt("correct_option_index", -1) : -1);
                 out.add(new PollItem(
                         clean(o, "id", ""),
                         clean(o, "question", ""),
@@ -1370,7 +1396,10 @@ public final class EveAdminModels {
                         countsMap,
                         o.optLong("createdAt", o.optLong("created_at", 0L)),
                         o.optLong("endsAt", o.optLong("ends_at", 0L)),
-                        clean(o, "createdBy", clean(o, "created_by", ""))
+                        clean(o, "createdBy", clean(o, "created_by", "")),
+                        isQuiz,
+                        correctIdx,
+                        clean(o, "explanation", "")
                 ));
             }
             return out;
@@ -1383,13 +1412,34 @@ public final class EveAdminModels {
         public final String message;
         public final long sentAt;
         public final String sentBy;
+        public final String stickerDocId;
+        public final String stickerAccessHash;
+        public final int stickerDcId;
+        public final String stickerEmoji;
 
         public BroadcastItem(String id, String title, String message, long sentAt, String sentBy) {
+            this(id, title, message, sentAt, sentBy, "", "", 0, "");
+        }
+
+        public BroadcastItem(
+                String id,
+                String title,
+                String message,
+                long sentAt,
+                String sentBy,
+                String stickerDocId,
+                String stickerAccessHash,
+                int stickerDcId,
+                String stickerEmoji) {
             this.id = id != null ? id : "";
             this.title = title != null ? title : "";
             this.message = message != null ? message : "";
             this.sentAt = sentAt;
             this.sentBy = sentBy != null ? sentBy : "";
+            this.stickerDocId = stickerDocId != null ? stickerDocId : "";
+            this.stickerAccessHash = stickerAccessHash != null ? stickerAccessHash : "";
+            this.stickerDcId = Math.max(0, stickerDcId);
+            this.stickerEmoji = stickerEmoji != null ? stickerEmoji : "";
         }
 
         public static List<BroadcastItem> parseList(JSONArray arr) {
@@ -1403,7 +1453,11 @@ public final class EveAdminModels {
                         clean(o, "title", ""),
                         clean(o, "message", ""),
                         o.optLong("sentAt", o.optLong("sent_at", 0L)),
-                        clean(o, "sentBy", clean(o, "sent_by", ""))
+                        clean(o, "sentBy", clean(o, "sent_by", "")),
+                        clean(o, "stickerDocId", clean(o, "sticker_doc_id", "")),
+                        clean(o, "stickerAccessHash", clean(o, "sticker_access_hash", "")),
+                        o.optInt("stickerDcId", o.optInt("sticker_dc_id", 0)),
+                        clean(o, "stickerEmoji", clean(o, "sticker_emoji", ""))
                 ));
             }
             return out;

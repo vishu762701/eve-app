@@ -18,6 +18,77 @@ function getEdgeCache(): Cache | null {
   return null;
 }
 
+function parseSingleByteRange(
+  rangeHeader: string,
+  totalLength: number
+): { start: number; end: number } | "invalid" {
+  const trimmed = rangeHeader.trim();
+  const match = /^bytes=([^,]+)$/i.exec(trimmed);
+  if (!match) return "invalid";
+  const spec = match[1].trim();
+  const dashIdx = spec.indexOf("-");
+  if (dashIdx < 0) return "invalid";
+  const startStr = spec.slice(0, dashIdx).trim();
+  const endStr = spec.slice(dashIdx + 1).trim();
+  if (!startStr && !endStr) return "invalid";
+
+  if (!startStr) {
+    // Suffix byte-range-spec: bytes=-500
+    if (!/^[0-9]+$/.test(endStr)) return "invalid";
+    const suffixLength = Number(endStr);
+    if (!Number.isSafeInteger(suffixLength) || suffixLength <= 0 || totalLength <= 0) {
+      return "invalid";
+    }
+    const start = Math.max(0, totalLength - suffixLength);
+    return { start, end: totalLength - 1 };
+  }
+
+  if (!/^[0-9]+$/.test(startStr)) return "invalid";
+  const start = Number(startStr);
+  if (!Number.isSafeInteger(start) || start < 0 || start >= totalLength) {
+    return "invalid";
+  }
+
+  if (!endStr) {
+    return { start, end: totalLength - 1 };
+  }
+  if (!/^[0-9]+$/.test(endStr)) return "invalid";
+  const rawEnd = Number(endStr);
+  if (!Number.isSafeInteger(rawEnd) || rawEnd < start) {
+    return "invalid";
+  }
+  const end = Math.min(rawEnd, totalLength - 1);
+  return { start, end };
+}
+
+async function applyRangeSupport(
+  c: Context<{ Bindings: Env; Variables: any }, any, any>,
+  fullResponse: Response
+): Promise<Response> {
+  const rangeHeader = c.req.header("range") || c.req.header("Range");
+  const fullBytes = new Uint8Array(await fullResponse.arrayBuffer());
+  const totalLength = fullBytes.byteLength;
+  const baseHeaders = new Headers(fullResponse.headers);
+  baseHeaders.set("Accept-Ranges", "bytes");
+
+  if (!rangeHeader) {
+    baseHeaders.set("Content-Length", String(totalLength));
+    return new Response(fullBytes, { status: 200, headers: baseHeaders });
+  }
+
+  const parsed = parseSingleByteRange(rangeHeader, totalLength);
+  if (parsed === "invalid") {
+    baseHeaders.set("Content-Range", `bytes */${totalLength}`);
+    baseHeaders.set("Content-Length", "0");
+    return new Response(null, { status: 416, headers: baseHeaders });
+  }
+
+  const slice = fullBytes.subarray(parsed.start, parsed.end + 1);
+  baseHeaders.set("Content-Range", `bytes ${parsed.start}-${parsed.end}/${totalLength}`);
+  baseHeaders.set("Content-Length", String(slice.byteLength));
+  return new Response(slice, { status: 206, headers: baseHeaders });
+}
+
 export async function serveCachedStorageMedia(
   c: Context<{ Bindings: Env; Variables: any }, any, any>,
   storageRef: string,
@@ -37,7 +108,7 @@ export async function serveCachedStorageMedia(
       cacheKey = new Request(keyUrl.toString(), { method: "GET" });
       const cached = await edgeCache.match(cacheKey);
       if (cached) {
-        return cached;
+        return applyRangeSupport(c, cached);
       }
     } catch {}
   }
@@ -51,6 +122,8 @@ export async function serveCachedStorageMedia(
   const headers: Record<string, string> = {
     "Content-Type": asset.contentType || options?.fallbackContentType || "application/octet-stream",
     "Cache-Control": PUBLIC_MEDIA_CACHE_CONTROL,
+    "Accept-Ranges": "bytes",
+    "Content-Length": String(asset.body.byteLength),
     ...(options?.contentDisposition ? { "Content-Disposition": options.contentDisposition } : {}),
     ...(options?.extraHeaders || {}),
   };
@@ -75,5 +148,5 @@ export async function serveCachedStorageMedia(
     }
   }
 
-  return response;
+  return applyRangeSupport(c, response);
 }

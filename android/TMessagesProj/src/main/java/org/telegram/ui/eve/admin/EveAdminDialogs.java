@@ -21,6 +21,7 @@ import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Cells.TextCheckCell;
 import org.telegram.ui.Components.BulletinFactory;
+import org.telegram.ui.Components.EditTextEmoji;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.eve.premium.EvePremiumRepository;
 
@@ -52,8 +53,21 @@ public final class EveAdminDialogs {
         if (activity == null) return;
         Theme.ResourcesProvider rp = fragment.getResourceProvider();
 
-        LinearLayout container = makeFormContainer(activity);
-        EditText nameInput = addField(activity, container, "Exam Name (e.g. SSC CGL Tier 1)", existing != null ? existing.examName : "", InputType.TYPE_CLASS_TEXT, rp);
+        EveAnimatedEmojiHelper.SheetHost host = new EveAnimatedEmojiHelper.SheetHost(
+                activity,
+                existing == null ? "Create Exam" : "Edit Exam",
+                rp);
+        LinearLayout container = host.formColumn;
+        addFieldLabel(activity, container, "Exam Name (e.g. SSC CGL Tier 1)", rp);
+        EditTextEmoji nameInput = EveAnimatedEmojiHelper.createEditTextEmoji(
+                activity,
+                host.root,
+                fragment,
+                "Exam Name (e.g. SSC CGL Tier 1)",
+                existing != null ? existing.examName : "",
+                false,
+                rp);
+        container.addView(nameInput, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 2, 0, 10));
         EditText categoryInput = addField(activity, container, "Category (SSC, UPSC, Banking, Railways)", existing != null ? existing.category : "SSC", InputType.TYPE_CLASS_TEXT, rp);
         EditText minutesInput = addField(activity, container, "Time Limit (minutes 1-600)", String.valueOf(existing != null ? existing.timeLimitMinutes : 60), InputType.TYPE_CLASS_NUMBER, rp);
         EditText countInput = addField(activity, container, "Questions Per Test (1-200)", String.valueOf(existing != null ? existing.questionCount : 25), InputType.TYPE_CLASS_NUMBER, rp);
@@ -193,85 +207,103 @@ public final class EveAdminDialogs {
                 ? addField(activity, container, "AI Generation Prompt Notes (optional)", "", InputType.TYPE_CLASS_TEXT, rp)
                 : null;
 
-        AlertDialog.Builder builder = new AlertDialog.Builder(activity, rp)
-                .setTitle(existing == null ? "Create Exam" : "Edit Exam: " + existing.examName)
-                .setView(wrapScroll(activity, container))
-                .setPositiveButton(existing == null ? "Create" : "Save Settings", (d, w) -> {
-                    String name = text(nameInput);
-                    String category = textOr(categoryInput, "General");
-                    int minutes = parseIntBounded(minutesInput, 60, 1, 600);
-                    int qCount = parseIntBounded(countInput, 25, 1, 200);
-                    String neg = customNegInput.getVisibility() == android.view.View.VISIBLE
-                            ? textOr(customNegInput, "0")
-                            : selectedNeg[0];
-                    String mode = selectedMode[0];
-                    String prompt = promptInput != null ? text(promptInput) : "";
-                    java.util.Map<String, Double> cutoffsMap = new java.util.LinkedHashMap<>();
-                    for (int i = 0; i < cutoffCats.length; i++) {
-                        String rawCut = text(cutoffInputs[i]);
-                        if (!rawCut.isEmpty()) {
-                            try {
-                                double v = Double.parseDouble(rawCut);
-                                if (!Double.isNaN(v) && !Double.isInfinite(v) && v >= 0.0) {
-                                    cutoffsMap.put(cutoffCats[i], v);
-                                }
-                            } catch (NumberFormatException ignored) {
-                            }
+        LinearLayout actionRow = new LinearLayout(activity);
+        actionRow.setOrientation(LinearLayout.HORIZONTAL);
+        actionRow.setPadding(0, AndroidUtilities.dp(10), 0, 0);
+        TextView cancelBtn = makeSheetButton(activity, "Cancel", false, rp);
+        TextView saveBtn = makeSheetButton(activity, existing == null ? "Create" : "Save Settings", true, rp);
+        actionRow.addView(cancelBtn, LayoutHelper.createLinear(0, 42, 1f, 0, 0, 8, 0));
+        actionRow.addView(saveBtn, LayoutHelper.createLinear(0, 42, 1f, 8, 0, 0, 0));
+        container.addView(actionRow, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+
+        cancelBtn.setOnClickListener(v -> host.sheet.dismiss());
+        saveBtn.setOnClickListener(v -> {
+            String name = EveAnimatedEmojiHelper.encode(nameInput.getText()).trim();
+            String category = textOr(categoryInput, "General");
+            int minutes = parseIntBounded(minutesInput, 60, 1, 600);
+            int qCount = parseIntBounded(countInput, 25, 1, 200);
+            String neg = customNegInput.getVisibility() == android.view.View.VISIBLE
+                    ? textOr(customNegInput, "0")
+                    : selectedNeg[0];
+            String mode = selectedMode[0];
+            String prompt = promptInput != null ? text(promptInput) : "";
+            java.util.Map<String, Double> cutoffsMap = new java.util.LinkedHashMap<>();
+            for (int i = 0; i < cutoffCats.length; i++) {
+                String rawCut = text(cutoffInputs[i]);
+                if (!rawCut.isEmpty()) {
+                    try {
+                        double val = Double.parseDouble(rawCut);
+                        if (!Double.isNaN(val) && !Double.isInfinite(val) && val >= 0.0) {
+                            cutoffsMap.put(cutoffCats[i], val);
                         }
+                    } catch (NumberFormatException ignored) {
                     }
-                    boolean autoGenOn = autoGenCheck.isChecked();
-                    String autoGenTimeVal = selectedTime[0];
-                    if (name.isEmpty()) {
-                        showError(fragment, "Exam name cannot be empty.");
-                        return;
+                }
+            }
+            boolean autoGenOn = autoGenCheck.isChecked();
+            String autoGenTimeVal = selectedTime[0];
+            if (name.isEmpty()) {
+                showError(fragment, "Exam name cannot be empty.");
+                return;
+            }
+            host.sheet.dismiss();
+            EveAdminRepository.ResultCallback<String> cb = callback(fragment, msg -> {
+                showInfo(fragment, msg);
+                if (onSaved != null) onSaved.run();
+            });
+            repo.runWithAdminToken(cb, token -> {
+                if (existing == null) {
+                    String id = repo.createExam(token, name, category, minutes, qCount, "Mock 1", neg, mode, prompt);
+                    if (!cutoffsMap.isEmpty() || !autoGenOn || !"00:00".equals(autoGenTimeVal)) {
+                        repo.updateExamSettings(token, id, name, category, minutes, qCount, neg, mode, cutoffsMap, autoGenOn, autoGenTimeVal);
                     }
-                    EveAdminRepository.ResultCallback<String> cb = callback(fragment, msg -> {
-                        showInfo(fragment, msg);
-                        if (onSaved != null) onSaved.run();
-                    });
-                    repo.runWithAdminToken(cb, token -> {
-                        if (existing == null) {
-                            String id = repo.createExam(token, name, category, minutes, qCount, "Mock 1", neg, mode, prompt);
-                            if (!cutoffsMap.isEmpty() || !autoGenOn || !"00:00".equals(autoGenTimeVal)) {
-                                repo.updateExamSettings(token, id, name, category, minutes, qCount, neg, mode, cutoffsMap, autoGenOn, autoGenTimeVal);
-                            }
-                            repo.postSuccess(cb, "Exam created (" + id + ").");
-                        } else {
-                            repo.updateExamSettings(token, existing.id, name, category, minutes, qCount, neg, mode, cutoffsMap, autoGenOn, autoGenTimeVal);
-                            repo.postSuccess(cb, "Exam settings & cutoffs saved.");
-                        }
-                    });
-                })
-                .setNegativeButton("Cancel", null);
+                    repo.postSuccess(cb, "Exam created (" + id + ").");
+                } else {
+                    repo.updateExamSettings(token, existing.id, name, category, minutes, qCount, neg, mode, cutoffsMap, autoGenOn, autoGenTimeVal);
+                    repo.postSuccess(cb, "Exam settings & cutoffs saved.");
+                }
+            });
+        });
+
         if (existing != null) {
-            builder.setNeutralButton("Duplicate / Pause", (d, w) -> new AlertDialog.Builder(activity, rp)
-                    .setTitle(existing.examName)
-                    .setItems(new String[] {
-                            "Duplicate Exam as Copy",
-                            "Pause Exam & Unpublish All Tests"
-                    }, (d2, action) -> {
-                        EveAdminRepository.ResultCallback<String> cb = callback(fragment, msg -> {
-                            showInfo(fragment, msg);
-                            if (onSaved != null) onSaved.run();
-                        });
-                        repo.runWithAdminToken(cb, token -> {
-                            if (action == 0) {
-                                String copyId = repo.createExam(token, existing.examName + " (Copy)", existing.category,
-                                        existing.timeLimitMinutes, existing.questionCount, existing.testNumber,
-                                        existing.negativeMarkingText, "paused", existing.generationPrompt);
-                                repo.postSuccess(cb, "Duplicated as draft exam (" + copyId + ").");
-                            } else {
-                                repo.updateExam(token, existing.id, existing.examName, existing.category,
-                                        existing.timeLimitMinutes, existing.questionCount, existing.negativeMarkingText, "paused");
-                                repo.unpublishExamTests(token, existing.id);
-                                repo.postSuccess(cb, "Exam paused & tests unpublished.");
-                            }
-                        });
-                    })
-                    .setNegativeButton("Cancel", null)
-                    .show());
+            TextView dupPauseBtn = makeSheetButton(activity, "Duplicate / Pause", false, rp);
+            dupPauseBtn.setOnClickListener(v -> {
+                host.sheet.dismiss();
+                new AlertDialog.Builder(activity, rp)
+                        .setTitle(EveAnimatedEmojiHelper.stripMarkupToPlainText(existing.examName))
+                        .setItems(new String[] {
+                                "Duplicate Exam as Copy",
+                                "Pause Exam & Unpublish All Tests"
+                        }, (d2, action) -> {
+                            EveAdminRepository.ResultCallback<String> cb = callback(fragment, msg -> {
+                                showInfo(fragment, msg);
+                                if (onSaved != null) onSaved.run();
+                            });
+                            repo.runWithAdminToken(cb, token -> {
+                                if (action == 0) {
+                                    String copyId = repo.createExam(token, existing.examName + " (Copy)", existing.category,
+                                            existing.timeLimitMinutes, existing.questionCount, existing.testNumber,
+                                            existing.negativeMarkingText, "paused", existing.generationPrompt);
+                                    repo.postSuccess(cb, "Duplicated as draft exam (" + copyId + ").");
+                                } else {
+                                    repo.updateExam(token, existing.id, existing.examName, existing.category,
+                                            existing.timeLimitMinutes, existing.questionCount, existing.negativeMarkingText, "paused");
+                                    repo.unpublishExamTests(token, existing.id);
+                                    repo.postSuccess(cb, "Exam paused & tests unpublished.");
+                                }
+                            });
+                        })
+                        .setNegativeButton("Cancel", null)
+                        .show();
+            });
+            container.addView(dupPauseBtn, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 40, 0, 8, 0, 0));
         }
-        builder.show();
+        host.sheet.setOnShowListener(d -> nameInput.onResume());
+        host.sheet.setOnDismissListener(d -> {
+            nameInput.onPause();
+            nameInput.onDestroy();
+        });
+        fragment.showDialog(host.sheet);
     }
 
     public static void showDuplicateExamDialog(
@@ -282,32 +314,50 @@ public final class EveAdminDialogs {
         if (source == null) return;
         Activity activity = fragment.getParentActivity();
         if (activity == null) return;
-        LinearLayout container = makeFormContainer(activity);
-        EditText nameInput = addField(activity, container, "New Exam Name", source.examName + " (Copy)", InputType.TYPE_CLASS_TEXT);
-        EditText categoryInput = addField(activity, container, "Category", source.category, InputType.TYPE_CLASS_TEXT);
-        EditText publishInput = addField(activity, container, "Publish Mode (paused | live | inherit)", "paused", InputType.TYPE_CLASS_TEXT);
-        new AlertDialog.Builder(activity)
-                .setTitle("Duplicate Exam")
-                .setView(wrapScroll(activity, container))
-                .setPositiveButton("Create Copy", (d, w) -> {
-                    String name = text(nameInput);
-                    if (name.isEmpty()) {
-                        showError(fragment, "Exam name cannot be empty.");
-                        return;
-                    }
-                    EveAdminRepository.ResultCallback<String> cb = callback(fragment, msg -> {
-                        showInfo(fragment, msg);
-                        if (onSaved != null) onSaved.run();
-                    });
-                    repo.runWithAdminToken(cb, token -> {
-                        String copyId = repo.createExam(token, name, textOr(categoryInput, source.category),
-                                source.timeLimitMinutes, source.questionCount, source.testNumber,
-                                source.negativeMarkingText, normalizePublishMode(text(publishInput)), source.generationPrompt);
-                        repo.postSuccess(cb, "Duplicated exam (" + copyId + ").");
-                    });
-                })
-                .setNegativeButton("Cancel", null)
-                .show();
+        Theme.ResourcesProvider rp = fragment.getResourceProvider();
+        EveAnimatedEmojiHelper.SheetHost host = new EveAnimatedEmojiHelper.SheetHost(activity, "Duplicate Exam", rp);
+        LinearLayout container = host.formColumn;
+        addFieldLabel(activity, container, "New Exam Name", rp);
+        EditTextEmoji nameInput = EveAnimatedEmojiHelper.createEditTextEmoji(
+                activity, host.root, fragment, "New Exam Name", source.examName + " (Copy)", false, rp);
+        container.addView(nameInput, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 2, 0, 10));
+        EditText categoryInput = addField(activity, container, "Category", source.category, InputType.TYPE_CLASS_TEXT, rp);
+        EditText publishInput = addField(activity, container, "Publish Mode (paused | live | inherit)", "paused", InputType.TYPE_CLASS_TEXT, rp);
+
+        LinearLayout actionRow = new LinearLayout(activity);
+        actionRow.setOrientation(LinearLayout.HORIZONTAL);
+        actionRow.setPadding(0, AndroidUtilities.dp(10), 0, 0);
+        TextView cancelBtn = makeSheetButton(activity, "Cancel", false, rp);
+        TextView copyBtn = makeSheetButton(activity, "Create Copy", true, rp);
+        actionRow.addView(cancelBtn, LayoutHelper.createLinear(0, 42, 1f, 0, 0, 8, 0));
+        actionRow.addView(copyBtn, LayoutHelper.createLinear(0, 42, 1f, 8, 0, 0, 0));
+        container.addView(actionRow, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+
+        cancelBtn.setOnClickListener(v -> host.sheet.dismiss());
+        copyBtn.setOnClickListener(v -> {
+            String name = EveAnimatedEmojiHelper.encode(nameInput.getText()).trim();
+            if (name.isEmpty()) {
+                showError(fragment, "Exam name cannot be empty.");
+                return;
+            }
+            host.sheet.dismiss();
+            EveAdminRepository.ResultCallback<String> cb = callback(fragment, msg -> {
+                showInfo(fragment, msg);
+                if (onSaved != null) onSaved.run();
+            });
+            repo.runWithAdminToken(cb, token -> {
+                String copyId = repo.createExam(token, name, textOr(categoryInput, source.category),
+                        source.timeLimitMinutes, source.questionCount, source.testNumber,
+                        source.negativeMarkingText, normalizePublishMode(text(publishInput)), source.generationPrompt);
+                repo.postSuccess(cb, "Duplicated exam (" + copyId + ").");
+            });
+        });
+        host.sheet.setOnShowListener(d -> nameInput.onResume());
+        host.sheet.setOnDismissListener(d -> {
+            nameInput.onPause();
+            nameInput.onDestroy();
+        });
+        fragment.showDialog(host.sheet);
     }
 
     public static void showGenerateTestDialog(
@@ -1400,8 +1450,15 @@ public final class EveAdminDialogs {
         if (activity == null || parentExam == null) return;
         Theme.ResourcesProvider rp = fragment.getResourceProvider();
 
-        LinearLayout container = makeFormContainer(activity);
-        EditText nameInput = addField(activity, container, "Sub-Exam Name (e.g. Tier 1 Maths)", "", InputType.TYPE_CLASS_TEXT, rp);
+        EveAnimatedEmojiHelper.SheetHost host = new EveAnimatedEmojiHelper.SheetHost(
+                activity,
+                "Add Sub-Exam under " + EveAnimatedEmojiHelper.stripMarkupToPlainText(parentExam.examName),
+                rp);
+        LinearLayout container = host.formColumn;
+        addFieldLabel(activity, container, "Sub-Exam Name (e.g. Tier 1 Maths)", rp);
+        EditTextEmoji nameInput = EveAnimatedEmojiHelper.createEditTextEmoji(
+                activity, host.root, fragment, "Sub-Exam Name (e.g. Tier 1 Maths)", "", false, rp);
+        container.addView(nameInput, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 2, 0, 10));
         EditText minutesInput = addField(activity, container, "Time Limit (minutes 1-600)", String.valueOf(parentExam.timeLimitMinutes > 0 ? parentExam.timeLimitMinutes : 60), InputType.TYPE_CLASS_NUMBER, rp);
         EditText countInput = addField(activity, container, "Questions Per Test (1-200)", String.valueOf(parentExam.questionCount > 0 ? parentExam.questionCount : 25), InputType.TYPE_CLASS_NUMBER, rp);
         EditText negInput = addField(activity, container, "Negative Marking (0, 0.25, 1/3, 0.5)", parentExam.negativeMarkingText, InputType.TYPE_CLASS_TEXT, rp);
@@ -1427,45 +1484,72 @@ public final class EveAdminDialogs {
                 })
                 .setNegativeButton("Cancel", null)
                 .show());
-        container.addView(publishPicker, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 4, 0, 8));
+        container.addView(publishPicker, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 4, 0, 12));
 
-        AlertDialog.Builder builder = new AlertDialog.Builder(activity, rp)
-                .setTitle("Add Sub-Exam under " + parentExam.examName)
-                .setView(wrapScroll(activity, container))
-                .setPositiveButton("Create Sub-Exam", (d, w) -> {
-                    String name = text(nameInput);
-                    if (name.isEmpty()) {
-                        showError(fragment, "Sub-exam name cannot be empty.");
-                        return;
-                    }
-                    int minutes = parseIntBounded(minutesInput, 60, 1, 600);
-                    int qCount = parseIntBounded(countInput, 25, 1, 200);
-                    String neg = textOr(negInput, "0");
-                    String prompt = text(promptInput);
-                    String mode = selectedMode[0];
+        LinearLayout actionRow = new LinearLayout(activity);
+        actionRow.setOrientation(LinearLayout.HORIZONTAL);
+        TextView cancelBtn = makeSheetButton(activity, "Cancel", false, rp);
+        TextView createBtn = makeSheetButton(activity, "Create Sub-Exam", true, rp);
+        actionRow.addView(cancelBtn, LayoutHelper.createLinear(0, 42, 1f, 0, 0, 8, 0));
+        actionRow.addView(createBtn, LayoutHelper.createLinear(0, 42, 1f, 8, 0, 0, 0));
+        container.addView(actionRow, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
 
-                    EveAdminRepository.ResultCallback<EveAdminModels.AdminExamItem> cb = callback(fragment, createdItem -> {
-                        BulletinFactory.of(fragment).createSimpleBulletin(R.raw.contact_check,
-                                "Sub-exam created! Tap its avatar to customize photo.").show();
-                        repo.invalidateCache();
-                        if (onCreated != null) onCreated.run();
-                        if (createdItem != null) {
-                            fragment.presentFragment(new EveAdminExamDetailFragment(createdItem, null, onCreated));
-                        }
-                    });
-                    repo.runWithAdminToken(cb, token -> {
-                        String newId = repo.createExamWithParent(
-                                token, name, parentExam.category, minutes, qCount, "Test 1",
-                                neg, mode, prompt, parentExam.id);
-                        EveAdminModels.AdminExamItem item = !newId.isEmpty()
-                                ? new EveAdminModels.AdminExamItem(
-                                        newId, name, parentExam.category, minutes, qCount, "Test 1",
-                                        neg, mode, prompt, parentExam.id, "", "", "", "", "", -1)
-                                : null;
-                        repo.postSuccess(cb, item);
-                    });
-                })
-                .setNegativeButton("Cancel", null);
-        fragment.showDialog(builder.create());
+        cancelBtn.setOnClickListener(v -> host.sheet.dismiss());
+        createBtn.setOnClickListener(v -> {
+            String name = EveAnimatedEmojiHelper.encode(nameInput.getText()).trim();
+            if (name.isEmpty()) {
+                showError(fragment, "Sub-exam name cannot be empty.");
+                return;
+            }
+            host.sheet.dismiss();
+            int minutes = parseIntBounded(minutesInput, 60, 1, 600);
+            int qCount = parseIntBounded(countInput, 25, 1, 200);
+            String neg = textOr(negInput, "0");
+            String prompt = text(promptInput);
+            String mode = selectedMode[0];
+
+            EveAdminRepository.ResultCallback<EveAdminModels.AdminExamItem> cb = callback(fragment, createdItem -> {
+                BulletinFactory.of(fragment).createSimpleBulletin(R.raw.contact_check,
+                        "Sub-exam created! Tap its avatar to customize photo.").show();
+                repo.invalidateCache();
+                if (onCreated != null) onCreated.run();
+                if (createdItem != null) {
+                    fragment.presentFragment(new EveAdminExamDetailFragment(createdItem, null, onCreated));
+                }
+            });
+            repo.runWithAdminToken(cb, token -> {
+                String newId = repo.createExamWithParent(
+                        token, name, parentExam.category, minutes, qCount, "Test 1",
+                        neg, mode, prompt, parentExam.id);
+                EveAdminModels.AdminExamItem item = !newId.isEmpty()
+                        ? new EveAdminModels.AdminExamItem(
+                                newId, name, parentExam.category, minutes, qCount, "Test 1",
+                                neg, mode, prompt, parentExam.id, "", "", "", "", "", -1)
+                        : null;
+                repo.postSuccess(cb, item);
+            });
+        });
+        host.sheet.setOnShowListener(d -> nameInput.onResume());
+        host.sheet.setOnDismissListener(d -> {
+            nameInput.onPause();
+            nameInput.onDestroy();
+        });
+        fragment.showDialog(host.sheet);
+    }
+
+    private static TextView makeSheetButton(Context context, String label, boolean primary, Theme.ResourcesProvider rp) {
+        TextView tv = new TextView(context);
+        tv.setText(label);
+        tv.setGravity(Gravity.CENTER);
+        tv.setTextSize(android.util.TypedValue.COMPLEX_UNIT_DIP, 14);
+        tv.setTypeface(AndroidUtilities.bold());
+        int accent = Theme.getColor(Theme.key_featuredStickers_addButton, rp);
+        tv.setBackground(Theme.createRoundRectDrawable(
+                AndroidUtilities.dp(10),
+                primary ? accent : Theme.multAlpha(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, rp), 0.14f)));
+        tv.setTextColor(primary
+                ? Theme.getColor(Theme.key_featuredStickers_buttonText, rp)
+                : Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, rp));
+        return tv;
     }
 }

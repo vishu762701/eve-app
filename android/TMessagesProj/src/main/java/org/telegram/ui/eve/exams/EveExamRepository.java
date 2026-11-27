@@ -801,11 +801,15 @@ public final class EveExamRepository {
                 JSONObject obj = arr.optJSONObject(i);
                 if (obj == null) continue;
                 items.add(new EveExamModels.BroadcastItem(
-                        obj.optString("id", ""),
-                        obj.optString("title", "EVE Update"),
-                        obj.optString("message", ""),
-                        obj.optString("type", "announcement"),
-                        obj.optLong("sentAt", 0L)
+                        cleanOptString(obj, "id", ""),
+                        cleanOptString(obj, "title", "EVE Update"),
+                        cleanOptString(obj, "message", ""),
+                        cleanOptString(obj, "type", "announcement"),
+                        obj.optLong("sentAt", 0L),
+                        cleanOptString(obj, "stickerDocId", cleanOptString(obj, "sticker_doc_id", "")),
+                        cleanOptString(obj, "stickerAccessHash", cleanOptString(obj, "sticker_access_hash", "")),
+                        obj.optInt("stickerDcId", obj.optInt("sticker_dc_id", 0)),
+                        cleanOptString(obj, "stickerEmoji", cleanOptString(obj, "sticker_emoji", ""))
                 ));
             }
         }
@@ -920,6 +924,12 @@ public final class EveExamRepository {
                 needsFallbackIndices.add(activePolls.size());
                 needsFallbackPollIds.add(id);
             }
+            boolean isQuiz = o.optBoolean("isQuiz", o.optInt("is_quiz", 1) == 1);
+            int correctOptionIndex = (o.has("correctOptionIndex") && !o.isNull("correctOptionIndex"))
+                    ? o.optInt("correctOptionIndex", -1)
+                    : (o.has("correct_option_index") && !o.isNull("correct_option_index") ? o.optInt("correct_option_index", -1) : -1);
+            Boolean isCorrect = (o.has("isCorrect") && !o.isNull("isCorrect")) ? Boolean.valueOf(o.optBoolean("isCorrect")) : null;
+            String explanation = cleanOptString(o, "explanation", "");
             activePolls.add(new EvePollModel(
                     id,
                     question,
@@ -930,7 +940,11 @@ public final class EveExamRepository {
                     o.optLong("createdAt", 0L),
                     endsAt,
                     o.optString("createdBy", ""),
-                    myVote
+                    myVote,
+                    isQuiz,
+                    correctOptionIndex,
+                    isCorrect,
+                    explanation
             ));
         }
         // Only run concurrent vote fallback if an older Worker version did not embed userVote.
@@ -1154,17 +1168,48 @@ public final class EveExamRepository {
         });
     }
 
+    public static final class QuizVoteOutcome {
+        public final boolean isQuiz;
+        public final int correctOptionIndex;
+        public final Boolean isCorrect;
+        public final String explanation;
+
+        public QuizVoteOutcome(boolean isQuiz, int correctOptionIndex, Boolean isCorrect, String explanation) {
+            this.isQuiz = isQuiz;
+            this.correctOptionIndex = correctOptionIndex;
+            this.isCorrect = isCorrect;
+            this.explanation = explanation != null ? explanation : "";
+        }
+    }
+
     public void submitPollVote(String pollId, int optionIndex, ApiCallback<Boolean> callback) {
+        submitQuizVote(pollId, optionIndex, (outcome, err) -> {
+            if (callback != null) {
+                callback.onComplete(outcome != null, err);
+            }
+        });
+    }
+
+    public void submitQuizVote(String pollId, int optionIndex, ApiCallback<QuizVoteOutcome> callback) {
         if (pollId == null || pollId.trim().isEmpty() || optionIndex < 0) {
-            postComplete(callback, false, "Invalid poll vote.");
+            postComplete(callback, null, "Invalid quiz vote.");
             return;
         }
         withFreshToken(callback, token -> {
             JSONObject payload = new JSONObject();
             payload.put("optionIndex", optionIndex);
-            backendClient.postJsonRoot("/api/polls/" + urlEncode(pollId.trim()) + "/vote", token, payload);
+            JSONObject root = backendClient.postJsonRoot("/api/polls/" + urlEncode(pollId.trim()) + "/vote", token, payload);
             invalidateSwrKey("polls_active");
-            postComplete(callback, true, "");
+            JSONObject data = root != null ? root.optJSONObject("data") : null;
+            boolean isQuiz = data == null || data.optBoolean("isQuiz", true);
+            int correctIdx = (data != null && data.has("correctOptionIndex") && !data.isNull("correctOptionIndex"))
+                    ? data.optInt("correctOptionIndex", -1)
+                    : -1;
+            Boolean isCorrect = (data != null && data.has("isCorrect") && !data.isNull("isCorrect"))
+                    ? Boolean.valueOf(data.optBoolean("isCorrect"))
+                    : null;
+            String explanation = data != null ? cleanOptString(data, "explanation", "") : "";
+            postComplete(callback, new QuizVoteOutcome(isQuiz, correctIdx, isCorrect, explanation), "");
         });
     }
 
@@ -1257,6 +1302,17 @@ public final class EveExamRepository {
         );
     }
 
+    private static String cleanOptString(JSONObject obj, String key, String fallback) {
+        if (obj == null || key == null || !obj.has(key) || obj.isNull(key)) {
+            return fallback;
+        }
+        String val = obj.optString(key, "").trim();
+        if (val.isEmpty() || "null".equalsIgnoreCase(val)) {
+            return fallback;
+        }
+        return val;
+    }
+
     public static List<EveExamModels.TestQuestion> parseQuestionsArray(JSONArray arr, String fallbackExamId, String fallbackTestId) {
         List<EveExamModels.TestQuestion> list = new ArrayList<>();
         if (arr == null) {
@@ -1267,7 +1323,7 @@ public final class EveExamRepository {
             if (obj == null) {
                 continue;
             }
-            String qId = obj.optString("id", "");
+            String qId = cleanOptString(obj, "id", "");
             if (qId.trim().isEmpty()) {
                 if (fallbackTestId != null && !fallbackTestId.trim().isEmpty()) {
                     qId = fallbackTestId.trim() + "_" + i;
@@ -1277,7 +1333,7 @@ public final class EveExamRepository {
             }
             list.add(new EveExamModels.TestQuestion(
                     qId,
-                    obj.optString("examId", fallbackExamId != null ? fallbackExamId : ""),
+                    cleanOptString(obj, "examId", fallbackExamId != null ? fallbackExamId : ""),
                     i + 1,
                     firstNonEmpty(obj, "questionText", "question_text"),
                     firstNonEmpty(obj, "questionTextHi", "question_text_hi"),
@@ -1289,7 +1345,7 @@ public final class EveExamRepository {
                     firstNonEmpty(obj, "optionBHi", "option_b_hi"),
                     firstNonEmpty(obj, "optionCHi", "option_c_hi"),
                     firstNonEmpty(obj, "optionDHi", "option_d_hi"),
-                    obj.optString("topic", "")
+                    cleanOptString(obj, "topic", "")
             ));
         }
         return list;

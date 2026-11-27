@@ -15,7 +15,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
 import android.widget.FrameLayout;
-import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -25,6 +24,8 @@ import androidx.recyclerview.widget.PagerSnapHelper;
 import androidx.recyclerview.widget.RecyclerView;
 
 import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.ApplicationLoader;
+import org.telegram.messenger.FileLog;
 import org.telegram.messenger.ImageLocation;
 import org.telegram.messenger.browser.Browser;
 import org.telegram.ui.ActionBar.Theme;
@@ -34,17 +35,39 @@ import org.telegram.ui.Components.VideoPlayer;
 import org.telegram.ui.eve.admin.EveAdminModels;
 import org.telegram.ui.eve.auth.EveBackendClient;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Horizontal Telegram-native Banner Carousel rendered above EVE Home Exams.
- * Exact dimensions: width matches exam row container (12dp horizontal margins matching Telegram cards),
- * height = 2.5x single exam row height (Math.round(dp(72) * 2.5f) = 180dp).
+ * Video banners are downloaded once per banner ID into a capped (40 MB LRU) disk cache
+ * under {@code cacheDir/eve_banner_media/<bannerId>.mp4} and played locally with full
+ * defensive try/catch fallback so corrupt/unsupported streams can never crash the home tab.
  */
 public class EveHomeBannerCarouselView extends FrameLayout implements Theme.Colorable {
+
+    private static final String BANNER_MEDIA_CACHE_DIR = "eve_banner_media";
+    private static final long MAX_VIDEO_CACHE_BYTES = 40L * 1024L * 1024L;
+    private static final long MAX_SINGLE_BANNER_BYTES = 24L * 1024L * 1024L;
+
+    private static final ExecutorService VIDEO_FETCH_EXECUTOR = Executors.newSingleThreadExecutor();
+    private static final ConcurrentHashMap<String, List<BannerDownloadListener>> IN_FLIGHT = new ConcurrentHashMap<>();
+
+    private interface BannerDownloadListener {
+        void onComplete(@Nullable File cachedFile);
+    }
 
     private final Theme.ResourcesProvider resourcesProvider;
     private final RecyclerView recyclerView;
@@ -172,6 +195,188 @@ public class EveHomeBannerCarouselView extends FrameLayout implements Theme.Colo
         colors.add(Theme.key_windowBackgroundWhiteGrayText);
     }
 
+    @Nullable
+    private static File resolveBannerMediaCacheDir(@Nullable Context ctx) {
+        try {
+            Context appCtx = ctx != null ? ctx.getApplicationContext() : ApplicationLoader.applicationContext;
+            if (appCtx == null) {
+                return null;
+            }
+            File base = appCtx.getCacheDir();
+            if (base == null) {
+                return null;
+            }
+            File dir = new File(base, BANNER_MEDIA_CACHE_DIR);
+            if (!dir.exists()) {
+                dir.mkdirs();
+            }
+            return dir;
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    @NonNull
+    private static String safeBannerFileKey(@NonNull EveAdminModels.BannerItem banner, @NonNull String url) {
+        String id = !TextUtils.isEmpty(banner.id) ? banner.id.trim() : Integer.toHexString(url.hashCode());
+        StringBuilder clean = new StringBuilder();
+        for (int i = 0; i < id.length() && clean.length() < 48; i++) {
+            char c = id.charAt(i);
+            if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_') {
+                clean.append(c);
+            } else {
+                clean.append('_');
+            }
+        }
+        if (clean.length() == 0) {
+            clean.append("banner_").append(Math.abs(url.hashCode()));
+        }
+        return clean.toString();
+    }
+
+    private static void fetchVideoToCacheOnce(
+            @Nullable Context ctx,
+            @NonNull String cacheKey,
+            @NonNull String remoteUrl,
+            @NonNull BannerDownloadListener listener) {
+        File dir = resolveBannerMediaCacheDir(ctx);
+        if (dir == null) {
+            AndroidUtilities.runOnUIThread(() -> listener.onComplete(null));
+            return;
+        }
+        File target = new File(dir, cacheKey + ".mp4");
+        if (target.exists() && target.isFile() && target.length() > 0L) {
+            target.setLastModified(System.currentTimeMillis());
+            AndroidUtilities.runOnUIThread(() -> listener.onComplete(target));
+            return;
+        }
+
+        boolean shouldStartDownload = false;
+        synchronized (IN_FLIGHT) {
+            List<BannerDownloadListener> listeners = IN_FLIGHT.get(cacheKey);
+            if (listeners == null) {
+                listeners = new ArrayList<>();
+                listeners.add(listener);
+                IN_FLIGHT.put(cacheKey, listeners);
+                shouldStartDownload = true;
+            } else {
+                listeners.add(listener);
+            }
+        }
+        if (!shouldStartDownload) {
+            return;
+        }
+
+        VIDEO_FETCH_EXECUTOR.execute(() -> {
+            File resultFile = null;
+            File tmp = new File(dir, cacheKey + ".tmp");
+            HttpURLConnection conn = null;
+            try {
+                if (target.exists() && target.isFile() && target.length() > 0L) {
+                    target.setLastModified(System.currentTimeMillis());
+                    resultFile = target;
+                } else {
+                    conn = (HttpURLConnection) new URL(remoteUrl).openConnection();
+                    conn.setConnectTimeout(15000);
+                    conn.setReadTimeout(25000);
+                    conn.setInstanceFollowRedirects(true);
+                    int code = conn.getResponseCode();
+                    if (code >= 200 && code < 300) {
+                        long totalWritten = 0L;
+                        byte[] buffer = new byte[16384];
+                        try (InputStream is = conn.getInputStream();
+                             FileOutputStream fos = new FileOutputStream(tmp, false)) {
+                            int read;
+                            while ((read = is.read(buffer)) != -1) {
+                                totalWritten += read;
+                                if (totalWritten > MAX_SINGLE_BANNER_BYTES) {
+                                    throw new IllegalStateException("Banner video exceeds cap");
+                                }
+                                fos.write(buffer, 0, read);
+                            }
+                            fos.flush();
+                        }
+                        if (totalWritten > 0L && (tmp.renameTo(target) || (!target.exists() || target.delete()) && tmp.renameTo(target))) {
+                            target.setLastModified(System.currentTimeMillis());
+                            resultFile = target;
+                        }
+                    }
+                    trimBannerVideoCacheLocked(dir, target);
+                }
+            } catch (Throwable err) {
+                FileLog.e("EveHomeBannerCarouselView video fetch failed: " + remoteUrl, err);
+            } finally {
+                if (tmp.exists()) {
+                    tmp.delete();
+                }
+                if (conn != null) {
+                    try {
+                        conn.disconnect();
+                    } catch (Throwable ignored) {
+                    }
+                }
+            }
+
+            List<BannerDownloadListener> waiters;
+            synchronized (IN_FLIGHT) {
+                waiters = IN_FLIGHT.remove(cacheKey);
+            }
+            final File finalResult = resultFile;
+            if (waiters != null) {
+                AndroidUtilities.runOnUIThread(() -> {
+                    for (BannerDownloadListener cb : waiters) {
+                        if (cb != null) {
+                            cb.onComplete(finalResult);
+                        }
+                    }
+                });
+            }
+        });
+    }
+
+    private static void trimBannerVideoCacheLocked(@NonNull File dir, @Nullable File keepFile) {
+        try {
+            File[] files = dir.listFiles();
+            if (files == null || files.length == 0) {
+                return;
+            }
+            List<File> videos = new ArrayList<>();
+            long total = 0L;
+            for (File f : files) {
+                if (f == null || !f.isFile()) {
+                    continue;
+                }
+                if (f.getName().endsWith(".tmp")) {
+                    if (System.currentTimeMillis() - f.lastModified() > 120_000L) {
+                        f.delete();
+                    }
+                    continue;
+                }
+                if (f.getName().endsWith(".mp4")) {
+                    videos.add(f);
+                    total += Math.max(0L, f.length());
+                }
+            }
+            if (total <= MAX_VIDEO_CACHE_BYTES) {
+                return;
+            }
+            videos.sort(Comparator.comparingLong(File::lastModified));
+            for (File f : videos) {
+                if (total <= MAX_VIDEO_CACHE_BYTES) {
+                    break;
+                }
+                if (keepFile != null && keepFile.equals(f)) {
+                    continue;
+                }
+                long len = Math.max(0L, f.length());
+                if (f.delete()) {
+                    total = Math.max(0L, total - len);
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
     private final class BannerAdapter extends RecyclerView.Adapter<BannerCardHolder> {
         @NonNull
         @Override
@@ -207,10 +412,12 @@ public class EveHomeBannerCarouselView extends FrameLayout implements Theme.Colo
         private final FrameLayout card;
         private final BackupImageView imageView;
         private final TextureView textureView;
+        private final TextView placeholderText;
         private final TextView captionPill;
         @Nullable private VideoPlayer player;
         private int boundPosition = -1;
-        private String boundVideoUrl = "";
+        private String boundKey = "";
+        private String boundVideoLocalPath = "";
 
         BannerCardHolder(FrameLayout outerSlot) {
             super(outerSlot);
@@ -234,6 +441,15 @@ public class EveHomeBannerCarouselView extends FrameLayout implements Theme.Colo
             textureView = new TextureView(context);
             textureView.setVisibility(GONE);
             card.addView(textureView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
+
+            placeholderText = new TextView(context);
+            placeholderText.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13.5f);
+            placeholderText.setTypeface(AndroidUtilities.bold());
+            placeholderText.setTextColor(0xCCFFFFFF);
+            placeholderText.setGravity(Gravity.CENTER);
+            placeholderText.setPadding(dp(20), dp(12), dp(20), dp(12));
+            placeholderText.setVisibility(GONE);
+            card.addView(placeholderText, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
 
             captionPill = new TextView(context);
             captionPill.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12.5f);
@@ -262,30 +478,32 @@ public class EveHomeBannerCarouselView extends FrameLayout implements Theme.Colo
             }
 
             if (banner.isVideo() && !resolvedUrl.isEmpty()) {
-                imageView.setVisibility(GONE);
-                textureView.setVisibility(VISIBLE);
-                if (!resolvedUrl.equals(boundVideoUrl) || player == null) {
-                    releaseVideo();
-                    boundVideoUrl = resolvedUrl;
-                    player = new VideoPlayer(false, true);
-                    player.setTextureView(textureView);
-                    player.setLooping(true);
-                    player.setMute(true);
-                    player.preparePlayer(Uri.parse(resolvedUrl), "other");
-                }
-                if (position == currentPage) {
-                    player.play();
-                } else {
-                    player.pause();
-                }
+                String cacheKey = safeBannerFileKey(banner, resolvedUrl);
+                boundKey = cacheKey;
+                showPosterFallback(!TextUtils.isEmpty(banner.linkLabel) ? banner.linkLabel : "Loading banner...");
+                fetchVideoToCacheOnce(card.getContext(), cacheKey, resolvedUrl, cachedFile -> {
+                    if (!cacheKey.equals(boundKey)) {
+                        return;
+                    }
+                    if (cachedFile == null || !cachedFile.exists() || cachedFile.length() <= 0L) {
+                        showPosterFallback(!TextUtils.isEmpty(banner.linkLabel) ? banner.linkLabel : "Announcement Banner");
+                        return;
+                    }
+                    startLocalVideoSafely(cachedFile, position);
+                });
             } else {
+                boundKey = "";
                 releaseVideo();
+                placeholderText.setVisibility(GONE);
                 textureView.setVisibility(GONE);
                 imageView.setVisibility(VISIBLE);
-                if (!resolvedUrl.isEmpty()) {
-                    imageView.setImage(ImageLocation.getForPath(resolvedUrl), null, (android.graphics.drawable.Drawable) null, null);
-                } else {
-                    imageView.setImageBitmap(null);
+                try {
+                    if (!resolvedUrl.isEmpty()) {
+                        imageView.setImage(ImageLocation.getForPath(resolvedUrl), null, (android.graphics.drawable.Drawable) null, null);
+                    } else {
+                        imageView.setImageBitmap(null);
+                    }
+                } catch (Throwable ignored) {
                 }
             }
 
@@ -299,23 +517,109 @@ public class EveHomeBannerCarouselView extends FrameLayout implements Theme.Colo
             });
         }
 
+        private void startLocalVideoSafely(@NonNull File localFile, int position) {
+            try {
+                String localPath = localFile.getAbsolutePath();
+                placeholderText.setVisibility(GONE);
+                imageView.setVisibility(GONE);
+                textureView.setVisibility(VISIBLE);
+
+                if (!localPath.equals(boundVideoLocalPath) || player == null) {
+                    releaseVideo();
+                    boundVideoLocalPath = localPath;
+                    player = new VideoPlayer(false, true);
+                    player.setDelegate(new VideoPlayer.VideoPlayerDelegate() {
+                        @Override
+                        public void onStateChanged(boolean playWhenReady, int playbackState) {
+                        }
+
+                        @Override
+                        public void onError(VideoPlayer p, Exception e) {
+                            FileLog.e("EveHomeBannerCarouselView VideoPlayer runtime error", e);
+                            AndroidUtilities.runOnUIThread(() -> {
+                                releaseVideo();
+                                showPosterFallback("Video preview unavailable");
+                            });
+                        }
+
+                        @Override
+                        public void onVideoSizeChanged(int width, int height, int unappliedRotationDegrees, float pixelWidthHeightRatio) {
+                        }
+
+                        @Override
+                        public void onRenderedFirstFrame() {
+                            AndroidUtilities.runOnUIThread(() -> {
+                                placeholderText.setVisibility(GONE);
+                                imageView.setVisibility(GONE);
+                            });
+                        }
+
+                        @Override
+                        public void onSurfaceTextureUpdated(android.graphics.SurfaceTexture surfaceTexture) {
+                        }
+
+                        @Override
+                        public boolean onSurfaceDestroyed(android.graphics.SurfaceTexture surfaceTexture) {
+                            return false;
+                        }
+                    });
+                    player.setTextureView(textureView);
+                    player.setLooping(true);
+                    player.setMute(true);
+                    player.preparePlayer(Uri.fromFile(localFile), "other");
+                }
+                if (position == currentPage) {
+                    player.play();
+                } else {
+                    player.pause();
+                }
+            } catch (Throwable err) {
+                FileLog.e("EveHomeBannerCarouselView startLocalVideoSafely guarded", err);
+                releaseVideo();
+                showPosterFallback("Video preview unavailable");
+            }
+        }
+
+        private void showPosterFallback(@NonNull String message) {
+            try {
+                textureView.setVisibility(GONE);
+                imageView.setVisibility(VISIBLE);
+                imageView.setImageBitmap(null);
+                placeholderText.setText(message);
+                placeholderText.setVisibility(VISIBLE);
+            } catch (Throwable ignored) {
+            }
+        }
+
         void pauseVideo() {
             if (player != null) {
-                player.pause();
+                try {
+                    player.pause();
+                } catch (Throwable ignored) {
+                }
             }
         }
 
         void resumeVideo() {
-            if (player != null && !boundVideoUrl.isEmpty()) {
-                player.setMute(true);
-                player.play();
+            if (player != null && !boundVideoLocalPath.isEmpty()) {
+                try {
+                    player.setMute(true);
+                    player.play();
+                } catch (Throwable err) {
+                    FileLog.e("EveHomeBannerCarouselView resumeVideo guarded", err);
+                    releaseVideo();
+                    showPosterFallback("Video preview unavailable");
+                }
             }
         }
 
         void releaseVideo() {
-            boundVideoUrl = "";
+            boundVideoLocalPath = "";
             if (player != null) {
-                player.releasePlayer(true);
+                try {
+                    player.releasePlayer(true);
+                } catch (Throwable ignored) {
+                }
                 player = null;
             }
         }
@@ -350,14 +654,19 @@ public class EveHomeBannerCarouselView extends FrameLayout implements Theme.Colo
         }
 
         @Override
-        protected void onDraw(@NonNull Canvas canvas) {
+        protected void onDraw(Canvas canvas) {
+            super.onDraw(canvas);
             if (count <= 1) return;
-            float cy = getHeight() / 2f;
+            int activeColor = Theme.getColor(Theme.key_windowBackgroundWhiteBlueText, rp);
+            int inactiveColor = Theme.multAlpha(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, rp), 0.35f);
+            float cy = getHeight() * 0.5f;
+            float rActive = dp(3.5f);
+            float rInactive = dp(2.5f);
             float startX = dp(6);
             for (int i = 0; i < count; i++) {
-                boolean active = i == selected;
-                paint.setColor(active ? 0xFFFFFFFF : 0x80FFFFFF);
-                canvas.drawCircle(startX + i * dp(12), cy, dp(active ? 3.5f : 2.5f), paint);
+                boolean isSel = i == selected;
+                paint.setColor(isSel ? activeColor : inactiveColor);
+                canvas.drawCircle(startX + i * dp(12), cy, isSel ? rActive : rInactive, paint);
             }
         }
     }

@@ -577,13 +577,38 @@ public final class EveExamModels {
         public final String message;
         public final String type;
         public final long sentAtMs;
+        public final String stickerDocId;
+        public final String stickerAccessHash;
+        public final int stickerDcId;
+        public final String stickerEmoji;
 
         public BroadcastItem(String id, String title, String message, String type, long sentAtMs) {
+            this(id, title, message, type, sentAtMs, "", "", 0, "");
+        }
+
+        public BroadcastItem(
+                String id,
+                String title,
+                String message,
+                String type,
+                long sentAtMs,
+                String stickerDocId,
+                String stickerAccessHash,
+                int stickerDcId,
+                String stickerEmoji) {
             this.id = id != null ? id : "";
             this.title = title != null ? title : "";
             this.message = message != null ? message : "";
             this.type = type != null ? type : "announcement";
             this.sentAtMs = sentAtMs;
+            this.stickerDocId = stickerDocId != null ? stickerDocId : "";
+            this.stickerAccessHash = stickerAccessHash != null ? stickerAccessHash : "";
+            this.stickerDcId = Math.max(0, stickerDcId);
+            this.stickerEmoji = stickerEmoji != null ? stickerEmoji : "";
+        }
+
+        public boolean hasSticker() {
+            return !stickerDocId.trim().isEmpty();
         }
     }
 

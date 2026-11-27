@@ -5,29 +5,32 @@ import static org.telegram.messenger.AndroidUtilities.dp;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
-import android.graphics.PorterDuff;
-import android.graphics.PorterDuffColorFilter;
 import android.graphics.RectF;
 import android.text.TextUtils;
 import android.text.util.Linkify;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.FrameLayout;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.recyclerview.widget.RecyclerView;
 
 import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.DocumentObject;
+import org.telegram.messenger.ImageLocation;
+import org.telegram.messenger.MediaDataController;
 import org.telegram.messenger.R;
+import org.telegram.messenger.UserConfig;
+import org.telegram.tgnet.TLRPC;
 import org.telegram.ui.ActionBar.ActionBar;
 import org.telegram.ui.ActionBar.BaseFragment;
-import org.telegram.ui.ActionBar.SimpleActionBarMenu;
 import org.telegram.ui.ActionBar.Theme;
-import org.telegram.ui.Components.AvatarDrawable;
+import org.telegram.ui.Components.AnimatedEmojiDrawable;
 import org.telegram.ui.Components.BackupImageView;
 import org.telegram.ui.Components.BulletinFactory;
 import org.telegram.ui.Components.FlickerLoadingView;
@@ -38,8 +41,8 @@ import org.telegram.ui.Components.UItem;
 import org.telegram.ui.Components.UniversalAdapter;
 import org.telegram.ui.Components.UniversalRecyclerView;
 import org.telegram.ui.SettingsActivity;
+import org.telegram.ui.eve.admin.EveAnimatedEmojiHelper;
 import org.telegram.ui.eve.admin.EveAdminUiChrome;
-import org.telegram.ui.eve.auth.EveBackendClient;
 import org.telegram.ui.eve.polls.EvePollModel;
 import org.telegram.ui.eve.polls.EveTelegramPollCardView;
 
@@ -67,10 +70,8 @@ public class EveAnnouncementsFragment extends BaseFragment {
     private final EveExamRepository repo = EveExamRepository.getInstance();
     private UniversalRecyclerView listView;
     private FrameLayout chatRoot;
-    private ChannelHeaderTitleView titleView;
 
     private String channelName = "Announcements";
-    private String channelAvatarUrl = "";
     private List<EveExamModels.BroadcastItem> broadcasts = Collections.emptyList();
     private List<EvePollModel> polls = Collections.emptyList();
     private final List<FeedEntry> feedEntries = new ArrayList<>();
@@ -141,8 +142,8 @@ public class EveAnnouncementsFragment extends BaseFragment {
                 getBaseSimpleGlass(),
                 glassEngine,
                 getResourceProvider(),
-                channelName,
-                "official channel",
+                EveAnimatedEmojiHelper.decode(channelName, null),
+                null,
                 false,
                 false,
                 this::fillItems,
@@ -160,17 +161,7 @@ public class EveAnnouncementsFragment extends BaseFragment {
         listView = chrome.listView;
         chatRoot = chrome.rootView;
 
-        if (simpleActionBar != null) {
-            titleView = new ChannelHeaderTitleView(context, getResourceProvider());
-            titleView.bind(channelName, channelAvatarUrl, feedEntries.size());
-            simpleActionBar.setTitle(channelName);
-            simpleActionBar.setSubtitle(buildChannelSubtitle());
-            // Attach custom channel badge + avatar to center header container cleanly if space allows.
-            if (simpleActionBar.getMenu() == null) {
-                SimpleActionBarMenu menu = simpleActionBar.createMenu();
-                menu.addView(titleView, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.MATCH_PARENT, Gravity.CENTER_VERTICAL, 0, 0, 8, 0));
-            }
-        }
+        updateHeader();
 
         applyChatTheme();
         rebuildFeedEntries();
@@ -188,12 +179,8 @@ public class EveAnnouncementsFragment extends BaseFragment {
             if (!TextUtils.isEmpty(cfg.announcementChannelName)) {
                 channelName = cfg.announcementChannelName;
             }
-            if (!TextUtils.isEmpty(cfg.announcementChannelAvatarUrl)) {
-                channelAvatarUrl = cfg.announcementChannelAvatarUrl;
-            }
         } else if (cachedSum != null) {
             if (!TextUtils.isEmpty(cachedSum.channelName)) channelName = cachedSum.channelName;
-            if (!TextUtils.isEmpty(cachedSum.channelAvatarUrl)) channelAvatarUrl = cachedSum.channelAvatarUrl;
         }
         List<EveExamModels.BroadcastItem> bc = repo.getCachedBroadcasts();
         List<EvePollModel> pl = repo.getCachedActivePolls();
@@ -210,9 +197,6 @@ public class EveAnnouncementsFragment extends BaseFragment {
         }
         if (listView != null) {
             listView.setBackgroundColor(chatBg);
-        }
-        if (titleView != null) {
-            titleView.updateColors();
         }
     }
 
@@ -234,13 +218,6 @@ public class EveAnnouncementsFragment extends BaseFragment {
         destroyed = true;
         autoSync.destroy();
         super.onFragmentDestroy();
-    }
-
-    private String buildChannelSubtitle() {
-        if (feedEntries.isEmpty()) {
-            return loading ? "updating..." : "official channel";
-        }
-        return feedEntries.size() + (feedEntries.size() == 1 ? " post" : " posts");
     }
 
     private void reload() {
@@ -284,7 +261,6 @@ public class EveAnnouncementsFragment extends BaseFragment {
                 if (!TextUtils.isEmpty(cfg.announcementChannelName)) {
                     channelName = cfg.announcementChannelName;
                 }
-                channelAvatarUrl = cfg.announcementChannelAvatarUrl != null ? cfg.announcementChannelAvatarUrl : "";
             }
             onBatchStepDone.run();
         });
@@ -314,11 +290,8 @@ public class EveAnnouncementsFragment extends BaseFragment {
 
     private void updateHeader() {
         if (simpleActionBar != null) {
-            simpleActionBar.setTitle(channelName);
-            simpleActionBar.setSubtitle(buildChannelSubtitle());
-        }
-        if (titleView != null) {
-            titleView.bind(channelName, channelAvatarUrl, feedEntries.size());
+            simpleActionBar.setTitle(EveAnimatedEmojiHelper.decode(channelName, null));
+            simpleActionBar.setSubtitle(null);
         }
     }
 
@@ -435,19 +408,36 @@ public class EveAnnouncementsFragment extends BaseFragment {
         rebuildFeedEntries();
         updateList();
 
-        repo.submitPollVote(poll.id, optionIndex, (ok, err) -> {
+        repo.submitQuizVote(poll.id, optionIndex, (outcome, err) -> {
             if (destroyed) return;
             votingPollId = "";
             votingOptionIdx = -1;
-            if (Boolean.TRUE.equals(ok)) {
-                BulletinFactory.of(this).createSimpleBulletin(R.raw.contact_check, "Vote recorded!").show();
+            if (outcome != null) {
+                List<EvePollModel> revealed = new ArrayList<>(polls.size());
+                for (EvePollModel p : polls) {
+                    if (p != null && poll.id.equals(p.id)) {
+                        revealed.add(p.withRecordedVote(
+                                optionIndex,
+                                outcome.correctOptionIndex,
+                                outcome.isCorrect,
+                                outcome.explanation));
+                    } else {
+                        revealed.add(p);
+                    }
+                }
+                polls = revealed;
+                rebuildFeedEntries();
+                String notice = outcome.isCorrect != null
+                        ? (outcome.isCorrect ? "Correct answer!" : "Answer recorded")
+                        : "Answer recorded!";
+                BulletinFactory.of(this).createSimpleBulletin(R.raw.contact_check, notice).show();
                 updateList();
             } else {
                 polls = previousPolls;
                 rebuildFeedEntries();
                 updateList();
                 BulletinFactory.of(this).createErrorBulletin(
-                        !TextUtils.isEmpty(err) ? err : "Could not record vote.").show();
+                        !TextUtils.isEmpty(err) ? err : "Could not record answer.").show();
             }
         });
     }
@@ -469,44 +459,6 @@ public class EveAnnouncementsFragment extends BaseFragment {
         return new SimpleDateFormat("d MMMM yyyy", Locale.getDefault()).format(new Date(timestampMs));
     }
 
-    private static final class ChannelHeaderTitleView extends LinearLayout {
-        private final Theme.ResourcesProvider rp;
-        private final AvatarDrawable avatarDrawable;
-        private final BackupImageView avatarView;
-        private final ImageView verifiedIcon;
-
-        ChannelHeaderTitleView(Context context, Theme.ResourcesProvider rp) {
-            super(context);
-            this.rp = rp;
-            setOrientation(HORIZONTAL);
-            setGravity(Gravity.CENTER_VERTICAL);
-
-            verifiedIcon = new ImageView(context);
-            verifiedIcon.setImageResource(R.drawable.msg_channel);
-            verifiedIcon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-            addView(verifiedIcon, LayoutHelper.createLinear(18, 18, Gravity.CENTER_VERTICAL, 0, 0, 6, 0));
-
-            avatarDrawable = new AvatarDrawable();
-            avatarView = new BackupImageView(context);
-            avatarView.setRoundRadius(dp(18));
-            addView(avatarView, LayoutHelper.createLinear(36, 36, Gravity.CENTER_VERTICAL));
-
-            updateColors();
-        }
-
-        void bind(String name, String avatarUrl, int postCount) {
-            EveAdminUiChrome.bindExamAvatar(
-                    avatarView, avatarDrawable, "eve_announcements",
-                    !TextUtils.isEmpty(name) ? name : "Announcements",
-                    avatarUrl, "", 4, 36, rp);
-        }
-
-        void updateColors() {
-            verifiedIcon.setColorFilter(new PorterDuffColorFilter(
-                    Theme.getColor(Theme.key_featuredStickers_addButton, rp), PorterDuff.Mode.SRC_IN));
-        }
-    }
-
     private static final class ChannelDatePillCell extends FrameLayout implements Theme.Colorable {
         private final Theme.ResourcesProvider rp;
         private final TextView pillView;
@@ -514,13 +466,16 @@ public class EveAnnouncementsFragment extends BaseFragment {
         ChannelDatePillCell(Context context, Theme.ResourcesProvider rp) {
             super(context);
             this.rp = rp;
-            setPadding(dp(16), dp(8), dp(16), dp(4));
+            setLayoutParams(new RecyclerView.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT));
+            setPadding(dp(16), dp(10), dp(16), dp(6));
 
             pillView = new TextView(context);
             pillView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12.5f);
             pillView.setTypeface(AndroidUtilities.bold());
             pillView.setGravity(Gravity.CENTER);
-            pillView.setPadding(dp(12), dp(4), dp(12), dp(4));
+            pillView.setPadding(dp(14), dp(4), dp(14), dp(4));
             addView(pillView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER));
             updateColors();
         }
@@ -535,7 +490,7 @@ public class EveAnnouncementsFragment extends BaseFragment {
             boolean dark = Theme.isCurrentThemeDark();
             pillView.setTextColor(0xFFFFFFFF);
             pillView.setBackground(Theme.createRoundRectDrawable(
-                    dp(14), dark ? 0x661F2C38 : 0x552E4A62));
+                    dp(14), dark ? 0x7A22303C : 0x6B4B6478));
         }
 
         @Override
@@ -592,6 +547,7 @@ public class EveAnnouncementsFragment extends BaseFragment {
                         && TextUtils.equals(broadcast.id, other.broadcast.id)
                         && TextUtils.equals(broadcast.title, other.broadcast.title)
                         && TextUtils.equals(broadcast.message, other.broadcast.message)
+                        && TextUtils.equals(broadcast.stickerDocId, other.broadcast.stickerDocId)
                         && broadcast.sentAtMs == other.broadcast.sentAtMs;
             }
 
@@ -603,19 +559,36 @@ public class EveAnnouncementsFragment extends BaseFragment {
 
         private final Theme.ResourcesProvider rp;
         private final LinearLayout bubble;
+        private final BackupImageView stickerView;
+        private final TextView stickerFallbackEmojiView;
         private final TextView authorView;
         private final TextView titleView;
         private final TextView bodyView;
         private final TextView timeView;
         private final Paint bubblePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final RectF bubbleRect = new RectF();
+        private String boundStickerId = "";
 
         ChannelPostBubbleView(Context context, Theme.ResourcesProvider rp) {
             super(context);
             this.rp = rp;
-            setPadding(dp(12), dp(5), dp(36), dp(5));
+            setLayoutParams(new RecyclerView.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT));
+            setPadding(dp(12), dp(5), dp(12), dp(5));
 
             bubble = new LinearLayout(context) {
+                @Override
+                protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+                    int avail = MeasureSpec.getSize(widthMeasureSpec);
+                    int mode = MeasureSpec.getMode(widthMeasureSpec);
+                    if (avail > 0 && mode != MeasureSpec.UNSPECIFIED) {
+                        int maxBubbleW = Math.max(dp(180), Math.round(avail * 0.88f));
+                        widthMeasureSpec = MeasureSpec.makeMeasureSpec(maxBubbleW, MeasureSpec.AT_MOST);
+                    }
+                    super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+                }
+
                 @Override
                 protected void dispatchDraw(Canvas canvas) {
                     bubbleRect.set(0, 0, getWidth(), getHeight());
@@ -625,52 +598,158 @@ public class EveAnnouncementsFragment extends BaseFragment {
             };
             bubble.setWillNotDraw(false);
             bubble.setOrientation(LinearLayout.VERTICAL);
-            bubble.setPadding(dp(14), dp(10), dp(14), dp(9));
-            addView(bubble, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+            bubble.setPadding(dp(14), dp(11), dp(14), dp(9));
+            bubble.setElevation(dp(1.5f));
+            addView(bubble, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.START));
 
-            authorView = new TextView(context);
+            stickerView = new BackupImageView(context);
+            stickerView.setAspectFit(true);
+            stickerView.setVisibility(GONE);
+            bubble.addView(stickerView, LayoutHelper.createLinear(132, 132, Gravity.START, 0, 2, 0, 8));
+
+            stickerFallbackEmojiView = new TextView(context);
+            stickerFallbackEmojiView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 48);
+            stickerFallbackEmojiView.setVisibility(GONE);
+            bubble.addView(stickerFallbackEmojiView, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.START, 0, 2, 0, 8));
+
+            authorView = EveAnimatedEmojiHelper.createEmojiTextView(context);
             authorView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13.5f);
             authorView.setTypeface(AndroidUtilities.bold());
             authorView.setSingleLine(true);
             authorView.setEllipsize(TextUtils.TruncateAt.END);
-            bubble.addView(authorView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 3));
+            bubble.addView(authorView, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 3));
 
-            titleView = new TextView(context);
+            titleView = EveAnimatedEmojiHelper.createEmojiTextView(context);
             titleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15.5f);
             titleView.setTypeface(AndroidUtilities.bold());
             titleView.setLineSpacing(dp(2), 1f);
-            bubble.addView(titleView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 4));
+            bubble.addView(titleView, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 4));
 
-            bodyView = new TextView(context);
+            bodyView = EveAnimatedEmojiHelper.createEmojiTextView(context);
             bodyView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14.5f);
             bodyView.setLineSpacing(dp(2.5f), 1f);
             bodyView.setAutoLinkMask(Linkify.WEB_URLS);
-            bubble.addView(bodyView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+            bubble.addView(bodyView, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT));
 
             timeView = new TextView(context);
             timeView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 11.5f);
             timeView.setGravity(Gravity.RIGHT);
-            bubble.addView(timeView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 5, 0, 0));
+            bubble.addView(timeView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 6, 0, 0));
 
             updateColors();
         }
 
         void bind(Payload payload) {
-            authorView.setText(payload.channelName);
+            EveAnimatedEmojiHelper.bindText(authorView, payload.channelName);
             EveExamModels.BroadcastItem b = payload.broadcast;
+            bindSticker(b);
             if (!TextUtils.isEmpty(b.title)) {
                 titleView.setVisibility(VISIBLE);
-                titleView.setText(b.title);
+                EveAnimatedEmojiHelper.bindText(titleView, b.title);
             } else {
                 titleView.setVisibility(GONE);
             }
-            bodyView.setText(b.message);
+            EveAnimatedEmojiHelper.bindText(bodyView, b.message);
             if (b.sentAtMs > 0L) {
                 timeView.setText(new SimpleDateFormat("HH:mm", Locale.getDefault()).format(new Date(b.sentAtMs)));
             } else {
                 timeView.setText("");
             }
             updateColors();
+        }
+
+        private void bindSticker(EveExamModels.BroadcastItem b) {
+            if (b == null || !b.hasSticker()) {
+                boundStickerId = "";
+                stickerView.setVisibility(GONE);
+                stickerFallbackEmojiView.setVisibility(GONE);
+                return;
+            }
+            boundStickerId = b.stickerDocId;
+            long docId = 0L;
+            long accessHash = 0L;
+            try {
+                docId = Long.parseLong(b.stickerDocId);
+            } catch (Throwable ignored) {
+            }
+            try {
+                if (!TextUtils.isEmpty(b.stickerAccessHash)) {
+                    accessHash = Long.parseLong(b.stickerAccessHash);
+                }
+            } catch (Throwable ignored) {
+            }
+
+            TLRPC.Document resolvedDoc = findInstalledStickerDocument(docId);
+            if (resolvedDoc == null && docId != 0L) {
+                TLRPC.TL_document synthetic = new TLRPC.TL_document();
+                synthetic.id = docId;
+                synthetic.access_hash = accessHash;
+                synthetic.dc_id = b.stickerDcId > 0 ? b.stickerDcId : 2;
+                synthetic.mime_type = "application/x-tgsticker";
+                synthetic.attributes.add(new TLRPC.TL_documentAttributeSticker());
+                resolvedDoc = synthetic;
+            }
+
+            if (resolvedDoc != null && EveAnimatedEmojiHelper.isMtprotoAvailable()) {
+                stickerFallbackEmojiView.setVisibility(GONE);
+                stickerView.setVisibility(VISIBLE);
+                final String targetId = b.stickerDocId;
+                try {
+                    stickerView.setImage(
+                            ImageLocation.getForDocument(resolvedDoc),
+                            "132_132",
+                            DocumentObject.getSvgThumb(resolvedDoc, Theme.key_windowBackgroundGray, 0.25f),
+                            null);
+                } catch (Throwable ignored) {
+                }
+                if (resolvedDoc.size <= 0 && docId != 0L) {
+                    try {
+                        AnimatedEmojiDrawable.getDocumentFetcher(UserConfig.selectedAccount).fetchDocument(docId, fetched -> {
+                            if (fetched != null && targetId.equals(boundStickerId)) {
+                                try {
+                                    stickerView.setImage(
+                                            ImageLocation.getForDocument(fetched),
+                                            "132_132",
+                                            DocumentObject.getSvgThumb(fetched, Theme.key_windowBackgroundGray, 0.25f),
+                                            null);
+                                } catch (Throwable ignored) {
+                                }
+                            }
+                        });
+                    } catch (Throwable ignored) {
+                    }
+                }
+            } else if (!TextUtils.isEmpty(b.stickerEmoji)) {
+                stickerView.setVisibility(GONE);
+                stickerFallbackEmojiView.setText(b.stickerEmoji);
+                stickerFallbackEmojiView.setVisibility(VISIBLE);
+            } else {
+                stickerView.setVisibility(GONE);
+                stickerFallbackEmojiView.setVisibility(GONE);
+            }
+        }
+
+        @Nullable
+        private static TLRPC.Document findInstalledStickerDocument(long docId) {
+            if (docId == 0L) return null;
+            try {
+                MediaDataController mdc = MediaDataController.getInstance(UserConfig.selectedAccount);
+                int[] types = new int[] { MediaDataController.TYPE_IMAGE, MediaDataController.TYPE_EMOJIPACKS };
+                for (int type : types) {
+                    ArrayList<TLRPC.TL_messages_stickerSet> sets = mdc.getStickerSets(type);
+                    if (sets == null) continue;
+                    for (TLRPC.TL_messages_stickerSet set : sets) {
+                        if (set == null || set.documents == null) continue;
+                        for (TLRPC.Document d : set.documents) {
+                            if (d != null && d.id == docId) {
+                                return d;
+                            }
+                        }
+                    }
+                }
+            } catch (Throwable ignored) {
+            }
+            return null;
         }
 
         @Override

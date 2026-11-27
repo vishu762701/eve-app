@@ -19,6 +19,8 @@ import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 import org.telegram.messenger.PushListenerController;
+import org.telegram.ui.eve.admin.EveAnimatedEmojiHelper;
+import org.telegram.ui.eve.auth.EveLocalDiskCache;
 import org.telegram.ui.eve.exams.EveAnnouncementsFragment;
 import org.telegram.ui.eve.exams.EveExamModels;
 import org.telegram.ui.eve.exams.EveExamRepository;
@@ -317,5 +319,48 @@ public class EveStudentExamExecutionTest {
         assertNotNull(Class.forName("org.telegram.ui.eve.exams.EvePdfHelper"));
         assertNotNull(Class.forName("org.telegram.ui.eve.exams.EveQuestionTimeChartView"));
         assertNotNull(Class.forName("org.telegram.ui.eve.exams.EveScoreTrendChartView"));
+
+        // 5. Defensive startup constructor guards & JSON null sanitization in TestPlayer / Repo
+        EveTestPlayerFragment defaultPlayer = new EveTestPlayerFragment();
+        android.os.Bundle emptyBundle = new android.os.Bundle();
+        EveTestPlayerFragment bundledPlayer = new EveTestPlayerFragment(emptyBundle);
+        assertNotNull(defaultPlayer);
+        assertNotNull(bundledPlayer);
+        assertFalse(EveTestPlayerFragment.validateStartupSession(
+                "ex__t",
+                new EveExamModels.StartAttemptResult(false, "", "", 0L, 600, 600, null),
+                ""
+        ).isEmpty());
+
+        List<EveExamModels.TestQuestion> sanitizedNulls = EveExamRepository.parseQuestionsArray(
+                new JSONArray("[{\"id\":\"q_n1\",\"examId\":null,\"topic\":null,\"questionText\":\"Q?\",\"optionA\":\"1\",\"optionB\":\"2\",\"optionC\":\"3\",\"optionD\":\"4\"}]"),
+                "fallback-ex",
+                "t-1"
+        );
+        assertEquals(1, sanitizedNulls.size());
+        assertEquals("fallback-ex", sanitizedNulls.get(0).examId);
+        assertEquals("", sanitizedNulls.get(0).topic);
+
+        // 6. Animated emoji markup roundtrip (offline fallback without native MTProto)
+        String rawMarkup = "Hello [tg_emoji:5368324170671202286:🔥] world";
+        assertEquals("Hello 🔥 world", EveAnimatedEmojiHelper.stripMarkupToPlainText(rawMarkup));
+        CharSequence offlineDecoded = EveAnimatedEmojiHelper.decode(rawMarkup, null, false);
+        assertEquals("Hello 🔥 world", offlineDecoded.toString());
+        android.text.SpannableStringBuilder fakeSpanText = new android.text.SpannableStringBuilder("Hi ✨");
+        org.telegram.ui.Components.AnimatedEmojiSpan span = new org.telegram.ui.Components.AnimatedEmojiSpan(999999L, null);
+        span.emoji = "✨";
+        fakeSpanText.setSpan(span, 3, 4, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        assertEquals("Hi [tg_emoji:999999:✨]", EveAnimatedEmojiHelper.encode(fakeSpanText));
+
+        // 7. Disk cache 10 MB cap enforcement
+        java.io.File tempCache = java.nio.file.Files.createTempDirectory("eve_disk_cap_test").toFile();
+        EveLocalDiskCache boundedCache = new EveLocalDiskCache(tempCache, 256L);
+        boundedCache.put("k1", new String(new char[140]).replace('\0', 'a'));
+        Thread.sleep(15L);
+        boundedCache.put("k2", new String(new char[140]).replace('\0', 'b'));
+        Thread.sleep(15L);
+        boundedCache.put("k3", new String(new char[140]).replace('\0', 'c'));
+        assertTrue(boundedCache.totalDiskBytes() <= 256L);
+        tempCache.delete();
     }
 }
