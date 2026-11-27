@@ -430,7 +430,7 @@ public class EveAdminControlCenterTest {
                 return new EveBackendClient.HttpResponse(200, "{\"events\":[]}");
             }
             if (url.contains("/api/admin/users/stu-1")) {
-                return new EveBackendClient.HttpResponse(200, "{\"user\":{\"id\":\"stu-1\",\"name\":\"Riya\",\"email\":\"riya@example.com\"}}");
+                return new EveBackendClient.HttpResponse(200, "{\"user\":{\"id\":\"stu-1\",\"displayName\":\"Riya\",\"name\":\"Riya\",\"email\":\"riya@example.com\"}}");
             }
             return new EveBackendClient.HttpResponse(200, "{\"success\":true}");
         });
@@ -451,6 +451,6 @@ public class EveAdminControlCenterTest {
         assertTrue(calls.get(calls.size() - 1).endsWith("/api/admin/system/security-events"));
 
         EveAdminModels.AdminStudentItem student = repo.fetchStudentById("admin-jwt", "stu-1", "Fallback");
-        assertEquals("Riya", student.name);
+        assertEquals("Riya", student.displayName);
     }
 }
