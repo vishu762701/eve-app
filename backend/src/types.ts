@@ -68,6 +68,9 @@ export interface ExamRow {
   avatar_url?: string;
   avatar_emoji?: string;
   avatar_color?: number | null;
+  ai_prompt?: string;
+  ai_language?: string;
+  ai_difficulty?: string;
 }
 
 export interface QuestionRow {
@@ -233,6 +236,9 @@ export interface GeneratedTestRow {
   prompt_used: string;
   questions_json: string;
   available_from?: number;
+  avatar_url?: string;
+  avatar_emoji?: string;
+  avatar_color?: number | null;
 }
 
 export interface AttemptSessionRow {

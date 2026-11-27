@@ -25,8 +25,6 @@ import org.telegram.ui.Components.UniversalAdapter;
 import org.telegram.ui.Components.UniversalRecyclerView;
 import org.telegram.ui.SettingsActivity;
 import org.telegram.ui.eve.admin.EveAdminUiChrome;
-import org.telegram.ui.eve.polls.EvePollModel;
-import org.telegram.ui.eve.polls.EveTelegramPollCardView;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -53,7 +51,6 @@ public class EveExamTestsFragment extends BaseFragment {
     private static final int SUB_EXAM_INFO = 104;
 
     private static final int ID_RETRY = 200;
-    private static final int BASE_POLL_ID = 500;
     private static final int BASE_TEST_ID = 1000;
 
     private final EveExamModels.ExamSummary exam;
@@ -62,9 +59,6 @@ public class EveExamTestsFragment extends BaseFragment {
     private List<EveExamModels.GeneratedTestSummary> tests = Collections.emptyList();
     private final List<EveExamModels.GeneratedTestSummary> liveTests = new ArrayList<>();
     private final List<EveExamModels.GeneratedTestSummary> filteredTests = new ArrayList<>();
-    private final List<EvePollModel> activePolls = new ArrayList<>();
-    private String votingPollId = "";
-    private int votingOptionIdx = -1;
     private boolean loading = true;
     private boolean destroyed = false;
     private String errorMessage = "";
@@ -210,7 +204,6 @@ public class EveExamTestsFragment extends BaseFragment {
 
     private void loadAll() {
         loadTests();
-        loadActivePolls();
     }
 
     private String buildCompactSubtitle() {
@@ -233,6 +226,20 @@ public class EveExamTestsFragment extends BaseFragment {
             loading = false;
             return;
         }
+        if (tests.isEmpty()) {
+            List<EveExamModels.GeneratedTestSummary> cached = EveExamRepository.getInstance().getCachedTestsForExam(exam.id);
+            if (cached != null && !cached.isEmpty()) {
+                tests = cached;
+                liveTests.clear();
+                for (EveExamModels.GeneratedTestSummary t : tests) {
+                    if (t != null && t.isLive()) {
+                        liveTests.add(t);
+                    }
+                }
+                Collections.sort(liveTests, NATURAL_TEST_COMPARATOR);
+                applyFilter(searchQuery);
+            }
+        }
         loading = tests.isEmpty();
         errorMessage = "";
         if (loading) {
@@ -252,42 +259,6 @@ public class EveExamTestsFragment extends BaseFragment {
             }
             Collections.sort(liveTests, NATURAL_TEST_COMPARATOR);
             applyFilter(searchQuery);
-        });
-    }
-
-    private void loadActivePolls() {
-        EveExamRepository.getInstance().loadActivePolls((loaded, err) -> {
-            if (destroyed || loaded == null) return;
-            activePolls.clear();
-            activePolls.addAll(loaded);
-            updateList();
-        });
-    }
-
-    private void handleStudentPollVote(EvePollModel poll, int optionIndex) {
-        if (poll == null || !TextUtils.isEmpty(votingPollId)) {
-            return;
-        }
-        votingPollId = poll.id;
-        votingOptionIdx = optionIndex;
-        updateList();
-        EveExamRepository.getInstance().submitPollVote(poll.id, optionIndex, (ok, err) -> {
-            if (destroyed) return;
-            votingPollId = "";
-            votingOptionIdx = -1;
-            if (Boolean.TRUE.equals(ok)) {
-                for (int i = 0; i < activePolls.size(); i++) {
-                    if (poll.id.equals(activePolls.get(i).id)) {
-                        activePolls.set(i, activePolls.get(i).withRecordedVote(optionIndex));
-                        break;
-                    }
-                }
-                BulletinFactory.of(this).createSimpleBulletin(R.raw.contact_check, "Vote recorded!").show();
-            } else {
-                BulletinFactory.of(this).createErrorBulletin(err != null && !err.isEmpty() ? err : "Could not record vote.").show();
-                loadActivePolls();
-            }
-            updateList();
         });
     }
 
@@ -392,18 +363,6 @@ public class EveExamTestsFragment extends BaseFragment {
             return;
         }
 
-        if (searchQuery.isEmpty() && !activePolls.isEmpty()) {
-            items.add(UItem.asHeader("Live Polls"));
-            for (int i = 0; i < activePolls.size(); i++) {
-                EvePollModel p = activePolls.get(i);
-                int subIdx = p.id.equals(votingPollId) ? votingOptionIdx : -1;
-                items.add(EveTelegramPollCardView.Factory.of(
-                        BASE_POLL_ID + i,
-                        new EveTelegramPollCardView.Payload(p, false, subIdx, this::handleStudentPollVote, null)));
-            }
-            items.add(UItem.asShadow(null));
-        }
-
         if (!errorMessage.isEmpty()) {
             items.add(SettingsActivity.SettingCell.Factory.of(
                     ID_RETRY,
@@ -423,10 +382,6 @@ public class EveExamTestsFragment extends BaseFragment {
             return;
         }
 
-        if (!activePolls.isEmpty() && searchQuery.isEmpty()) {
-            items.add(UItem.asHeader(LocaleController.getString(R.string.EveExamTests)));
-        }
-
         SimpleDateFormat fmt = new SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault());
         long nowMs = System.currentTimeMillis();
         int durationMins = exam.timeLimitMinutes > 0 ? exam.timeLimitMinutes : 30;
@@ -440,14 +395,20 @@ public class EveExamTestsFragment extends BaseFragment {
                     : (qCount + " Qs • " + durationMins + " min");
             String badge = isScheduled ? "Scheduled" : LocaleController.getString(R.string.EveStartTest);
 
-            items.add(SettingsActivity.SettingCell.Factory.of(
+            items.add(EveAdminUiChrome.AvatarRowCell.Factory.of(
                     BASE_TEST_ID + i,
-                    isScheduled ? IconBackgroundColors.ORANGE.top : IconBackgroundColors.BLUE.top,
-                    isScheduled ? IconBackgroundColors.ORANGE.bottom : IconBackgroundColors.BLUE.bottom,
-                    isScheduled ? R.drawable.msg_calendar2 : R.drawable.msg_list,
-                    test.getDisplayTitle(),
-                    subtitle,
-                    badge));
+                    test,
+                    new EveAdminUiChrome.AvatarRowCell.Payload(
+                            test.id,
+                            test.getDisplayTitle(),
+                            subtitle,
+                            test.avatarUrl,
+                            test.avatarEmoji,
+                            test.avatarColor,
+                            badge,
+                            isScheduled
+                                    ? EveAdminUiChrome.AvatarRowCell.BADGE_NEUTRAL
+                                    : EveAdminUiChrome.AvatarRowCell.BADGE_BLUE)));
         }
     }
 

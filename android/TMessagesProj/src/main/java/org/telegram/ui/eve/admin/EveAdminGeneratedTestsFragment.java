@@ -4,14 +4,19 @@ import static org.telegram.messenger.AndroidUtilities.dp;
 
 import android.app.Activity;
 import android.content.Context;
+import android.content.Intent;
+import android.graphics.Bitmap;
 import android.text.InputType;
+import android.text.TextUtils;
 import android.view.View;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import org.json.JSONObject;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.R;
 import org.telegram.ui.ActionBar.ActionBar;
@@ -51,6 +56,9 @@ public class EveAdminGeneratedTestsFragment extends BaseFragment {
     private final EveAdminModels.AdminExamItem scopedExam;
     private UniversalRecyclerView listView;
     private ActionBarMenuItem searchItem;
+    private EveTelegramAvatarPicker testAvatarPicker;
+    @Nullable
+    private EveAdminModels.AdminGeneratedTestItem pendingAvatarTest;
 
     private boolean loading = true;
     private boolean destroyed = false;
@@ -116,11 +124,42 @@ public class EveAdminGeneratedTestsFragment extends BaseFragment {
         destroyed = false;
         setHasOwnBackground(true);
 
-        EveAdminModels.DashboardSnapshot cached = repo.getCachedSnapshot();
-        if (cached != null) {
-            exams = cached.exams;
-            allTests = cached.generatedTests;
+        EveAdminRepository.ExamsCatalogData cachedCatalog = repo.getCachedExamsCatalog();
+        if (cachedCatalog != null && !cachedCatalog.generatedTests.isEmpty()) {
+            exams = cachedCatalog.exams;
+            allTests = cachedCatalog.generatedTests;
+            loading = false;
+        } else {
+            EveAdminModels.DashboardSnapshot cached = repo.getCachedSnapshot();
+            if (cached != null) {
+                exams = cached.exams;
+                allTests = cached.generatedTests;
+                loading = allTests.isEmpty();
+            }
         }
+        if (allTests.isEmpty() && scopedExam != null) {
+            List<EveAdminModels.AdminGeneratedTestItem> cachedScoped = repo.getCachedGeneratedTests(scopedExam.id);
+            if (cachedScoped != null && !cachedScoped.isEmpty()) {
+                allTests = cachedScoped;
+                loading = false;
+            }
+        }
+
+        testAvatarPicker = new EveTelegramAvatarPicker(this, true, new EveTelegramAvatarPicker.Delegate() {
+            @Override
+            public void onAvatarCaptured(@NonNull byte[] imageBytes, @NonNull String mimeType, @Nullable Bitmap previewBitmap) {
+                if (pendingAvatarTest != null) {
+                    uploadTestAvatar(pendingAvatarTest, imageBytes, mimeType);
+                }
+            }
+
+            @Override
+            public void onAvatarRemoved() {
+                if (pendingAvatarTest != null) {
+                    removeTestAvatar(pendingAvatarTest);
+                }
+            }
+        });
 
         EveAdminUiChrome.Chrome chrome = EveAdminUiChrome.setup(
                 this,
@@ -141,11 +180,8 @@ public class EveAdminGeneratedTestsFragment extends BaseFragment {
                             finishFragment();
                         } else if (id == MENU_ADD) {
                             if (scopedExam != null) {
-                                EveAdminDialogs.showGeneratePromptDialog(
-                                        EveAdminGeneratedTestsFragment.this,
-                                        repo,
-                                        scopedExam,
-                                        EveAdminGeneratedTestsFragment.this::reload);
+                                presentFragment(new EveAdminExamPromptFragment(
+                                        scopedExam, exams, EveAdminGeneratedTestsFragment.this::reload));
                             } else {
                                 EveAdminDialogs.showGenerateTestDialog(
                                         EveAdminGeneratedTestsFragment.this,
@@ -196,11 +232,17 @@ public class EveAdminGeneratedTestsFragment extends BaseFragment {
     @Override
     public void onResume() {
         super.onResume();
+        if (testAvatarPicker != null) {
+            testAvatarPicker.onResume();
+        }
         autoSync.onResume();
     }
 
     @Override
     public void onPause() {
+        if (testAvatarPicker != null) {
+            testAvatarPicker.onPause();
+        }
         autoSync.onPause();
         super.onPause();
     }
@@ -209,7 +251,27 @@ public class EveAdminGeneratedTestsFragment extends BaseFragment {
     public void onFragmentDestroy() {
         destroyed = true;
         autoSync.destroy();
+        if (testAvatarPicker != null) {
+            testAvatarPicker.destroy();
+            testAvatarPicker = null;
+        }
         super.onFragmentDestroy();
+    }
+
+    @Override
+    public void onActivityResultFragment(int requestCode, int resultCode, Intent data) {
+        if (testAvatarPicker != null) {
+            testAvatarPicker.onActivityResult(requestCode, resultCode, data);
+        }
+        super.onActivityResultFragment(requestCode, resultCode, data);
+    }
+
+    @Override
+    public void onRequestPermissionsResultFragment(int requestCode, String[] permissions, int[] grantResults) {
+        if (testAvatarPicker != null) {
+            testAvatarPicker.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        }
+        super.onRequestPermissionsResultFragment(requestCode, permissions, grantResults);
     }
 
     private void reload() {
@@ -308,17 +370,23 @@ public class EveAdminGeneratedTestsFragment extends BaseFragment {
         for (int i = 0; i < filteredTests.size(); i++) {
             EveAdminModels.AdminGeneratedTestItem test = filteredTests.get(i);
             boolean live = test.isLive();
-            IconBackgroundColors iconBg = live ? IconBackgroundColors.GREEN : IconBackgroundColors.ORANGE;
             String examLabel = !test.examName.isEmpty() ? test.examName : (scopedExam != null ? scopedExam.examName : "Mock Test");
             String subtitle = examLabel + " • " + test.questionCount + " Qs";
             String badge = live ? "Live" : "Draft";
-            items.add(SettingsActivity.SettingCell.Factory.of(
+            items.add(EveAdminUiChrome.AvatarRowCell.Factory.of(
                     BASE_TEST_ID + i,
-                    iconBg.top, iconBg.bottom,
-                    R.drawable.msg_list,
-                    test.title,
-                    subtitle,
-                    badge));
+                    test,
+                    new EveAdminUiChrome.AvatarRowCell.Payload(
+                            test.id,
+                            test.title,
+                            subtitle,
+                            test.avatarUrl,
+                            test.avatarEmoji,
+                            test.avatarColor,
+                            badge,
+                            live
+                                    ? EveAdminUiChrome.AvatarRowCell.BADGE_GREEN
+                                    : EveAdminUiChrome.AvatarRowCell.BADGE_RED)));
         }
     }
 
@@ -339,6 +407,7 @@ public class EveAdminGeneratedTestsFragment extends BaseFragment {
         boolean live = test.isLive();
         String[] actions = new String[]{
                 live ? "Move to Draft / Pause" : "Publish Live",
+                "Set Test Avatar",
                 "Schedule Release",
                 "View Questions",
                 "Delete Test"
@@ -351,18 +420,81 @@ public class EveAdminGeneratedTestsFragment extends BaseFragment {
                             updateTestStatus(test, live ? "paused" : "live");
                             break;
                         case 1:
-                            showScheduleDialog(test);
+                            pendingAvatarTest = test;
+                            if (testAvatarPicker != null) {
+                                testAvatarPicker.open(!TextUtils.isEmpty(test.avatarUrl));
+                            }
                             break;
                         case 2:
-                            previewQuestions(test);
+                            showScheduleDialog(test);
                             break;
                         case 3:
+                            previewQuestions(test);
+                            break;
+                        case 4:
                             confirmDeleteTest(test);
                             break;
                     }
                 })
                 .setNegativeButton(LocaleController.getString(R.string.Cancel), null)
                 .create());
+    }
+
+    private void uploadTestAvatar(EveAdminModels.AdminGeneratedTestItem test, byte[] bytes, String mimeType) {
+        if (destroyed || test == null) return;
+        EveAdminRepository.ResultCallback<JSONObject> cb = new EveAdminRepository.ResultCallback<JSONObject>() {
+            @Override
+            public void onSuccess(JSONObject data) {
+                if (destroyed) return;
+                String nextUrl = data != null ? data.optString("avatarUrl", "") : "";
+                applyOptimisticAvatar(test.id, nextUrl, "", -1);
+                repo.invalidateCache();
+                BulletinFactory.of(EveAdminGeneratedTestsFragment.this)
+                        .createSimpleBulletin(R.raw.contact_check, "Mock test avatar updated").show();
+                reload();
+            }
+
+            @Override
+            public void onError(String message, int httpStatus) {
+                if (destroyed) return;
+                BulletinFactory.of(EveAdminGeneratedTestsFragment.this)
+                        .createErrorBulletin(message != null ? message : "Failed to upload test avatar.").show();
+            }
+        };
+        repo.runWithAdminToken(cb, token -> repo.postSuccess(cb,
+                repo.uploadGeneratedTestAvatarImage(token, test.id, bytes, mimeType)));
+    }
+
+    private void removeTestAvatar(EveAdminModels.AdminGeneratedTestItem test) {
+        if (destroyed || test == null) return;
+        EveAdminRepository.ResultCallback<JSONObject> cb = new EveAdminRepository.ResultCallback<JSONObject>() {
+            @Override
+            public void onSuccess(JSONObject data) {
+                if (destroyed) return;
+                applyOptimisticAvatar(test.id, "", "", -1);
+                repo.invalidateCache();
+                BulletinFactory.of(EveAdminGeneratedTestsFragment.this)
+                        .createSimpleBulletin(R.raw.ic_delete, "Test avatar removed").show();
+                reload();
+            }
+
+            @Override
+            public void onError(String message, int httpStatus) {
+                if (destroyed) return;
+                BulletinFactory.of(EveAdminGeneratedTestsFragment.this)
+                        .createErrorBulletin(message != null ? message : "Failed to remove test avatar.").show();
+            }
+        };
+        repo.runWithAdminToken(cb, token -> repo.postSuccess(cb, repo.deleteGeneratedTestAvatar(token, test.id)));
+    }
+
+    private void applyOptimisticAvatar(String testId, String url, String emoji, int color) {
+        List<EveAdminModels.AdminGeneratedTestItem> updated = new ArrayList<>(allTests.size());
+        for (EveAdminModels.AdminGeneratedTestItem t : allTests) {
+            updated.add(t.id.equals(testId) ? t.withAvatar(url, emoji, color) : t);
+        }
+        allTests = updated;
+        applyFilter();
     }
 
     private void updateTestStatus(EveAdminModels.AdminGeneratedTestItem test, String nextStatus) {

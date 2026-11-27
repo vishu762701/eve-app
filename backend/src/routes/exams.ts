@@ -10,7 +10,27 @@ import { AssetStorage } from "../storage";
 import { SupabaseStorage } from "../supabase";
 import { AuthUser, EmojiPlacementPublic, Env, ExamRow } from "../types";
 import { prepareAdminAuditLog, recordAdminAction, runBatch } from "../util/auditLog";
+import {
+  detectAvatarImage,
+  extractStorageAvatarKey,
+  getTableColumns,
+  parseAvatarUploadPayload,
+  serveStoredAvatarResponse,
+} from "../util/avatarMedia";
 import { getActiveEmojiPlacements } from "./emoji";
+
+const VALID_AI_LANGUAGES = new Set(["english", "hindi", "bilingual"]);
+const VALID_AI_DIFFICULTIES = new Set(["easy", "medium", "hard", "mixed"]);
+
+function normalizeAiLanguage(raw: unknown): string {
+  const value = String(raw ?? "english").trim().toLowerCase();
+  return VALID_AI_LANGUAGES.has(value) ? value : "english";
+}
+
+function normalizeAiDifficulty(raw: unknown): string {
+  const value = String(raw ?? "mixed").trim().toLowerCase();
+  return VALID_AI_DIFFICULTIES.has(value) ? value : "mixed";
+}
 
 export const examRoutes = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
 
@@ -118,6 +138,9 @@ function mapExamRow(row: ExamRow, emojiPlacement?: EmojiPlacementPublic) {
     syllabusUrl: row.syllabus_url || "",
     syllabusFileName: row.syllabus_file_name || "",
     generationPrompt: row.generation_prompt || "",
+    aiPrompt: String(row.ai_prompt ?? row.generation_prompt ?? "").trim(),
+    aiLanguage: normalizeAiLanguage(row.ai_language),
+    aiDifficulty: normalizeAiDifficulty(row.ai_difficulty),
     imageUrl: row.image_url || "",
     avatarUrl: String(row.avatar_url || row.image_url || "").trim(),
     avatarEmoji: String(row.avatar_emoji || "").trim(),
@@ -183,7 +206,28 @@ examRoutes.post("/", requirePermission("manage_exams"), async (c) => {
   const autoGenEnabled = body.autoGenEnabled !== false && body.autoGenerationEnabled !== false ? 1 : 0;
   const autoGenTime = String(body.autoGenTime || "00:00").trim();
   const timezone = String(body.timezone || "Asia/Kolkata").trim();
-  const generationPrompt = String(body.generationPrompt || "").trim();
+  const rawAiPrompt = body.aiPrompt !== undefined ? String(body.aiPrompt).trim() : "";
+  const rawGenPrompt = body.generationPrompt !== undefined ? String(body.generationPrompt).trim() : "";
+  const effectivePrompt = rawGenPrompt || rawAiPrompt;
+  if (effectivePrompt.length > 4000) {
+    return c.json({ success: false, error: "AI prompt cannot exceed 4000 characters" }, 400);
+  }
+  let aiLanguage = "english";
+  if (body.aiLanguage !== undefined && body.aiLanguage !== null && String(body.aiLanguage).trim() !== "") {
+    const lang = String(body.aiLanguage).trim().toLowerCase();
+    if (!VALID_AI_LANGUAGES.has(lang)) {
+      return c.json({ success: false, error: "aiLanguage must be 'english', 'hindi', or 'bilingual'" }, 400);
+    }
+    aiLanguage = lang;
+  }
+  let aiDifficulty = "mixed";
+  if (body.aiDifficulty !== undefined && body.aiDifficulty !== null && String(body.aiDifficulty).trim() !== "") {
+    const diff = String(body.aiDifficulty).trim().toLowerCase();
+    if (!VALID_AI_DIFFICULTIES.has(diff)) {
+      return c.json({ success: false, error: "aiDifficulty must be 'easy', 'medium', 'hard', or 'mixed'" }, 400);
+    }
+    aiDifficulty = diff;
+  }
   const imageUrl = String(body.imageUrl || "").trim();
   const parentExamId = String(body.parentExamId || "").trim();
 
@@ -235,32 +279,59 @@ examRoutes.post("/", requirePermission("manage_exams"), async (c) => {
   }
 
   const id = crypto.randomUUID();
+  const examCols = await getTableColumns(db, "exams");
+  const insertCols = [
+    "id",
+    "exam_name",
+    "time_limit_minutes",
+    "category",
+    "test_number",
+    "question_count",
+    "auto_generation_enabled",
+    "auto_gen_time",
+    "timezone",
+    "generation_prompt",
+    "image_url",
+    "negative_marking_text",
+    "negative_marking_value",
+    "parent_exam_id",
+    "publish_mode",
+  ];
+  const insertVals: Array<string | number> = [
+    id,
+    name,
+    minutes,
+    category,
+    testNumber,
+    questionCount,
+    autoGenEnabled,
+    autoGenTime,
+    timezone,
+    effectivePrompt,
+    imageUrl,
+    negText,
+    negValue,
+    parentExamId,
+    publishMode,
+  ];
+  if (examCols.has("ai_prompt")) {
+    insertCols.push("ai_prompt");
+    insertVals.push(effectivePrompt);
+  }
+  if (examCols.has("ai_language")) {
+    insertCols.push("ai_language");
+    insertVals.push(aiLanguage);
+  }
+  if (examCols.has("ai_difficulty")) {
+    insertCols.push("ai_difficulty");
+    insertVals.push(aiDifficulty);
+  }
 
   const insertStmt = db
     .prepare(
-      `INSERT INTO exams (
-        id, exam_name, time_limit_minutes, category, test_number, question_count,
-        auto_generation_enabled, auto_gen_time, timezone, generation_prompt, image_url,
-        negative_marking_text, negative_marking_value, parent_exam_id, publish_mode
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO exams (${insertCols.join(", ")}) VALUES (${insertCols.map(() => "?").join(", ")})`
     )
-    .bind(
-      id,
-      name,
-      minutes,
-      category,
-      testNumber,
-      questionCount,
-      autoGenEnabled,
-      autoGenTime,
-      timezone,
-      generationPrompt,
-      imageUrl,
-      negText,
-      negValue,
-      parentExamId,
-      publishMode
-    );
+    .bind(...insertVals);
 
   const user = c.get("user");
   const { stmt: auditStmt } = prepareAdminAuditLog(db, user, {
@@ -328,7 +399,35 @@ examRoutes.put("/:id", requirePermission("manage_exams"), async (c) => {
   const autoGenTime = body.autoGenTime !== undefined ? String(body.autoGenTime).trim() : existing.auto_gen_time;
   const syllabusUrl = body.syllabusUrl !== undefined ? String(body.syllabusUrl).trim() : (existing.syllabus_url || "");
   const syllabusFileName = body.syllabusFileName !== undefined ? String(body.syllabusFileName).trim() : (existing.syllabus_file_name || "");
-  const generationPrompt = body.generationPrompt !== undefined ? String(body.generationPrompt).trim() : (existing.generation_prompt || "");
+  const hasPromptUpdate = body.generationPrompt !== undefined || body.aiPrompt !== undefined;
+  let generationPrompt = String(existing.generation_prompt || "");
+  let aiPrompt = String(existing.ai_prompt ?? existing.generation_prompt ?? "");
+  if (hasPromptUpdate) {
+    if ((body.aiPrompt !== undefined && typeof body.aiPrompt !== "string") ||
+        (body.generationPrompt !== undefined && typeof body.generationPrompt !== "string")) {
+      return c.json({ success: false, error: "AI prompt must be a string" }, 400);
+    }
+    const updatedPrompt = String(body.aiPrompt !== undefined ? body.aiPrompt : body.generationPrompt).trim();
+    if (updatedPrompt.length > 4000) {
+      return c.json({ success: false, error: "AI prompt cannot exceed 4000 characters" }, 400);
+    }
+    generationPrompt = updatedPrompt;
+    aiPrompt = updatedPrompt;
+  }
+  let aiLanguage = normalizeAiLanguage(existing.ai_language);
+  if (body.aiLanguage !== undefined && body.aiLanguage !== null) {
+    if (typeof body.aiLanguage !== "string" || !VALID_AI_LANGUAGES.has(body.aiLanguage.trim().toLowerCase())) {
+      return c.json({ success: false, error: "aiLanguage must be 'english', 'hindi', or 'bilingual'" }, 400);
+    }
+    aiLanguage = body.aiLanguage.trim().toLowerCase();
+  }
+  let aiDifficulty = normalizeAiDifficulty(existing.ai_difficulty);
+  if (body.aiDifficulty !== undefined && body.aiDifficulty !== null) {
+    if (typeof body.aiDifficulty !== "string" || !VALID_AI_DIFFICULTIES.has(body.aiDifficulty.trim().toLowerCase())) {
+      return c.json({ success: false, error: "aiDifficulty must be 'easy', 'medium', 'hard', or 'mixed'" }, 400);
+    }
+    aiDifficulty = body.aiDifficulty.trim().toLowerCase();
+  }
   const category = body.category !== undefined ? String(body.category).trim() : existing.category;
   const parentExamId = body.parentExamId !== undefined ? String(body.parentExamId).trim() : (existing.parent_exam_id || "");
 
@@ -371,6 +470,7 @@ examRoutes.put("/:id", requirePermission("manage_exams"), async (c) => {
   }
 
   // Omitted columns retain their WRITE-time values rather than an earlier snapshot.
+  const examCols = await getTableColumns(db, "exams");
   const assignments: string[] = [];
   const values: (string | number)[] = [];
   const add = (column: string, value: string | number, provided: boolean) => {
@@ -385,7 +485,10 @@ examRoutes.put("/:id", requirePermission("manage_exams"), async (c) => {
   add("auto_gen_time", autoGenTime, body.autoGenTime !== undefined);
   add("syllabus_url", syllabusUrl, body.syllabusUrl !== undefined);
   add("syllabus_file_name", syllabusFileName, body.syllabusFileName !== undefined);
-  add("generation_prompt", generationPrompt, body.generationPrompt !== undefined);
+  add("generation_prompt", generationPrompt, hasPromptUpdate);
+  add("ai_prompt", aiPrompt, hasPromptUpdate && examCols.has("ai_prompt"));
+  add("ai_language", aiLanguage, body.aiLanguage != null && examCols.has("ai_language"));
+  add("ai_difficulty", aiDifficulty, body.aiDifficulty != null && examCols.has("ai_difficulty"));
   add("negative_marking_text", negText, body.negativeMarkingText != null);
   add("negative_marking_value", negValue, body.negativeMarkingText != null);
   add("parent_exam_id", parentExamId, body.parentExamId !== undefined);
@@ -709,67 +812,12 @@ examRoutes.delete("/:id/syllabus", requirePermission("manage_syllabus"), async (
   return c.json({ success: true });
 });
 
-const MAX_EXAM_AVATAR_BYTES = 5 * 1024 * 1024;
-const ALLOWED_AVATAR_MIMES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
-
 async function getExamColumnNames(db: D1Database): Promise<Set<string>> {
-  const cols = new Set<string>();
-  try {
-    const { results } = await db.prepare("PRAGMA table_info(exams)").all<{ name: string }>();
-    for (const row of results || []) {
-      if (row?.name) cols.add(row.name);
-    }
-  } catch {}
-  return cols;
-}
-
-function detectExamAvatarImage(
-  bytes: Uint8Array,
-  declaredMime?: string
-): { mime: string; ext: string } | null {
-  if (bytes.length < 12 || bytes.length > MAX_EXAM_AVATAR_BYTES) return null;
-  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
-    return { mime: "image/jpeg", ext: "jpg" };
-  }
-  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {
-    return { mime: "image/png", ext: "png" };
-  }
-  if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x38) {
-    return { mime: "image/gif", ext: "gif" };
-  }
-  if (
-    bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
-    bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50
-  ) {
-    return { mime: "image/webp", ext: "webp" };
-  }
-  const cleanMime = String(declaredMime || "").split(";")[0].trim().toLowerCase();
-  if (ALLOWED_AVATAR_MIMES.has(cleanMime)) {
-    const ext = cleanMime === "image/png" ? "png" : cleanMime === "image/webp" ? "webp" : cleanMime === "image/gif" ? "gif" : "jpg";
-    return { mime: cleanMime, ext };
-  }
-  return null;
+  return getTableColumns(db, "exams");
 }
 
 function extractExamAvatarKey(rawUrl: string): string {
-  const value = (rawUrl || "").trim();
-  if (!value) return "";
-  if (value.startsWith("r2://")) {
-    return value.slice("r2://".length).replace(/^\/+/, "");
-  }
-  if (value.includes("/eve-media/")) {
-    return value.split("/eve-media/")[1]?.split("?")[0]?.replace(/^\/+/, "") || "";
-  }
-  if (value.includes("/avatar")) {
-    try {
-      const parsed = new URL(value, "https://eve.local");
-      const keyParam = parsed.searchParams.get("k");
-      if (keyParam && keyParam.startsWith("exam-avatars/")) {
-        return keyParam;
-      }
-    } catch {}
-  }
-  return "";
+  return extractStorageAvatarKey(rawUrl, "exam-avatars/");
 }
 
 // GET /api/exams/:id/avatar - Public asset reader for R2/Worker-hosted exam avatars
@@ -781,19 +829,7 @@ examRoutes.get("/:id/avatar", async (c) => {
     return c.json({ success: false, error: "Exam not found" }, 404);
   }
   const storedUrl = String(row.avatar_url || row.image_url || "").trim();
-  const key = extractExamAvatarKey(storedUrl) || extractExamAvatarKey(c.req.url);
-  if (!key) {
-    return c.json({ success: false, error: "Avatar image not set" }, 404);
-  }
-  const storage = new AssetStorage(c.env);
-  const asset = await storage.getObjectBytes(key);
-  if (!asset) {
-    return c.json({ success: false, error: "Avatar media not found" }, 404);
-  }
-  return c.body(asset.body.buffer.slice(asset.body.byteOffset, asset.body.byteOffset + asset.body.byteLength) as ArrayBuffer, 200, {
-    "Content-Type": asset.contentType || "image/jpeg",
-    "Cache-Control": "public, max-age=86400",
-  });
+  return serveStoredAvatarResponse(c, storedUrl, "exam-avatars/");
 });
 
 // POST /api/exams/:id/avatar - Set uploaded photo/GIF/WebP OR emoji+color avatar (Admin)
@@ -812,57 +848,17 @@ examRoutes.post("/:id/avatar", requirePermission("manage_exams"), async (c) => {
   const hasAvatarColor = cols.has("avatar_color");
   const oldKey = extractExamAvatarKey(String(existing.avatar_url || existing.image_url || ""));
 
-  const contentType = (c.req.header("content-type") || "").toLowerCase();
-  let imageBytes: Uint8Array | null = null;
-  let declaredMime = "";
-  let parsedBody: Record<string, unknown> | null = null;
-
-  if (contentType.includes("multipart/form-data")) {
-    const formData = await c.req.formData();
-    const fileValue: unknown = formData.get("file");
-    if (fileValue && typeof fileValue === "object" && "arrayBuffer" in fileValue && typeof fileValue.arrayBuffer === "function") {
-      const file = fileValue as File;
-      declaredMime = file.type || "";
-      imageBytes = new Uint8Array(await file.arrayBuffer());
-    } else {
-      return c.json({ success: false, error: "No avatar image file provided" }, 400);
-    }
-  } else if (contentType.startsWith("image/")) {
-    declaredMime = contentType.split(";")[0];
-    imageBytes = new Uint8Array(await c.req.arrayBuffer());
-  } else {
-    const rawJson = await c.req.json().catch(() => null);
-    if (!rawJson || typeof rawJson !== "object" || Array.isArray(rawJson)) {
-      return c.json({ success: false, error: "Provide an avatar image or emoji payload" }, 400);
-    }
-    parsedBody = rawJson as Record<string, unknown>;
-    if (typeof parsedBody.base64 === "string" && parsedBody.base64.trim()) {
-      const rawB64 = parsedBody.base64.trim();
-      const commaIdx = rawB64.indexOf(",");
-      const b64Clean = rawB64.startsWith("data:") && commaIdx > 0 ? rawB64.slice(commaIdx + 1) : rawB64;
-      if (b64Clean.length > Math.ceil(MAX_EXAM_AVATAR_BYTES * 4 / 3) + 16) {
-        return c.json({ success: false, error: "Avatar image exceeds 5MB limit" }, 400);
-      }
-      try {
-        const bin = atob(b64Clean);
-        const bytes = new Uint8Array(bin.length);
-        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-        imageBytes = bytes;
-      } catch {
-        return c.json({ success: false, error: "Invalid base64 image encoding" }, 400);
-      }
-      declaredMime = typeof parsedBody.mimeType === "string" ? parsedBody.mimeType : "";
-    }
+  const parsedPayload = await parseAvatarUploadPayload(c);
+  if (parsedPayload.error) {
+    return c.json({ success: false, error: parsedPayload.error }, 400);
   }
+  const { imageBytes, declaredMime, parsedBody } = parsedPayload;
 
   const storage = new AssetStorage(c.env);
 
   // Branch 1: Image/GIF/WebP upload
   if (imageBytes !== null) {
-    if (imageBytes.byteLength > MAX_EXAM_AVATAR_BYTES) {
-      return c.json({ success: false, error: "Avatar image exceeds 5MB limit" }, 400);
-    }
-    const detected = detectExamAvatarImage(imageBytes, declaredMime);
+    const detected = detectAvatarImage(imageBytes, declaredMime);
     if (!detected) {
       return c.json({ success: false, error: "Supported avatar formats: JPEG, PNG, WebP, GIF (max 5MB)" }, 400);
     }

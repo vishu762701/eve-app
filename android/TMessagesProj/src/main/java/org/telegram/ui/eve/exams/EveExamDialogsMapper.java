@@ -114,6 +114,30 @@ public final class EveExamDialogsMapper {
         return custom;
     }
 
+    public static DialogCell.CustomDialog toAnnouncementChannelDialog(
+            EveExamRepository.AnnouncementChannelSummary summary) {
+        DialogCell.CustomDialog custom = new DialogCell.CustomDialog();
+        String name = summary != null && !summary.channelName.trim().isEmpty()
+                ? summary.channelName.trim() : "Announcements";
+        String preview = summary != null && !summary.latestPreview.trim().isEmpty()
+                ? summary.latestPreview.trim() : "Broadcasts & live polls";
+        custom.id = -90002;
+        custom.name = name;
+        custom.message = preview;
+        custom.unread_count = summary != null ? Math.max(0, summary.unreadCount) : 0;
+        custom.date = summary != null ? summary.latestTimestampSec : 0;
+        custom.type = 2;
+        custom.verified = true;
+        custom.pinned = true;
+        custom.muted = false;
+        custom.isMedia = false;
+        custom.sent = -1;
+        custom.avatarUrl = summary != null ? summary.channelAvatarUrl : "";
+        custom.avatarEmoji = "";
+        custom.avatarColor = 4;
+        return custom;
+    }
+
     public static final class EmptyStateSpec {
         public final int iconRes;
         public final int titleRes;

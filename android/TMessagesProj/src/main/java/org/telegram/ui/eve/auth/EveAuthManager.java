@@ -631,8 +631,8 @@ public final class EveAuthManager {
                 : baseProfile;
         saveCachedProfile(workingProfile);
 
-        // Always request a fresh Firebase ID token (getIdToken(true)) for cloud profile sync.
-        user.getIdToken(true)
+        // Use cached Firebase token (~1ms) first; only force-refresh on automatic 401 retry.
+        user.getIdToken(!allowRetryOn401)
                 .addOnSuccessListener(tokenResult -> {
                     String idToken = tokenResult.getToken();
                     if (idToken == null || idToken.trim().isEmpty()) {
@@ -991,16 +991,24 @@ public final class EveAuthManager {
     }
 
     public void updateEveProfileFields(@NonNull JSONObject updates, @NonNull SimpleCallback callback) {
+        updateEveProfileFieldsInternal(updates, true, callback);
+    }
+
+    private void updateEveProfileFieldsInternal(@NonNull JSONObject updates, boolean allowRetryOn401, @NonNull SimpleCallback callback) {
         ensureInitialized();
         FirebaseUser user = getCurrentUser();
         if (user == null || user.isAnonymous()) {
             mainHandler.post(() -> callback.onError("Sign in to EVE with Google first."));
             return;
         }
-        user.getIdToken(true)
+        user.getIdToken(!allowRetryOn401)
                 .addOnSuccessListener(result -> {
                     String token = result != null ? result.getToken() : null;
                     if (token == null || token.trim().isEmpty()) {
+                        if (allowRetryOn401) {
+                            updateEveProfileFieldsInternal(updates, false, callback);
+                            return;
+                        }
                         mainHandler.post(() -> callback.onError("Authentication token unavailable."));
                         return;
                     }
@@ -1028,6 +1036,13 @@ public final class EveAuthManager {
                                 NotificationCenter.getInstance(UserConfig.selectedAccount).postNotificationName(NotificationCenter.updateInterfaces, MessagesController.UPDATE_MASK_NAME);
                                 callback.onSuccess("Profile saved to EVE Cloud.");
                             });
+                        } catch (EveBackendClient.BackendException be) {
+                            if (be.unauthorized && allowRetryOn401) {
+                                updateEveProfileFieldsInternal(updates, false, callback);
+                                return;
+                            }
+                            String msg = be.getMessage() != null ? be.getMessage() : "Could not update EVE profile.";
+                            mainHandler.post(() -> callback.onError(msg));
                         } catch (Throwable t) {
                             String msg = t.getMessage() != null ? t.getMessage() : "Could not update EVE profile.";
                             mainHandler.post(() -> callback.onError(msg));

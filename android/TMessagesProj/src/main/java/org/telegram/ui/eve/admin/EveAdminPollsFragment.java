@@ -83,6 +83,12 @@ public class EveAdminPollsFragment extends BaseFragment {
         destroyed = false;
         setHasOwnBackground(true);
 
+        List<EveAdminModels.PollItem> cachedPolls = repo.getCachedPolls();
+        if (cachedPolls != null && !cachedPolls.isEmpty()) {
+            polls = cachedPolls;
+            loading = false;
+        }
+
         EveAdminUiChrome.Chrome chrome = EveAdminUiChrome.setup(
                 this,
                 context,
@@ -91,7 +97,7 @@ public class EveAdminPollsFragment extends BaseFragment {
                 glassEngine,
                 getResourceProvider(),
                 "Student Polls",
-                "Loading...",
+                polls.isEmpty() ? "Loading..." : polls.size() + " poll(s)",
                 true,
                 this::fillItems,
                 this::onClick,
@@ -242,6 +248,21 @@ public class EveAdminPollsFragment extends BaseFragment {
 
     private void togglePollStatus(EvePollModel poll) {
         final boolean targetActive = !poll.active;
+        final List<EveAdminModels.PollItem> previous = new ArrayList<>(polls);
+        List<EveAdminModels.PollItem> optimistic = new ArrayList<>(polls.size());
+        for (EveAdminModels.PollItem p : polls) {
+            if (p.id.equals(poll.id)) {
+                optimistic.add(new EveAdminModels.PollItem(
+                        p.id, p.question, p.options, targetActive, p.totalVotes,
+                        p.voteCounts, p.createdAt, p.endsAt, p.createdBy));
+            } else {
+                optimistic.add(p);
+            }
+        }
+        polls = optimistic;
+        updateSubtitle();
+        updateList();
+
         EveAdminRepository.ResultCallback<Void> cb = new EveAdminRepository.ResultCallback<Void>() {
             @Override
             public void onSuccess(Void data) {
@@ -254,6 +275,9 @@ public class EveAdminPollsFragment extends BaseFragment {
             @Override
             public void onError(String message, int httpStatus) {
                 if (destroyed) return;
+                polls = previous;
+                updateSubtitle();
+                updateList();
                 BulletinFactory.of(EveAdminPollsFragment.this).createErrorBulletin(
                         message != null ? message : "Status update failed.").show();
             }
@@ -271,6 +295,17 @@ public class EveAdminPollsFragment extends BaseFragment {
         builder.setTitle("Delete Poll");
         builder.setMessage("Delete \"" + poll.question + "\" and all recorded votes?");
         builder.setPositiveButton("Delete", (d, w) -> {
+            final List<EveAdminModels.PollItem> previous = new ArrayList<>(polls);
+            List<EveAdminModels.PollItem> optimistic = new ArrayList<>(polls.size());
+            for (EveAdminModels.PollItem p : polls) {
+                if (!p.id.equals(poll.id)) {
+                    optimistic.add(p);
+                }
+            }
+            polls = optimistic;
+            updateSubtitle();
+            updateList();
+
             EveAdminRepository.ResultCallback<Void> cb = new EveAdminRepository.ResultCallback<Void>() {
                 @Override
                 public void onSuccess(Void data) {
@@ -283,6 +318,9 @@ public class EveAdminPollsFragment extends BaseFragment {
                 @Override
                 public void onError(String message, int httpStatus) {
                     if (destroyed) return;
+                    polls = previous;
+                    updateSubtitle();
+                    updateList();
                     BulletinFactory.of(EveAdminPollsFragment.this).createErrorBulletin(
                             message != null ? message : "Delete failed.").show();
                 }

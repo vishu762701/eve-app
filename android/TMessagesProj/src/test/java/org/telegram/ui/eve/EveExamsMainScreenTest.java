@@ -188,4 +188,73 @@ public class EveExamsMainScreenTest {
         assertEquals("ex-c", pins.getString(0));
         assertTrue(client.toggleExamPin("jwt-1", "ex-b"));
     }
+
+    @Test
+    public void sixUpgrades_appConfigMaintenanceChannelAndTestAvatarsWorkCleanly() throws Exception {
+        final java.util.concurrent.atomic.AtomicReference<String> signaledMsg = new java.util.concurrent.atomic.AtomicReference<>();
+        EveBackendClient.setMaintenanceSignalListener(signaledMsg::set);
+
+        try {
+            EveBackendClient client = new EveBackendClient("https://eve-backend.anyqueairdrop.workers.dev", (method, url, token, body) -> {
+                if (url.endsWith("/api/app-config")) {
+                    return new EveBackendClient.HttpResponse(200, "{\"success\":true,\"data\":{"
+                            + "\"maintenanceMode\":true,\"maintenanceMessage\":\"Upgrading D1 clusters\","
+                            + "\"minSupportedVersionCode\":5,\"defaultPublishMode\":\"live\","
+                            + "\"announcementChannelName\":\"EVE Updates\","
+                            + "\"announcementChannelAvatarUrl\":\"/api/announcement-channel/avatar?v=3\"}}");
+                }
+                if (url.endsWith("/api/exams")) {
+                    return new EveBackendClient.HttpResponse(503,
+                            "{\"success\":false,\"code\":\"MAINTENANCE_MODE\",\"maintenanceMessage\":\"Upgrading D1 clusters\"}");
+                }
+                return new EveBackendClient.HttpResponse(404, "{}");
+            });
+
+            EveBackendClient.AppConfigResult cfg = client.fetchPublicAppConfig();
+            assertTrue(cfg.maintenanceMode);
+            assertEquals("Upgrading D1 clusters", cfg.maintenanceMessage);
+            assertEquals(5, cfg.minSupportedVersionCode);
+            assertEquals("EVE Updates", cfg.announcementChannelName);
+            assertEquals("/api/announcement-channel/avatar?v=3", cfg.announcementChannelAvatarUrl);
+
+            try {
+                client.fetchExamsJson("student-jwt");
+                org.junit.Assert.fail("Expected 503 MAINTENANCE_MODE BackendException");
+            } catch (EveBackendClient.BackendException expected) {
+                assertEquals(503, expected.httpStatus);
+                assertTrue(expected.maintenanceMode);
+                assertEquals(EveBackendClient.ErrorKind.MAINTENANCE_MODE, expected.kind);
+                assertEquals("Upgrading D1 clusters", expected.maintenanceMessage);
+            }
+            assertEquals("Upgrading D1 clusters", signaledMsg.get());
+        } finally {
+            EveBackendClient.setMaintenanceSignalListener(null);
+        }
+
+        // Mock test avatars & Announcements Channel pinned DialogCell mapping
+        JSONArray tests = new JSONArray("[{"
+                + "\"id\":\"gt-1\",\"examId\":\"ex-1\",\"examName\":\"SSC\",\"title\":\"Mock 1\","
+                + "\"status\":\"live\",\"questionCount\":25,\"generatedAt\":1000,"
+                + "\"avatarUrl\":\"/api/generated-tests/gt-1/avatar?v=2\""
+                + "}]");
+        List<EveExamModels.GeneratedTestSummary> parsedTests = EveExamRepository.parseGeneratedTests(tests);
+        assertEquals(1, parsedTests.size());
+        assertEquals("/api/generated-tests/gt-1/avatar?v=2", parsedTests.get(0).avatarUrl);
+
+        EveExamRepository.AnnouncementChannelSummary ch = new EveExamRepository.AnnouncementChannelSummary(
+                "EVE Updates",
+                "/api/announcement-channel/avatar?v=3",
+                "New Mock 1 live",
+                1700000000,
+                1700000000000L,
+                3);
+        DialogCell.CustomDialog channelDialog = EveExamDialogsMapper.toAnnouncementChannelDialog(ch);
+        assertTrue(channelDialog.verified);
+        assertTrue(channelDialog.pinned);
+        assertEquals(-90002, channelDialog.id);
+        assertEquals("EVE Updates", channelDialog.name);
+        assertEquals("New Mock 1 live", channelDialog.message);
+        assertEquals(3, channelDialog.unread_count);
+        assertEquals("/api/announcement-channel/avatar?v=3", channelDialog.avatarUrl);
+    }
 }

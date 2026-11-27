@@ -31,7 +31,19 @@ export async function runGeneration(env: Env, exam: ExamRow, count: number, test
   if (!lease.meta.changes) throw new GenerationBusyError('Generation already running for this exam');
   try {
     await db.prepare("INSERT INTO generation_jobs (id, exam_id, exam_name, source, requested_count, status, started_at, request_key) VALUES (?, ?, ?, ?, ?, 'running', ?, ?)").bind(id, exam.id, exam.exam_name, source, count, now, requestKey || null).run();
-    const questions = await generateQuestions(env, exam.exam_name, exam.syllabus || '', count, prompt);
+    const effectivePrompt = (prompt || exam.ai_prompt || exam.generation_prompt || exam.custom_prompt_notes || '').trim();
+    const questions = await generateQuestions(
+      env,
+      exam.exam_name,
+      exam.syllabus || '',
+      count,
+      effectivePrompt,
+      fetch,
+      {
+        language: exam.ai_language || 'english',
+        difficulty: exam.ai_difficulty || 'mixed',
+      }
+    );
     if (questions.length !== count) throw new Error("Generated question count was incomplete");
     const testId = crypto.randomUUID();
     const finish = Date.now();

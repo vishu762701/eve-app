@@ -12,6 +12,13 @@ import { isUserAdmin, HARDCODED_ADMIN_EMAILS, ALL_ADMIN_RIGHTS, AdminRight, isOw
 import { prepareAdminAuditLog, recordAdminAction, runBatch } from "../util/auditLog";
 import { getMonthlyApiUsage, trackGeminiCall } from "../util/usageTracker";
 import { validateReformatInput, reformatExplanationWithAi } from "../ai/explanationReformat";
+import { normalizeAppConfigObject, readAppConfig } from "../util/appConfig";
+import { AssetStorage } from "../storage";
+import {
+  detectAvatarImage,
+  extractStorageAvatarKey,
+  parseAvatarUploadPayload,
+} from "../util/avatarMedia";
 
 const EMAIL_REGEX = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/;
 
@@ -186,6 +193,11 @@ adminRoutes.get("/dashboard", async (c) => {
       avatarUrl: String(r.avatar_url || r.image_url || "").trim(),
       avatarEmoji: String(r.avatar_emoji || "").trim(),
       avatarColor: typeof r.avatar_color === "number" ? r.avatar_color : null,
+      generationPrompt: r.generation_prompt || "",
+      customPromptNotes: r.custom_prompt_notes || "",
+      aiPrompt: String(r.ai_prompt ?? r.generation_prompt ?? "").trim(),
+      aiLanguage: String(r.ai_language || "english").trim().toLowerCase() || "english",
+      aiDifficulty: String(r.ai_difficulty || "mixed").trim().toLowerCase() || "mixed",
     };
   });
 
@@ -1032,57 +1044,119 @@ adminRoutes.put("/config", requirePermission("manage_config_maintenance"), async
   }
 
   // 1. Validate minimum_supported_version_code
+  const rawVerProvided =
+    body.minimum_supported_version_code !== undefined
+      ? body.minimum_supported_version_code
+      : body.minSupportedVersionCode;
   let minVersion = prevConfig.minimum_supported_version_code !== undefined ? Number(prevConfig.minimum_supported_version_code) : 1;
-  if (body.minimum_supported_version_code !== undefined && body.minimum_supported_version_code !== null) {
-    const rawVer = body.minimum_supported_version_code;
-    const v = Number(rawVer);
-    if (typeof rawVer === "boolean" || !Number.isInteger(v) || isNaN(v) || v < 0) {
+  if (rawVerProvided !== undefined && rawVerProvided !== null) {
+    const v = Number(rawVerProvided);
+    if (typeof rawVerProvided === "boolean" || !Number.isInteger(v) || isNaN(v) || v < 0) {
       return c.json({ success: false, error: "minimum_supported_version_code must be a non-negative integer" }, 400);
     }
     minVersion = v;
   }
 
   // 2. Validate maintenance_mode
+  const rawMaintModeProvided =
+    body.maintenance_mode !== undefined ? body.maintenance_mode : body.maintenanceMode;
   let maintenanceMode = prevConfig.maintenance_mode !== undefined ? Boolean(prevConfig.maintenance_mode) : false;
-  if (body.maintenance_mode !== undefined && body.maintenance_mode !== null) {
-    if (typeof body.maintenance_mode !== "boolean") {
+  if (rawMaintModeProvided !== undefined && rawMaintModeProvided !== null) {
+    if (typeof rawMaintModeProvided !== "boolean") {
       return c.json({ success: false, error: "maintenance_mode must be a boolean" }, 400);
     }
-    maintenanceMode = body.maintenance_mode;
+    maintenanceMode = rawMaintModeProvided;
   }
 
   // 3. Validate maintenance_message
+  const rawMaintMsgProvided =
+    body.maintenance_message !== undefined ? body.maintenance_message : body.maintenanceMessage;
   let maintenanceMessage = prevConfig.maintenance_message !== undefined
     ? String(prevConfig.maintenance_message)
     : "Eve Mock Test is currently undergoing scheduled maintenance. Please check back shortly.";
-  if (body.maintenance_message !== undefined && body.maintenance_message !== null) {
-    if (typeof body.maintenance_message !== "string" || body.maintenance_message.length > 1000) {
+  if (rawMaintMsgProvided !== undefined && rawMaintMsgProvided !== null) {
+    if (typeof rawMaintMsgProvided !== "string" || rawMaintMsgProvided.length > 1000) {
       return c.json({ success: false, error: "maintenance_message must be a string up to 1000 characters" }, 400);
     }
-    maintenanceMessage = body.maintenance_message.trim();
+    maintenanceMessage = rawMaintMsgProvided.trim();
   }
 
   // 4. Validate default_publish_mode
+  const rawPubProvided =
+    body.default_publish_mode !== undefined ? body.default_publish_mode : body.defaultPublishMode;
   let defaultPublishMode = prevConfig.default_publish_mode || "paused";
-  if (body.default_publish_mode !== undefined && body.default_publish_mode !== null) {
-    const mode = String(body.default_publish_mode).trim().toLowerCase();
+  if (rawPubProvided !== undefined && rawPubProvided !== null) {
+    const mode = String(rawPubProvided).trim().toLowerCase();
     if (mode !== "paused" && mode !== "live" && mode !== "draft") {
       return c.json({ success: false, error: "default_publish_mode must be 'paused', 'live', or 'draft'" }, 400);
     }
     defaultPublishMode = mode;
   }
 
-  const configObj = {
+  // 5. Validate announcement channel metadata
+  const rawChNameProvided =
+    body.announcement_channel_name !== undefined
+      ? body.announcement_channel_name
+      : body.announcementChannelName;
+  let announcementChannelName =
+    typeof (prevConfig.announcement_channel_name ?? prevConfig.announcementChannelName) === "string" &&
+    String(prevConfig.announcement_channel_name ?? prevConfig.announcementChannelName).trim()
+      ? String(prevConfig.announcement_channel_name ?? prevConfig.announcementChannelName).trim()
+      : "Announcements";
+  if (rawChNameProvided !== undefined && rawChNameProvided !== null) {
+    if (typeof rawChNameProvided !== "string" || rawChNameProvided.trim().length > 60) {
+      return c.json({ success: false, error: "announcementChannelName must be a string up to 60 characters" }, 400);
+    }
+    announcementChannelName = rawChNameProvided.trim() || "Announcements";
+  }
+
+  const rawChAvatarProvided =
+    body.announcement_channel_avatar_url !== undefined
+      ? body.announcement_channel_avatar_url
+      : body.announcementChannelAvatarUrl;
+  let announcementChannelAvatarUrl = String(
+    prevConfig.announcement_channel_avatar_url ?? prevConfig.announcementChannelAvatarUrl ?? ""
+  ).trim();
+  if (rawChAvatarProvided !== undefined && rawChAvatarProvided !== null) {
+    if (typeof rawChAvatarProvided !== "string" || rawChAvatarProvided.length > 1024) {
+      return c.json({ success: false, error: "announcementChannelAvatarUrl must be a string up to 1024 characters" }, 400);
+    }
+    announcementChannelAvatarUrl = rawChAvatarProvided.trim();
+  }
+
+  const configObj: Record<string, any> = {
     ...prevConfig,
     minimum_supported_version_code: minVersion,
     maintenance_mode: maintenanceMode,
     maintenance_message: maintenanceMessage,
     default_publish_mode: defaultPublishMode,
   };
+  if (rawChNameProvided !== undefined || prevConfig.announcement_channel_name !== undefined) {
+    configObj.announcement_channel_name = announcementChannelName;
+  }
+  if (rawChAvatarProvided !== undefined || prevConfig.announcement_channel_avatar_url !== undefined) {
+    configObj.announcement_channel_avatar_url = announcementChannelAvatarUrl;
+  }
 
-  const patch = Object.fromEntries(Object.entries(configObj).filter(([key]) =>
-    ["minimum_supported_version_code", "maintenance_mode", "maintenance_message", "default_publish_mode"].includes(key)
-      && body[key] !== undefined && body[key] !== null));
+  const patch: Record<string, any> = {};
+  if (rawVerProvided !== undefined && rawVerProvided !== null) {
+    patch.minimum_supported_version_code = minVersion;
+  }
+  if (rawMaintModeProvided !== undefined && rawMaintModeProvided !== null) {
+    patch.maintenance_mode = maintenanceMode;
+  }
+  if (rawMaintMsgProvided !== undefined && rawMaintMsgProvided !== null) {
+    patch.maintenance_message = maintenanceMessage;
+  }
+  if (rawPubProvided !== undefined && rawPubProvided !== null) {
+    patch.default_publish_mode = defaultPublishMode;
+  }
+  if (rawChNameProvided !== undefined && rawChNameProvided !== null) {
+    patch.announcement_channel_name = announcementChannelName;
+  }
+  if (rawChAvatarProvided !== undefined && rawChAvatarProvided !== null) {
+    patch.announcement_channel_avatar_url = announcementChannelAvatarUrl;
+  }
   try {
     const user = c.get("user");
     const saveStmt = db
@@ -1091,13 +1165,13 @@ adminRoutes.put("/config", requirePermission("manage_config_maintenance"), async
       )
       .bind(JSON.stringify(configObj), Date.now(), user?.email || "admin", JSON.stringify(patch));
 
-    const actionType = prevConfig.maintenance_mode !== maintenanceMode ? "MAINTENANCE_TOGGLED" : "CONFIG_UPDATED";
+    const actionType = Boolean(prevConfig.maintenance_mode) !== maintenanceMode ? "MAINTENANCE_TOGGLED" : "CONFIG_UPDATED";
     const { stmt: auditStmt } = prepareAdminAuditLog(db, user, {
       actionType,
-      description: `Updated app configuration (maintenance=${maintenanceMode}, minVersion=${minVersion})`,
+      description: `Updated app configuration (maintenance=${maintenanceMode}, minVersion=${minVersion}, channel=${announcementChannelName})`,
       targetType: "app_content",
       targetId: "app_config",
-      metadata: { maintenanceMode, minVersion, defaultPublishMode },
+      metadata: { maintenanceMode, minVersion, defaultPublishMode, announcementChannelName },
     });
 
     await runBatch(db, [saveStmt, auditStmt]);
@@ -1108,6 +1182,138 @@ adminRoutes.put("/config", requirePermission("manage_config_maintenance"), async
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500);
   }
+});
+
+async function requireAnnouncementChannelEditor(db: D1Database, email: string): Promise<boolean> {
+  const perms = await getAdminPermissions(db, email);
+  if (!perms) return false;
+  return (
+    perms.isOwner ||
+    perms.rights.includes("send_broadcasts") ||
+    perms.rights.includes("manage_config_maintenance")
+  );
+}
+
+// PUT /api/admin/announcement-channel - Update Home Announcements Channel display name
+adminRoutes.put("/announcement-channel", async (c) => {
+  const user = c.get("user");
+  const db = c.env.DB;
+  if (!(await requireAnnouncementChannelEditor(db, user?.email))) {
+    return c.json({ success: false, error: "Missing send_broadcasts or config permission" }, 403);
+  }
+  const body = await c.req.json().catch(() => null);
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return c.json({ success: false, error: "Provide channel settings" }, 400);
+  }
+  const rawName = body.announcementChannelName ?? body.announcement_channel_name ?? body.name;
+  if (typeof rawName !== "string" || rawName.trim().length > 60) {
+    return c.json({ success: false, error: "Channel name must be a string up to 60 characters" }, 400);
+  }
+  const name = rawName.trim() || "Announcements";
+  const prev = await readAppConfig(db).catch(() => normalizeAppConfigObject({}));
+  const updated = normalizeAppConfigObject({ ...prev, announcement_channel_name: name });
+  const patch = { announcement_channel_name: name, announcementChannelName: name };
+  const saveStmt = db
+    .prepare(
+      "INSERT INTO app_content (id, title, body, updated_at, updated_by) VALUES ('app_config', 'App Configuration', ?, ?, ?) ON CONFLICT(id) DO UPDATE SET body = json_patch(app_content.body, ?), updated_at = excluded.updated_at, updated_by = excluded.updated_by"
+    )
+    .bind(JSON.stringify(updated), Date.now(), user?.email || "admin", JSON.stringify(patch));
+  const { stmt: auditStmt } = prepareAdminAuditLog(db, user, {
+    actionType: "ANNOUNCEMENT_CHANNEL_UPDATED",
+    description: `Renamed Announcements channel to '${name}'`,
+    targetType: "app_content",
+    targetId: "app_config",
+    metadata: { announcementChannelName: name },
+  });
+  await runBatch(db, [saveStmt, auditStmt]);
+  return c.json({ success: true, data: updated });
+});
+
+// POST /api/admin/announcement-channel/avatar - Upload Home Announcements Channel circular avatar
+adminRoutes.post("/announcement-channel/avatar", async (c) => {
+  const user = c.get("user");
+  const db = c.env.DB;
+  if (!(await requireAnnouncementChannelEditor(db, user?.email))) {
+    return c.json({ success: false, error: "Missing send_broadcasts or config permission" }, 403);
+  }
+  const parsed = await parseAvatarUploadPayload(c);
+  if (parsed.error || !parsed.imageBytes) {
+    return c.json({ success: false, error: parsed.error || "Provide an avatar image file or base64 payload" }, 400);
+  }
+  const detected = detectAvatarImage(parsed.imageBytes, parsed.declaredMime);
+  if (!detected) {
+    return c.json({ success: false, error: "Supported avatar formats: JPEG, PNG, WebP, GIF (max 5MB)" }, 400);
+  }
+
+  const prev = await readAppConfig(db).catch(() => normalizeAppConfigObject({}));
+  const oldKey = extractStorageAvatarKey(prev.announcementChannelAvatarUrl, "channel-avatars/");
+
+  const storage = new AssetStorage(c.env);
+  const storagePath = `channel-avatars/${crypto.randomUUID()}.${detected.ext}`;
+  const storedLocation = await storage.uploadFile(storagePath, parsed.imageBytes, detected.mime);
+  const avatarUrl = storedLocation.startsWith("r2://")
+    ? `/api/announcement-channel/avatar?k=${encodeURIComponent(storagePath)}&v=${Date.now()}`
+    : storedLocation;
+
+  const updated = normalizeAppConfigObject({ ...prev, announcement_channel_avatar_url: avatarUrl });
+  const patch = {
+    announcement_channel_avatar_url: avatarUrl,
+    announcementChannelAvatarUrl: avatarUrl,
+  };
+  const saveStmt = db
+    .prepare(
+      "INSERT INTO app_content (id, title, body, updated_at, updated_by) VALUES ('app_config', 'App Configuration', ?, ?, ?) ON CONFLICT(id) DO UPDATE SET body = json_patch(app_content.body, ?), updated_at = excluded.updated_at, updated_by = excluded.updated_by"
+    )
+    .bind(JSON.stringify(updated), Date.now(), user?.email || "admin", JSON.stringify(patch));
+  const { stmt: auditStmt } = prepareAdminAuditLog(db, user, {
+    actionType: "ANNOUNCEMENT_CHANNEL_AVATAR_UPDATED",
+    description: `Updated Announcements channel avatar (${detected.ext.toUpperCase()})`,
+    targetType: "app_content",
+    targetId: "app_config",
+    metadata: { mime: detected.mime },
+  });
+  try {
+    await runBatch(db, [saveStmt, auditStmt]);
+  } catch {
+    try { await storage.deleteFiles([storagePath]); } catch {}
+    return c.json({ success: false, error: "Could not save channel avatar; please retry" }, 409);
+  }
+  if (oldKey && oldKey !== storagePath) {
+    try { await storage.deleteFiles([oldKey]); } catch {}
+  }
+  return c.json({ success: true, data: updated });
+});
+
+// DELETE /api/admin/announcement-channel/avatar - Clear Home Announcements Channel avatar
+adminRoutes.delete("/announcement-channel/avatar", async (c) => {
+  const user = c.get("user");
+  const db = c.env.DB;
+  if (!(await requireAnnouncementChannelEditor(db, user?.email))) {
+    return c.json({ success: false, error: "Missing send_broadcasts or config permission" }, 403);
+  }
+  const prev = await readAppConfig(db).catch(() => normalizeAppConfigObject({}));
+  const oldKey = extractStorageAvatarKey(prev.announcementChannelAvatarUrl, "channel-avatars/");
+  const updated = normalizeAppConfigObject({ ...prev, announcement_channel_avatar_url: "" });
+  const patch = {
+    announcement_channel_avatar_url: "",
+    announcementChannelAvatarUrl: "",
+  };
+  const saveStmt = db
+    .prepare(
+      "INSERT INTO app_content (id, title, body, updated_at, updated_by) VALUES ('app_config', 'App Configuration', ?, ?, ?) ON CONFLICT(id) DO UPDATE SET body = json_patch(app_content.body, ?), updated_at = excluded.updated_at, updated_by = excluded.updated_by"
+    )
+    .bind(JSON.stringify(updated), Date.now(), user?.email || "admin", JSON.stringify(patch));
+  const { stmt: auditStmt } = prepareAdminAuditLog(db, user, {
+    actionType: "ANNOUNCEMENT_CHANNEL_AVATAR_DELETED",
+    description: "Cleared Announcements channel avatar",
+    targetType: "app_content",
+    targetId: "app_config",
+  });
+  await runBatch(db, [saveStmt, auditStmt]);
+  if (oldKey) {
+    try { await new AssetStorage(c.env).deleteFiles([oldKey]); } catch {}
+  }
+  return c.json({ success: true, data: updated });
 });
 
 function validateFloatingLinkUrl(rawUrl: string): { valid: boolean; error?: string; cleanUrl: string } {

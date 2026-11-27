@@ -13,6 +13,17 @@ export interface GeneratedQuestionItem {
   optionD: string;
   correctAnswer: string;
   explanation: string;
+  questionTextHi?: string;
+  optionAHi?: string;
+  optionBHi?: string;
+  optionCHi?: string;
+  optionDHi?: string;
+  explanationHi?: string;
+}
+
+export interface PromptGenerationOptions {
+  language?: string;
+  difficulty?: string;
 }
 
 export function incrementTestNumber(current: string): string {
@@ -76,26 +87,31 @@ export function parseGeminiErrorBody(rawText: string): ParsedGeminiErrorBody {
   return {};
 }
 
-function buildPrompt(
+function normalizeLanguageOption(language?: string): "english" | "hindi" | "bilingual" {
+  const value = String(language || "english").trim().toLowerCase();
+  if (value === "hindi" || value === "bilingual") return value;
+  return "english";
+}
+
+function normalizeDifficultyOption(difficulty?: string): "easy" | "medium" | "hard" | "mixed" {
+  const value = String(difficulty || "mixed").trim().toLowerCase();
+  if (value === "easy" || value === "medium" || value === "hard" || value === "mixed") return value;
+  return "mixed";
+}
+
+export function buildPrompt(
   examName: string,
   syllabusText: string,
   questionCount: number,
-  customPromptNotes: string
+  customPromptNotes: string,
+  options: PromptGenerationOptions = {}
 ): string {
-  return `You are an expert question-setter for ${examName}, a well-known Indian competitive/entrance exam.
-Generate exactly ${questionCount} unique, high-quality multiple-choice questions strictly adhering to this exam pattern and syllabus:
-${syllabusText || "General competitive exam topics including General Awareness, Reasoning, Quantitative Aptitude, and English Comprehension."}
-Admin instructions & focus areas: ${customPromptNotes || "Ensure standard exam difficulty and balanced topic coverage."}
+  const language = normalizeLanguageOption(options.language);
+  const difficulty = normalizeDifficultyOption(options.difficulty);
 
-Rules:
-1. Each question must match the real competitive exam format and difficulty level.
-2. Factually verify each question and step-by-step solve before matching to options.
-3. Every question must have 4 distinct, plausible options (A, B, C, D).
-4. Provide a detailed, pedagogical explanation (3-4 sentences) for why the correct answer is right.
-5. Output ONLY a valid JSON array of objects with the exact schema below. No markdown fences, no surrounding prose.
-
-JSON Schema:
-[
+  let languageInstruction =
+    "Medium: English only. Write questionText, options A/B/C/D, and explanation in clear competitive-exam English.";
+  let schemaHint = `[
   {
     "questionText": "...",
     "optionA": "...",
@@ -106,6 +122,60 @@ JSON Schema:
     "explanation": "..."
   }
 ]`;
+  if (language === "hindi") {
+    languageInstruction =
+      "Medium: Hindi (Devanagari script / हिंदी) only. Write questionText, options A/B/C/D, and explanation in natural competitive-exam Hindi while keeping JSON property keys in English and correctAnswer as A/B/C/D.";
+  } else if (language === "bilingual") {
+    languageInstruction =
+      "Medium: Bilingual (English + Hindi). Provide clear English in questionText, optionA..optionD, explanation AND accurate Devanagari Hindi translations in questionTextHi, optionAHi, optionBHi, optionCHi, optionDHi, explanationHi.";
+    schemaHint = `[
+  {
+    "questionText": "...",
+    "optionA": "...",
+    "optionB": "...",
+    "optionC": "...",
+    "optionD": "...",
+    "correctAnswer": "A",
+    "explanation": "...",
+    "questionTextHi": "...",
+    "optionAHi": "...",
+    "optionBHi": "...",
+    "optionCHi": "...",
+    "optionDHi": "...",
+    "explanationHi": "..."
+  }
+]`;
+  }
+
+  let difficultyInstruction =
+    "Target Difficulty: MIXED (approx 30% Easy, 50% Medium, 20% Hard).";
+  if (difficulty === "easy") {
+    difficultyInstruction =
+      "Target Difficulty: EASY (foundational concepts, direct recall, single-step reasoning).";
+  } else if (difficulty === "medium") {
+    difficultyInstruction =
+      "Target Difficulty: MEDIUM (standard multi-step competitive exam application level).";
+  } else if (difficulty === "hard") {
+    difficultyInstruction =
+      "Target Difficulty: HARD (analytical, multi-concept, statement/assertion-reason level).";
+  }
+
+  return `You are an expert question-setter for ${examName}, a well-known Indian competitive/entrance exam.
+Generate exactly ${questionCount} unique, high-quality multiple-choice questions strictly adhering to this exam pattern and syllabus:
+${syllabusText || "General competitive exam topics including General Awareness, Reasoning, Quantitative Aptitude, and English Comprehension."}
+${languageInstruction}
+${difficultyInstruction}
+Admin instructions & focus areas: ${customPromptNotes || "Ensure standard exam difficulty and balanced topic coverage."}
+
+Rules:
+1. Each question must match the real competitive exam format and target difficulty level.
+2. Factually verify each question and step-by-step solve before matching to options.
+3. Every question must have 4 distinct, plausible options (A, B, C, D).
+4. Provide a detailed, pedagogical explanation (3-4 sentences) for why the correct answer is right.
+5. Output ONLY a valid JSON array of objects with the exact schema below. No markdown fences, no surrounding prose.
+
+JSON Schema:
+${schemaHint}`;
 }
 
 /**
@@ -217,6 +287,13 @@ export function parseAndValidateQuestions(rawText: string): GeneratedQuestionIte
       throw new Error("Question options must be distinct");
     }
 
+    const questionTextHi = field(q.questionTextHi || q.question_text_hi || "");
+    const optionAHi = field(q.optionAHi || q.option_a_hi || "");
+    const optionBHi = field(q.optionBHi || q.option_b_hi || "");
+    const optionCHi = field(q.optionCHi || q.option_c_hi || "");
+    const optionDHi = field(q.optionDHi || q.option_d_hi || "");
+    const explanationHi = field(q.explanationHi || q.explanation_hi || "");
+
     const normalized = questionText.toLowerCase().replace(/\s+/g, " ");
     if (seen.has(normalized)) throw new Error("Duplicate question in AI response");
     seen.add(normalized);
@@ -228,6 +305,12 @@ export function parseAndValidateQuestions(rawText: string): GeneratedQuestionIte
       optionD,
       correctAnswer,
       explanation: explanation || `Option ${correctAnswer} is the correct answer.`,
+      ...(questionTextHi ? { questionTextHi } : {}),
+      ...(optionAHi ? { optionAHi } : {}),
+      ...(optionBHi ? { optionBHi } : {}),
+      ...(optionCHi ? { optionCHi } : {}),
+      ...(optionDHi ? { optionDHi } : {}),
+      ...(explanationHi ? { explanationHi } : {}),
     });
   }
 
@@ -580,7 +663,8 @@ export async function generateQuestions(
   syllabus: string,
   targetCount: number,
   customPrompt: string,
-  fetchFn: typeof fetch = fetch
+  fetchFn: typeof fetch = fetch,
+  options: PromptGenerationOptions = {}
 ): Promise<GeneratedQuestionItem[]> {
   if (!Number.isInteger(targetCount) || targetCount < 1 || targetCount > 200) {
     throw new Error("questionCount must be an integer between 1 and 200");
@@ -641,7 +725,7 @@ export async function generateQuestions(
         }
 
         const apiKey = candidateKeys[keyIndex % candidateKeys.length];
-        const prompt = buildPrompt(examName, syllabus, currentChunkRequestCount, customPrompt);
+        const prompt = buildPrompt(examName, syllabus, currentChunkRequestCount, customPrompt, options);
         const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(currentModel)}:generateContent`;
 
         const body: any = {

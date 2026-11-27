@@ -101,6 +101,9 @@ public final class EveAdminModels {
         public final String avatarUrl;
         public final String avatarEmoji;
         public final int avatarColor;
+        public final String aiPrompt;
+        public final String aiLanguage;
+        public final String aiDifficulty;
 
         public AdminExamItem(
                 String id,
@@ -113,7 +116,8 @@ public final class EveAdminModels {
                 String publishMode,
                 String generationPrompt) {
             this(id, examName, category, timeLimitMinutes, questionCount, testNumber,
-                    negativeMarkingText, publishMode, generationPrompt, "", "", "", "", "", "", -1);
+                    negativeMarkingText, publishMode, generationPrompt, "", "", "", "", "", "", -1,
+                    generationPrompt, "english", "mixed");
         }
 
         public AdminExamItem(
@@ -132,7 +136,8 @@ public final class EveAdminModels {
                 String imageUrl) {
             this(id, examName, category, timeLimitMinutes, questionCount, testNumber,
                     negativeMarkingText, publishMode, generationPrompt, parentExamId,
-                    syllabusFileName, syllabusUrl, imageUrl, imageUrl, "", -1);
+                    syllabusFileName, syllabusUrl, imageUrl, imageUrl, "", -1,
+                    generationPrompt, "english", "mixed");
         }
 
         public AdminExamItem(
@@ -152,6 +157,32 @@ public final class EveAdminModels {
                 String avatarUrl,
                 String avatarEmoji,
                 int avatarColor) {
+            this(id, examName, category, timeLimitMinutes, questionCount, testNumber,
+                    negativeMarkingText, publishMode, generationPrompt, parentExamId,
+                    syllabusFileName, syllabusUrl, imageUrl, avatarUrl, avatarEmoji, avatarColor,
+                    generationPrompt, "english", "mixed");
+        }
+
+        public AdminExamItem(
+                String id,
+                String examName,
+                String category,
+                int timeLimitMinutes,
+                int questionCount,
+                String testNumber,
+                String negativeMarkingText,
+                String publishMode,
+                String generationPrompt,
+                String parentExamId,
+                String syllabusFileName,
+                String syllabusUrl,
+                String imageUrl,
+                String avatarUrl,
+                String avatarEmoji,
+                int avatarColor,
+                String aiPrompt,
+                String aiLanguage,
+                String aiDifficulty) {
             this.id = id != null ? id : "";
             this.examName = examName != null ? examName : "Untitled Exam";
             this.category = category != null && !category.isEmpty() ? category : "General";
@@ -160,7 +191,13 @@ public final class EveAdminModels {
             this.testNumber = testNumber != null && !testNumber.isEmpty() ? testNumber : "Test 1";
             this.negativeMarkingText = negativeMarkingText != null && !negativeMarkingText.isEmpty() ? negativeMarkingText : "0";
             this.publishMode = publishMode != null && !publishMode.isEmpty() ? publishMode.toLowerCase(Locale.US) : "inherit";
-            this.generationPrompt = generationPrompt != null ? generationPrompt : "";
+            String resolvedPrompt = (aiPrompt != null && !aiPrompt.trim().isEmpty())
+                    ? aiPrompt.trim()
+                    : (generationPrompt != null ? generationPrompt : "");
+            this.generationPrompt = resolvedPrompt;
+            this.aiPrompt = resolvedPrompt;
+            this.aiLanguage = normalizeLanguage(aiLanguage);
+            this.aiDifficulty = normalizeDifficulty(aiDifficulty);
             this.parentExamId = parentExamId != null ? parentExamId : "";
             this.syllabusFileName = syllabusFileName != null ? syllabusFileName : "";
             this.syllabusUrl = syllabusUrl != null ? syllabusUrl : "";
@@ -171,12 +208,34 @@ public final class EveAdminModels {
             this.avatarColor = avatarColor;
         }
 
+        private static String normalizeLanguage(String raw) {
+            String val = raw != null ? raw.trim().toLowerCase(Locale.US) : "";
+            if ("hindi".equals(val) || "bilingual".equals(val)) return val;
+            return "english";
+        }
+
+        private static String normalizeDifficulty(String raw) {
+            String val = raw != null ? raw.trim().toLowerCase(Locale.US) : "";
+            if ("easy".equals(val) || "medium".equals(val) || "hard".equals(val) || "mixed".equals(val)) return val;
+            return "mixed";
+        }
+
         public AdminExamItem withAvatar(String nextAvatarUrl, String nextAvatarEmoji, int nextAvatarColor) {
             String cleanUrl = nextAvatarUrl != null ? nextAvatarUrl.trim() : "";
             return new AdminExamItem(
                     id, examName, category, timeLimitMinutes, questionCount, testNumber,
                     negativeMarkingText, publishMode, generationPrompt, parentExamId,
-                    syllabusFileName, syllabusUrl, cleanUrl, cleanUrl, nextAvatarEmoji, nextAvatarColor);
+                    syllabusFileName, syllabusUrl, cleanUrl, cleanUrl, nextAvatarEmoji, nextAvatarColor,
+                    aiPrompt, aiLanguage, aiDifficulty);
+        }
+
+        public AdminExamItem withAiSettings(String nextPrompt, String nextLanguage, String nextDifficulty) {
+            String p = nextPrompt != null ? nextPrompt.trim() : "";
+            return new AdminExamItem(
+                    id, examName, category, timeLimitMinutes, questionCount, testNumber,
+                    negativeMarkingText, publishMode, p, parentExamId,
+                    syllabusFileName, syllabusUrl, imageUrl, avatarUrl, avatarEmoji, avatarColor,
+                    p, nextLanguage, nextDifficulty);
         }
 
         public boolean hasCustomAvatar() {
@@ -201,6 +260,8 @@ public final class EveAdminModels {
                 String avUrl = clean(o, "avatarUrl", imgUrl);
                 String avEmoji = clean(o, "avatarEmoji", "");
                 int avColor = o.isNull("avatarColor") ? -1 : o.optInt("avatarColor", -1);
+                String genPrompt = clean(o, "generationPrompt", "");
+                String aiPromptVal = clean(o, "aiPrompt", genPrompt);
                 out.add(new AdminExamItem(
                         clean(o, "id", ""),
                         clean(o, "examName", "Untitled Exam"),
@@ -210,14 +271,17 @@ public final class EveAdminModels {
                         clean(o, "testNumber", "Test 1"),
                         clean(o, "negativeMarkingText", "0"),
                         clean(o, "publishMode", "inherit"),
-                        clean(o, "generationPrompt", ""),
+                        genPrompt,
                         clean(o, "parentExamId", ""),
                         clean(o, "syllabusFileName", ""),
                         clean(o, "syllabusUrl", ""),
                         imgUrl,
                         avUrl,
                         avEmoji,
-                        avColor
+                        avColor,
+                        aiPromptVal,
+                        clean(o, "aiLanguage", "english"),
+                        clean(o, "aiDifficulty", "mixed")
                 ));
             }
             return out;
@@ -234,6 +298,9 @@ public final class EveAdminModels {
         public final int questionCount;
         public final long generatedAtMs;
         public final String validationError;
+        public final String avatarUrl;
+        public final String avatarEmoji;
+        public final int avatarColor;
 
         public AdminGeneratedTestItem(
                 String id,
@@ -245,6 +312,22 @@ public final class EveAdminModels {
                 int questionCount,
                 long generatedAtMs,
                 String validationError) {
+            this(id, examId, examName, testNumber, title, status, questionCount, generatedAtMs, validationError, "", "", -1);
+        }
+
+        public AdminGeneratedTestItem(
+                String id,
+                String examId,
+                String examName,
+                String testNumber,
+                String title,
+                String status,
+                int questionCount,
+                long generatedAtMs,
+                String validationError,
+                String avatarUrl,
+                String avatarEmoji,
+                int avatarColor) {
             this.id = id != null ? id : "";
             this.examId = examId != null ? examId : "";
             this.examName = examName != null ? examName : "";
@@ -254,6 +337,19 @@ public final class EveAdminModels {
             this.questionCount = questionCount;
             this.generatedAtMs = generatedAtMs;
             this.validationError = validationError != null ? validationError : "";
+            this.avatarUrl = avatarUrl != null ? avatarUrl.trim() : "";
+            this.avatarEmoji = avatarEmoji != null ? avatarEmoji.trim() : "";
+            this.avatarColor = avatarColor;
+        }
+
+        public AdminGeneratedTestItem withStatus(String nextStatus) {
+            return new AdminGeneratedTestItem(id, examId, examName, testNumber, title, nextStatus, questionCount,
+                    generatedAtMs, validationError, avatarUrl, avatarEmoji, avatarColor);
+        }
+
+        public AdminGeneratedTestItem withAvatar(String nextUrl, String nextEmoji, int nextColor) {
+            return new AdminGeneratedTestItem(id, examId, examName, testNumber, title, status, questionCount,
+                    generatedAtMs, validationError, nextUrl, nextEmoji, nextColor);
         }
 
         public boolean isLive() {
@@ -275,7 +371,10 @@ public final class EveAdminModels {
                         clean(o, "status", "draft"),
                         o.optInt("questionCount", 0),
                         o.optLong("generatedAt", 0L),
-                        clean(o, "validationError", "")
+                        clean(o, "validationError", ""),
+                        clean(o, "avatarUrl", ""),
+                        clean(o, "avatarEmoji", ""),
+                        o.isNull("avatarColor") ? -1 : o.optInt("avatarColor", -1)
                 ));
             }
             return out;
@@ -1208,6 +1307,7 @@ public final class EveAdminModels {
 
     public static final class QuestionReportItem {
         public final String id;
+        public final String questionId;
         public final String examName;
         public final String questionText;
         public final String reason;
@@ -1217,7 +1317,12 @@ public final class EveAdminModels {
         public final long timestamp;
 
         public QuestionReportItem(String id, String examName, String questionText, String reason, String comment, String studentEmail, String status, long timestamp) {
+            this(id, "", examName, questionText, reason, comment, studentEmail, status, timestamp);
+        }
+
+        public QuestionReportItem(String id, String questionId, String examName, String questionText, String reason, String comment, String studentEmail, String status, long timestamp) {
             this.id = id != null ? id : "";
+            this.questionId = questionId != null ? questionId : "";
             this.examName = examName != null ? examName : "";
             this.questionText = questionText != null ? questionText : "";
             this.reason = reason != null ? reason : "";
@@ -1235,6 +1340,7 @@ public final class EveAdminModels {
                 if (o == null) continue;
                 out.add(new QuestionReportItem(
                         clean(o, "id", ""),
+                        clean(o, "questionId", clean(o, "question_id", "")),
                         clean(o, "examName", ""),
                         clean(o, "questionText", ""),
                         clean(o, "reason", ""),
@@ -1577,24 +1683,44 @@ public final class EveAdminModels {
         public final boolean maintenanceMode;
         public final String maintenanceMessage;
         public final String defaultPublishMode;
+        public final String announcementChannelName;
+        public final String announcementChannelAvatarUrl;
 
         public AppConfigModel(int minSupportedVersionCode, boolean maintenanceMode, String maintenanceMessage, String defaultPublishMode) {
+            this(minSupportedVersionCode, maintenanceMode, maintenanceMessage, defaultPublishMode, "Announcements", "");
+        }
+
+        public AppConfigModel(
+                int minSupportedVersionCode,
+                boolean maintenanceMode,
+                String maintenanceMessage,
+                String defaultPublishMode,
+                String announcementChannelName,
+                String announcementChannelAvatarUrl) {
             this.minSupportedVersionCode = Math.max(1, minSupportedVersionCode);
             this.maintenanceMode = maintenanceMode;
             this.maintenanceMessage = maintenanceMessage != null ? maintenanceMessage : "";
             this.defaultPublishMode = defaultPublishMode != null && !defaultPublishMode.isEmpty() ? defaultPublishMode : "paused";
+            this.announcementChannelName = announcementChannelName != null && !announcementChannelName.trim().isEmpty()
+                    ? announcementChannelName.trim() : "Announcements";
+            this.announcementChannelAvatarUrl = announcementChannelAvatarUrl != null ? announcementChannelAvatarUrl.trim() : "";
         }
 
         public static AppConfigModel fromJson(JSONObject data) {
             if (data == null) {
-                return new AppConfigModel(1, false, "", "paused");
+                return new AppConfigModel(1, false, "", "paused", "Announcements", "");
             }
-            return new AppConfigModel(
-                    data.optInt("minimum_supported_version_code", 1),
-                    data.optBoolean("maintenance_mode", false),
-                    clean(data, "maintenance_message", ""),
-                    clean(data, "default_publish_mode", "paused")
-            );
+            int minVer = data.has("minSupportedVersionCode")
+                    ? data.optInt("minSupportedVersionCode", 1)
+                    : data.optInt("minimum_supported_version_code", 1);
+            boolean maint = data.has("maintenanceMode")
+                    ? data.optBoolean("maintenanceMode", false)
+                    : data.optBoolean("maintenance_mode", false);
+            String msg = clean(data, "maintenanceMessage", clean(data, "maintenance_message", ""));
+            String pub = clean(data, "defaultPublishMode", clean(data, "default_publish_mode", "paused"));
+            String chName = clean(data, "announcementChannelName", clean(data, "announcement_channel_name", "Announcements"));
+            String chAvatar = clean(data, "announcementChannelAvatarUrl", clean(data, "announcement_channel_avatar_url", ""));
+            return new AppConfigModel(minVer, maint, msg, pub, chName, chAvatar);
         }
     }
 

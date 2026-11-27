@@ -16,6 +16,7 @@ import java.net.URL;
 import java.net.URLEncoder;
 import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
+import java.util.zip.GZIPInputStream;
 
 import javax.net.ssl.SSLException;
 
@@ -51,18 +52,98 @@ public final class EveBackendClient {
         }
         return "";
     }
-    private static final int CONNECT_TIMEOUT_MS = 20_000;
-    private static final int READ_TIMEOUT_MS = 25_000;
+    private static final int CONNECT_TIMEOUT_MS = 10_000;
+    private static final int READ_TIMEOUT_MS = 15_000;
+
+    static {
+        try {
+            System.setProperty("http.keepAlive", "true");
+            System.setProperty("http.maxConnections", "12");
+        } catch (Throwable ignored) {
+        }
+    }
 
     public enum ErrorKind {
         UNAUTHORIZED,
         ACCOUNT_DISABLED,
+        MAINTENANCE_MODE,
         NETWORK_OFFLINE,
         NETWORK_TIMEOUT,
         TLS_ERROR,
         D1_OR_SERVER_ERROR,
         CLIENT_BAD_REQUEST,
         INVALID_RESPONSE
+    }
+
+    public interface MaintenanceSignalListener {
+        void onMaintenanceDetected(String message);
+    }
+
+    private static volatile MaintenanceSignalListener maintenanceSignalListener;
+
+    public static void setMaintenanceSignalListener(MaintenanceSignalListener listener) {
+        maintenanceSignalListener = listener;
+    }
+
+    public static final class AppConfigResult {
+        public final boolean maintenanceMode;
+        public final String maintenanceMessage;
+        public final int minSupportedVersionCode;
+        public final String defaultPublishMode;
+        public final String announcementChannelName;
+        public final String announcementChannelAvatarUrl;
+
+        public AppConfigResult(
+                boolean maintenanceMode,
+                String maintenanceMessage,
+                int minSupportedVersionCode,
+                String defaultPublishMode,
+                String announcementChannelName,
+                String announcementChannelAvatarUrl) {
+            this.maintenanceMode = maintenanceMode;
+            this.maintenanceMessage = maintenanceMessage != null ? maintenanceMessage : "";
+            this.minSupportedVersionCode = minSupportedVersionCode;
+            this.defaultPublishMode = defaultPublishMode != null && !defaultPublishMode.isEmpty() ? defaultPublishMode : "paused";
+            this.announcementChannelName = announcementChannelName != null && !announcementChannelName.trim().isEmpty()
+                    ? announcementChannelName.trim() : "Announcements";
+            this.announcementChannelAvatarUrl = announcementChannelAvatarUrl != null ? announcementChannelAvatarUrl.trim() : "";
+        }
+
+        public JSONObject toJson() {
+            JSONObject obj = new JSONObject();
+            try {
+                obj.put("maintenanceMode", maintenanceMode);
+                obj.put("maintenanceMessage", maintenanceMessage);
+                obj.put("minSupportedVersionCode", minSupportedVersionCode);
+                obj.put("defaultPublishMode", defaultPublishMode);
+                obj.put("announcementChannelName", announcementChannelName);
+                obj.put("announcementChannelAvatarUrl", announcementChannelAvatarUrl);
+            } catch (JSONException ignored) {
+            }
+            return obj;
+        }
+
+        public static AppConfigResult fromJson(JSONObject data) {
+            if (data == null) {
+                return new AppConfigResult(false, "", 1, "paused", "Announcements", "");
+            }
+            boolean maint = data.has("maintenanceMode")
+                    ? data.optBoolean("maintenanceMode", false)
+                    : data.optBoolean("maintenance_mode", false);
+            String msg = optCleanString(data, "maintenanceMessage",
+                    optCleanString(data, "maintenance_message",
+                            "Eve Mock Test is currently undergoing scheduled maintenance. Please check back shortly."));
+            int minVer = data.has("minSupportedVersionCode")
+                    ? data.optInt("minSupportedVersionCode", 1)
+                    : data.optInt("minimum_supported_version_code", 1);
+            String pub = optCleanString(data, "defaultPublishMode",
+                    optCleanString(data, "default_publish_mode", "paused"));
+            String chName = optCleanString(data, "announcementChannelName",
+                    optCleanString(data, "announcement_channel_name", "Announcements"));
+            String chAvatar = optCleanString(data, "announcementChannelAvatarUrl",
+                    optCleanString(data, "announcement_channel_avatar_url", ""));
+            return new AppConfigResult(maint, msg, minVer, pub, chName, chAvatar);
+        }
     }
 
     public interface HttpTransport {
@@ -122,6 +203,8 @@ public final class EveBackendClient {
         public final ErrorKind kind;
         public final boolean accountDisabled;
         public final boolean unauthorized;
+        public final boolean maintenanceMode;
+        public final String maintenanceMessage;
         public final boolean networkError;
 
         public BackendException(
@@ -130,6 +213,16 @@ public final class EveBackendClient {
                 String serverCode,
                 ErrorKind kind,
                 String message) {
+            this(httpStatus, endpoint, serverCode, kind, message, "");
+        }
+
+        public BackendException(
+                int httpStatus,
+                String endpoint,
+                String serverCode,
+                ErrorKind kind,
+                String message,
+                String maintenanceMessage) {
             super(message);
             this.httpStatus = httpStatus;
             this.endpoint = endpoint != null ? endpoint : "";
@@ -137,6 +230,11 @@ public final class EveBackendClient {
             this.kind = kind != null ? kind : ErrorKind.D1_OR_SERVER_ERROR;
             this.accountDisabled = this.kind == ErrorKind.ACCOUNT_DISABLED;
             this.unauthorized = this.kind == ErrorKind.UNAUTHORIZED;
+            this.maintenanceMode = this.kind == ErrorKind.MAINTENANCE_MODE
+                    || "MAINTENANCE_MODE".equalsIgnoreCase(this.serverCode);
+            this.maintenanceMessage = maintenanceMessage != null && !maintenanceMessage.isEmpty()
+                    ? maintenanceMessage
+                    : (message != null ? message : "");
             this.networkError = this.kind == ErrorKind.NETWORK_OFFLINE
                     || this.kind == ErrorKind.NETWORK_TIMEOUT
                     || this.kind == ErrorKind.TLS_ERROR;
@@ -381,6 +479,11 @@ public final class EveBackendClient {
         return executeRootJsonRequest("GET", path, null, null);
     }
 
+    public AppConfigResult fetchPublicAppConfig() throws BackendException {
+        JSONObject root = getPublicJsonRoot("/api/app-config");
+        return AppConfigResult.fromJson(root.optJSONObject("data"));
+    }
+
     public JSONObject postBinaryRoot(String path, String firebaseIdToken, String contentType, byte[] payloadBytes) throws BackendException {
         requireToken(firebaseIdToken, path);
         HttpURLConnection conn = null;
@@ -391,18 +494,22 @@ public final class EveBackendClient {
             conn.setConnectTimeout(CONNECT_TIMEOUT_MS);
             conn.setReadTimeout(READ_TIMEOUT_MS);
             conn.setUseCaches(false);
+            conn.setRequestProperty("Accept", "application/json");
+            conn.setRequestProperty("Accept-Encoding", "gzip");
+            conn.setRequestProperty("Connection", "keep-alive");
             conn.setRequestProperty(HEADER_EVE_CLIENT, EVE_CLIENT_VERSION);
             conn.setRequestProperty("Authorization", "Bearer " + firebaseIdToken);
             conn.setRequestProperty("Content-Type", contentType != null ? contentType : "application/octet-stream");
             conn.setDoOutput(true);
             byte[] bytes = payloadBytes != null ? payloadBytes : new byte[0];
+            conn.setFixedLengthStreamingMode(bytes.length);
             try (OutputStream os = conn.getOutputStream()) {
                 os.write(bytes);
                 os.flush();
             }
             int code = conn.getResponseCode();
             InputStream stream = (code >= 200 && code < 300) ? conn.getInputStream() : conn.getErrorStream();
-            String bodyText = UrlConnectionTransport.readStream(stream);
+            String bodyText = UrlConnectionTransport.readStream(conn, stream);
             if (code >= 200 && code < 300) {
                 return new JSONObject(bodyText.isEmpty() ? "{}" : bodyText);
             }
@@ -412,6 +519,17 @@ public final class EveBackendClient {
             } catch (JSONException ignored) {}
             String serverCode = parsedErr != null ? optCleanString(parsedErr, "code", "") : "";
             String errMsg = parsedErr != null ? optCleanString(parsedErr, "error", "") : "";
+            if (code == 401) {
+                throw new BackendException(401, path, serverCode.isEmpty() ? "AUTH_REQUIRED" : serverCode,
+                        ErrorKind.UNAUTHORIZED, errMsg.isEmpty() ? "Authentication expired." : errMsg);
+            }
+            if (code == 503 && "MAINTENANCE_MODE".equalsIgnoreCase(serverCode)) {
+                String maintMsg = parsedErr != null
+                        ? optCleanString(parsedErr, "maintenanceMessage", errMsg)
+                        : errMsg;
+                notifyMaintenanceDetected(maintMsg);
+                throw new BackendException(503, path, "MAINTENANCE_MODE", ErrorKind.MAINTENANCE_MODE, maintMsg, maintMsg);
+            }
             if (errMsg.isEmpty()) errMsg = "Upload failed (" + code + ").";
             throw new BackendException(code, path, serverCode, ErrorKind.CLIENT_BAD_REQUEST, errMsg);
         } catch (BackendException be) {
@@ -508,6 +626,14 @@ public final class EveBackendClient {
                     : "Request rejected (" + response.statusCode + ").";
             throw new BackendException(response.statusCode, path, serverCode, ErrorKind.CLIENT_BAD_REQUEST, err);
         }
+        if (response.statusCode == 503 && "MAINTENANCE_MODE".equalsIgnoreCase(serverCode)) {
+            String fallbackMsg = "Eve Mock Test is currently undergoing scheduled maintenance. Please check back shortly.";
+            String err = parsed != null
+                    ? optCleanString(parsed, "maintenanceMessage", optCleanString(parsed, "error", fallbackMsg))
+                    : fallbackMsg;
+            notifyMaintenanceDetected(err);
+            throw new BackendException(503, path, "MAINTENANCE_MODE", ErrorKind.MAINTENANCE_MODE, err, err);
+        }
         if (response.statusCode < 200 || response.statusCode >= 300) {
             String err = parsed != null
                     ? optCleanString(parsed, "error", "EVE Cloud server error (" + response.statusCode + ").")
@@ -525,6 +651,16 @@ public final class EveBackendClient {
         return parsed;
     }
 
+    private static void notifyMaintenanceDetected(String message) {
+        MaintenanceSignalListener listener = maintenanceSignalListener;
+        if (listener != null) {
+            try {
+                listener.onMaintenanceDetected(message != null ? message : "");
+            } catch (Throwable ignored) {
+            }
+        }
+    }
+
     public static final class UrlConnectionTransport implements HttpTransport {
         @Override
         public HttpResponse execute(String method, String urlString, String bearerToken, String jsonBody) throws IOException {
@@ -537,6 +673,8 @@ public final class EveBackendClient {
                 conn.setReadTimeout(READ_TIMEOUT_MS);
                 conn.setUseCaches(false);
                 conn.setRequestProperty("Accept", "application/json");
+                conn.setRequestProperty("Accept-Encoding", "gzip");
+                conn.setRequestProperty("Connection", "keep-alive");
                 conn.setRequestProperty(HEADER_EVE_CLIENT, EVE_CLIENT_VERSION);
                 if (bearerToken != null && !bearerToken.trim().isEmpty()) {
                     conn.setRequestProperty("Authorization", "Bearer " + bearerToken);
@@ -552,7 +690,7 @@ public final class EveBackendClient {
                 }
                 int code = conn.getResponseCode();
                 InputStream stream = code >= 400 ? conn.getErrorStream() : conn.getInputStream();
-                String body = readStream(stream);
+                String body = readStream(conn, stream);
                 return new HttpResponse(code, body);
             } catch (IOException e) {
                 if (conn != null) {
@@ -562,12 +700,17 @@ public final class EveBackendClient {
             }
         }
 
-        private static String readStream(InputStream stream) throws IOException {
+        private static String readStream(HttpURLConnection conn, InputStream stream) throws IOException {
             if (stream == null) {
                 return "";
             }
+            InputStream effectiveStream = stream;
+            String encoding = conn != null ? conn.getContentEncoding() : null;
+            if (encoding != null && encoding.toLowerCase(java.util.Locale.US).contains("gzip")) {
+                effectiveStream = new GZIPInputStream(stream);
+            }
             StringBuilder sb = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(effectiveStream, StandardCharsets.UTF_8))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     sb.append(line);

@@ -67,6 +67,10 @@ public class EveAdminMaintenanceConfigFragment extends BaseFragment {
     private boolean saving = false;
     private boolean destroyed = false;
 
+    public EveAdminMaintenanceConfigFragment() {
+        this(EveAdminRepository.getInstance().getCachedAppConfig(), null);
+    }
+
     public EveAdminMaintenanceConfigFragment(
             @Nullable EveAdminModels.AppConfigModel initialConfig,
             @Nullable Runnable onSaved) {

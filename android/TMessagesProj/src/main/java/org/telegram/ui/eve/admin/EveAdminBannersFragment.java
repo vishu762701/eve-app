@@ -98,6 +98,12 @@ public class EveAdminBannersFragment extends BaseFragment {
         destroyed = false;
         setHasOwnBackground(true);
 
+        List<EveAdminModels.BannerItem> cachedBanners = repo.getCachedBanners();
+        if (cachedBanners != null && !cachedBanners.isEmpty()) {
+            banners = cachedBanners;
+            loading = false;
+        }
+
         EveAdminUiChrome.Chrome chrome = EveAdminUiChrome.setup(
                 this,
                 context,
@@ -123,6 +129,7 @@ public class EveAdminBannersFragment extends BaseFragment {
                 null
         );
         listView = chrome.listView;
+        updateSubtitle();
 
         if (simpleActionBar != null) {
             SimpleActionBarMenu menu = simpleActionBar.createMenu();

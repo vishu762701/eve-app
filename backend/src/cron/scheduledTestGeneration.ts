@@ -83,7 +83,15 @@ export async function handleScheduledTestGeneration(event: ScheduledEvent, env: 
     }
 
     try {
-      await runGeneration(env, exam, Number(exam.question_count || 20), exam.test_number || "Test 1", exam.generation_prompt || exam.custom_prompt_notes || "", "scheduled", `scheduled:${exam.id}:${todayDate}`);
+      await runGeneration(
+        env,
+        exam,
+        Number(exam.question_count || 20),
+        exam.test_number || "Test 1",
+        exam.ai_prompt || exam.generation_prompt || exam.custom_prompt_notes || "",
+        "scheduled",
+        `scheduled:${exam.id}:${todayDate}`
+      );
     } catch (err) {
       console.warn("Scheduled generation:", err instanceof GenerationBusyError ? "BUSY" : err instanceof GeminiProviderError ? err.code : "GENERATION_FAILED");
     }

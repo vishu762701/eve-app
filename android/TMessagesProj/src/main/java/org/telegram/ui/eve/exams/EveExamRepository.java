@@ -27,6 +27,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -59,21 +60,50 @@ public final class EveExamRepository {
     private static volatile EveExamRepository instance;
 
     private static final String PREFS_CACHE = "eve_exam_catalog_cache";
+    private static final String PREFS_SWR = "eve_student_swr_cache";
     private static final String KEY_EXAMS_JSON = "exams_json";
     private static final String KEY_TESTS_JSON = "tests_json";
     private static final String KEY_PINS_JSON = "pinned_exam_ids_json";
     private static final String KEY_CACHED_AT = "cached_at_ms";
+    private static final String KEY_LAST_SEEN_ANNOUNCEMENT_MS = "last_seen_announcement_ms";
+
+    public static final class AnnouncementChannelSummary {
+        public final String channelName;
+        public final String channelAvatarUrl;
+        public final String latestPreview;
+        public final int latestTimestampSec;
+        public final long latestTimestampMs;
+        public final int unreadCount;
+
+        public AnnouncementChannelSummary(
+                String channelName,
+                String channelAvatarUrl,
+                String latestPreview,
+                int latestTimestampSec,
+                long latestTimestampMs,
+                int unreadCount) {
+            this.channelName = channelName != null && !channelName.trim().isEmpty() ? channelName.trim() : "Announcements";
+            this.channelAvatarUrl = channelAvatarUrl != null ? channelAvatarUrl.trim() : "";
+            this.latestPreview = latestPreview != null ? latestPreview : "";
+            this.latestTimestampSec = Math.max(0, latestTimestampSec);
+            this.latestTimestampMs = Math.max(0L, latestTimestampMs);
+            this.unreadCount = Math.max(0, unreadCount);
+        }
+    }
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
-    private final ExecutorService ioExecutor = Executors.newFixedThreadPool(4);
+    private final ExecutorService ioExecutor = Executors.newFixedThreadPool(6);
     private final CopyOnWriteArrayList<CatalogListener> listeners = new CopyOnWriteArrayList<>();
     private final AtomicBoolean loading = new AtomicBoolean(false);
+    private final ConcurrentHashMap<String, String> swrMemoryCache = new ConcurrentHashMap<>();
     private final EveBackendClient backendClient;
 
     private volatile EveExamModels.ExamCatalogResult currentResult =
             new EveExamModels.ExamCatalogResult(EveExamModels.LoadState.LOADING, Collections.emptyList(), "");
     private volatile List<EveExamModels.ExamSummary> allExamSummaries = Collections.emptyList();
     private volatile List<EveAdminModels.BannerItem> cachedBanners = Collections.emptyList();
+    private volatile EveBackendClient.AppConfigResult cachedAppConfig;
+    private volatile AnnouncementChannelSummary cachedChannelSummary;
     private volatile Set<String> pinnedExamIds = Collections.emptySet();
     private volatile long lastSuccessLoadMs;
 
@@ -82,7 +112,56 @@ public final class EveExamRepository {
         hydrateFromDiskCache();
     }
 
+    private void putSwrJson(String key, String raw) {
+        if (key == null || raw == null) return;
+        swrMemoryCache.put(key, raw);
+        try {
+            Context ctx = ApplicationLoader.applicationContext;
+            if (ctx == null) return;
+            ctx.getSharedPreferences(PREFS_SWR, Context.MODE_PRIVATE).edit().putString(key, raw).apply();
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private String getSwrJson(String key) {
+        if (key == null) return "";
+        String mem = swrMemoryCache.get(key);
+        if (mem != null && !mem.isEmpty()) return mem;
+        try {
+            Context ctx = ApplicationLoader.applicationContext;
+            if (ctx == null) return "";
+            String disk = ctx.getSharedPreferences(PREFS_SWR, Context.MODE_PRIVATE).getString(key, "");
+            if (disk != null && !disk.isEmpty()) {
+                swrMemoryCache.put(key, disk);
+                return disk;
+            }
+        } catch (Throwable ignored) {
+        }
+        return "";
+    }
+
     private void hydrateFromDiskCache() {
+        try {
+            String bannersRaw = getSwrJson("banners_home");
+            if (!bannersRaw.isEmpty()) {
+                List<EveAdminModels.BannerItem> bList = EveAdminModels.BannerItem.parseList(new JSONArray(bannersRaw));
+                List<EveAdminModels.BannerItem> activeBanners = new ArrayList<>();
+                for (EveAdminModels.BannerItem b : bList) {
+                    if (b != null && b.active) activeBanners.add(b);
+                }
+                if (!activeBanners.isEmpty()) {
+                    cachedBanners = Collections.unmodifiableList(activeBanners);
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        try {
+            String cfgRaw = getSwrJson("app_config");
+            if (!cfgRaw.isEmpty()) {
+                cachedAppConfig = EveBackendClient.AppConfigResult.fromJson(new JSONObject(cfgRaw));
+            }
+        } catch (Throwable ignored) {
+        }
         try {
             Context ctx = ApplicationLoader.applicationContext;
             if (ctx == null) return;
@@ -221,10 +300,18 @@ public final class EveExamRepository {
     }
 
     private void fetchWithUser(FirebaseUser user) {
-        user.getIdToken(false)
+        fetchWithUserInternal(user, true);
+    }
+
+    private void fetchWithUserInternal(FirebaseUser user, boolean allowRetryOn401) {
+        user.getIdToken(!allowRetryOn401)
                 .addOnSuccessListener(tokenResult -> {
                     String token = tokenResult != null ? tokenResult.getToken() : null;
                     if (token == null || token.trim().isEmpty()) {
+                        if (allowRetryOn401) {
+                            fetchWithUserInternal(user, false);
+                            return;
+                        }
                         loading.set(false);
                         publishResult(new EveExamModels.ExamCatalogResult(
                                 EveExamModels.LoadState.AUTH_REQUIRED,
@@ -272,6 +359,10 @@ public final class EveExamRepository {
                             loading.set(false);
                             publishResult(new EveExamModels.ExamCatalogResult(state, parsed, ""));
                         } catch (EveBackendClient.BackendException be) {
+                            if (be.unauthorized && allowRetryOn401) {
+                                fetchWithUserInternal(user, false);
+                                return;
+                            }
                             loading.set(false);
                             EveExamModels.LoadState errState = be.unauthorized
                                     ? EveExamModels.LoadState.AUTH_REQUIRED
@@ -288,6 +379,10 @@ public final class EveExamRepository {
                     });
                 })
                 .addOnFailureListener(e -> {
+                    if (allowRetryOn401) {
+                        fetchWithUserInternal(user, false);
+                        return;
+                    }
                     loading.set(false);
                     publishResult(new EveExamModels.ExamCatalogResult(
                             EveExamModels.LoadState.AUTH_REQUIRED,
@@ -296,34 +391,41 @@ public final class EveExamRepository {
                 });
     }
 
-    public void loadTestsForExam(String examId, ExamTestsCallback callback) {
-        EveAuthManager authManager = EveAuthManager.getInstance();
-        authManager.ensureInitialized();
-        FirebaseUser user = authManager.getCurrentUser();
-        if (user == null) {
-            mainHandler.post(() -> callback.onLoaded(Collections.emptyList(), "Sign in to EVE Cloud to view published tests."));
-            return;
+    public List<EveExamModels.GeneratedTestSummary> getCachedTestsForExam(String examId) {
+        if (examId == null || examId.trim().isEmpty()) {
+            return Collections.emptyList();
         }
-        user.getIdToken(false)
-                .addOnSuccessListener(tokenResult -> {
-                    String token = tokenResult != null ? tokenResult.getToken() : null;
-                    if (token == null || token.trim().isEmpty()) {
-                        mainHandler.post(() -> callback.onLoaded(Collections.emptyList(), "Authentication token unavailable."));
-                        return;
-                    }
-                    ioExecutor.execute(() -> {
-                        try {
-                            JSONArray arr = backendClient.fetchGeneratedTestsJson(token, examId);
-                            List<EveExamModels.GeneratedTestSummary> parsed = parseGeneratedTests(arr);
-                            mainHandler.post(() -> callback.onLoaded(parsed, ""));
-                        } catch (Throwable t) {
-                            mainHandler.post(() -> callback.onLoaded(Collections.emptyList(),
-                                    t.getMessage() != null ? t.getMessage() : "Could not load tests."));
-                        }
-                    });
-                })
-                .addOnFailureListener(e -> mainHandler.post(() -> callback.onLoaded(Collections.emptyList(),
-                        "Could not verify EVE Cloud session.")));
+        String raw = getSwrJson("exam_tests_" + examId.trim());
+        if (raw.isEmpty()) {
+            return Collections.emptyList();
+        }
+        try {
+            return parseGeneratedTests(new JSONArray(raw));
+        } catch (Throwable ignored) {
+            return Collections.emptyList();
+        }
+    }
+
+    public void loadTestsForExam(String examId, ExamTestsCallback callback) {
+        withFreshToken(new ApiCallback<List<EveExamModels.GeneratedTestSummary>>() {
+            @Override
+            public void onComplete(List<EveExamModels.GeneratedTestSummary> data, String errorMessage) {
+                if (callback != null) {
+                    callback.onLoaded(data != null ? data : Collections.emptyList(), errorMessage != null ? errorMessage : "");
+                }
+            }
+        }, token -> {
+            JSONArray arr = backendClient.fetchGeneratedTestsJson(token, examId);
+            if (examId != null && !examId.trim().isEmpty() && arr != null) {
+                putSwrJson("exam_tests_" + examId.trim(), arr.toString());
+            }
+            List<EveExamModels.GeneratedTestSummary> parsed = parseGeneratedTests(arr);
+            mainHandler.post(() -> {
+                if (callback != null) {
+                    callback.onLoaded(parsed, "");
+                }
+            });
+        });
     }
 
     public void startOrResumeAttempt(
@@ -534,25 +636,42 @@ public final class EveExamRepository {
         });
     }
 
+    public List<EveExamModels.BroadcastItem> getCachedBroadcasts() {
+        String raw = getSwrJson("broadcasts_all");
+        if (raw.isEmpty()) return Collections.emptyList();
+        try {
+            return parseBroadcastsArray(new JSONArray(raw));
+        } catch (Throwable ignored) {
+            return Collections.emptyList();
+        }
+    }
+
+    private static List<EveExamModels.BroadcastItem> parseBroadcastsArray(JSONArray arr) {
+        List<EveExamModels.BroadcastItem> items = new ArrayList<>();
+        if (arr != null) {
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject obj = arr.optJSONObject(i);
+                if (obj == null) continue;
+                items.add(new EveExamModels.BroadcastItem(
+                        obj.optString("id", ""),
+                        obj.optString("title", "EVE Update"),
+                        obj.optString("message", ""),
+                        obj.optString("type", "announcement"),
+                        obj.optLong("sentAt", 0L)
+                ));
+            }
+        }
+        return items;
+    }
+
     public void loadBroadcasts(ApiCallback<List<EveExamModels.BroadcastItem>> callback) {
         withFreshToken(callback, token -> {
             JSONObject root = backendClient.getJsonRoot("/api/broadcasts?limit=50", token);
             JSONArray arr = root.optJSONArray("data");
-            List<EveExamModels.BroadcastItem> items = new ArrayList<>();
             if (arr != null) {
-                for (int i = 0; i < arr.length(); i++) {
-                    JSONObject obj = arr.optJSONObject(i);
-                    if (obj == null) continue;
-                    items.add(new EveExamModels.BroadcastItem(
-                            obj.optString("id", ""),
-                            obj.optString("title", "EVE Update"),
-                            obj.optString("message", ""),
-                            obj.optString("type", "announcement"),
-                            obj.optLong("sentAt", 0L)
-                    ));
-                }
+                putSwrJson("broadcasts_all", arr.toString());
             }
-            postComplete(callback, items, "");
+            postComplete(callback, parseBroadcastsArray(arr), "");
         });
     }
 
@@ -578,7 +697,11 @@ public final class EveExamRepository {
         ioExecutor.execute(() -> {
             try {
                 JSONObject root = backendClient.getPublicJsonRoot("/api/banners");
-                List<EveAdminModels.BannerItem> parsed = EveAdminModels.BannerItem.parseList(root.optJSONArray("data"));
+                JSONArray rawArr = root.optJSONArray("data");
+                if (rawArr != null) {
+                    putSwrJson("banners_home", rawArr.toString());
+                }
+                List<EveAdminModels.BannerItem> parsed = EveAdminModels.BannerItem.parseList(rawArr);
                 List<EveAdminModels.BannerItem> activeOnly = new ArrayList<>();
                 for (EveAdminModels.BannerItem b : parsed) {
                     if (b != null && b.active) {
@@ -593,69 +716,281 @@ public final class EveExamRepository {
         });
     }
 
+    public List<EvePollModel> getCachedActivePolls() {
+        String raw = getSwrJson("polls_active");
+        if (raw.isEmpty()) return Collections.emptyList();
+        try {
+            return parsePollsFromArray(new JSONArray(raw), null);
+        } catch (Throwable ignored) {
+            return Collections.emptyList();
+        }
+    }
+
+    private List<EvePollModel> parsePollsFromArray(JSONArray arr, String optionalTokenForLegacyFallback) {
+        List<EvePollModel> activePolls = new ArrayList<>();
+        long nowMs = System.currentTimeMillis();
+        if (arr == null) return activePolls;
+        List<Integer> needsFallbackIndices = new ArrayList<>();
+        List<String> needsFallbackPollIds = new ArrayList<>();
+        for (int i = 0; i < arr.length(); i++) {
+            JSONObject o = arr.optJSONObject(i);
+            if (o == null) continue;
+            boolean active = o.optBoolean("active", o.optBoolean("isActive", true));
+            long endsAt = o.optLong("endsAt", 0L);
+            if (!active || (endsAt > 0L && nowMs > endsAt)) {
+                continue;
+            }
+            String id = o.optString("id", "");
+            String question = o.optString("question", "");
+            List<String> opts = new ArrayList<>();
+            JSONArray optArr = o.optJSONArray("options");
+            if (optArr != null) {
+                for (int j = 0; j < optArr.length(); j++) {
+                    String opt = optArr.optString(j, "").trim();
+                    if (!opt.isEmpty()) opts.add(opt);
+                }
+            }
+            if (id.isEmpty() || question.isEmpty() || opts.size() < 2) {
+                continue;
+            }
+            Map<Integer, Integer> counts = new HashMap<>();
+            int sumVotes = 0;
+            JSONObject vc = o.optJSONObject("voteCounts");
+            if (vc != null) {
+                for (int j = 0; j < opts.size(); j++) {
+                    int count = Math.max(0, vc.optInt(String.valueOf(j), 0));
+                    counts.put(j, count);
+                    sumVotes += count;
+                }
+            }
+            Integer myVote = null;
+            if (o.has("userVote")) {
+                if (!o.isNull("userVote")) {
+                    myVote = o.optInt("userVote");
+                }
+            } else if (optionalTokenForLegacyFallback != null && !optionalTokenForLegacyFallback.isEmpty()) {
+                needsFallbackIndices.add(activePolls.size());
+                needsFallbackPollIds.add(id);
+            }
+            activePolls.add(new EvePollModel(
+                    id,
+                    question,
+                    opts,
+                    counts,
+                    sumVotes,
+                    true,
+                    o.optLong("createdAt", 0L),
+                    endsAt,
+                    o.optString("createdBy", ""),
+                    myVote
+            ));
+        }
+        // Only run concurrent vote fallback if an older Worker version did not embed userVote.
+        if (!needsFallbackPollIds.isEmpty() && optionalTokenForLegacyFallback != null) {
+            List<Future<Integer>> futures = new ArrayList<>(needsFallbackPollIds.size());
+            for (String pid : needsFallbackPollIds) {
+                futures.add(ioExecutor.submit(() -> {
+                    try {
+                        JSONObject voteRoot = backendClient.getJsonRoot("/api/polls/" + urlEncode(pid) + "/vote", optionalTokenForLegacyFallback);
+                        JSONObject voteData = voteRoot.optJSONObject("data");
+                        return (voteData != null && !voteData.isNull("optionIndex")) ? voteData.optInt("optionIndex") : null;
+                    } catch (Exception ignored) {
+                        return null;
+                    }
+                }));
+            }
+            for (int k = 0; k < needsFallbackIndices.size(); k++) {
+                try {
+                    Integer v = futures.get(k).get();
+                    if (v != null) {
+                        EvePollModel prev = activePolls.get(needsFallbackIndices.get(k));
+                        activePolls.set(needsFallbackIndices.get(k), new EvePollModel(
+                                prev.id, prev.question, prev.options, prev.voteCounts, prev.totalVotes,
+                                prev.active, prev.createdAt, prev.endsAt, prev.createdBy, v));
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+        }
+        return activePolls;
+    }
+
     public void loadActivePolls(ApiCallback<List<EvePollModel>> callback) {
         withFreshToken(callback, token -> {
             JSONObject root = backendClient.getJsonRoot("/api/polls", token);
             JSONArray arr = root.optJSONArray("data");
-            List<EvePollModel> activePolls = new ArrayList<>();
-            long nowMs = System.currentTimeMillis();
             if (arr != null) {
-                for (int i = 0; i < arr.length(); i++) {
-                    JSONObject o = arr.optJSONObject(i);
-                    if (o == null) continue;
-                    boolean active = o.optBoolean("active", o.optBoolean("isActive", true));
-                    long endsAt = o.optLong("endsAt", 0L);
-                    if (!active || (endsAt > 0L && nowMs > endsAt)) {
-                        continue;
-                    }
-                    String id = o.optString("id", "");
-                    String question = o.optString("question", "");
-                    List<String> opts = new ArrayList<>();
-                    JSONArray optArr = o.optJSONArray("options");
-                    if (optArr != null) {
-                        for (int j = 0; j < optArr.length(); j++) {
-                            String opt = optArr.optString(j, "").trim();
-                            if (!opt.isEmpty()) opts.add(opt);
-                        }
-                    }
-                    if (id.isEmpty() || question.isEmpty() || opts.size() < 2) {
-                        continue;
-                    }
-                    Map<Integer, Integer> counts = new HashMap<>();
-                    int sumVotes = 0;
-                    JSONObject vc = o.optJSONObject("voteCounts");
-                    if (vc != null) {
-                        for (int j = 0; j < opts.size(); j++) {
-                            int count = Math.max(0, vc.optInt(String.valueOf(j), 0));
-                            counts.put(j, count);
-                            sumVotes += count;
-                        }
-                    }
-                    Integer myVote = null;
-                    try {
-                        JSONObject voteRoot = backendClient.getJsonRoot("/api/polls/" + urlEncode(id) + "/vote", token);
-                        JSONObject voteData = voteRoot.optJSONObject("data");
-                        if (voteData != null && !voteData.isNull("optionIndex")) {
-                            myVote = voteData.optInt("optionIndex");
-                        }
-                    } catch (Exception ignored) {
-                    }
-                    activePolls.add(new EvePollModel(
-                            id,
-                            question,
-                            opts,
-                            counts,
-                            sumVotes,
-                            true,
-                            o.optLong("createdAt", 0L),
-                            endsAt,
-                            o.optString("createdBy", ""),
-                            myVote
-                    ));
-                }
+                putSwrJson("polls_active", arr.toString());
             }
+            List<EvePollModel> activePolls = parsePollsFromArray(arr, token);
             postComplete(callback, activePolls, "");
         });
+    }
+
+    public EveBackendClient.AppConfigResult getCachedAppConfig() {
+        return cachedAppConfig;
+    }
+
+    public void fetchAppConfig(ApiCallback<EveBackendClient.AppConfigResult> callback) {
+        ioExecutor.execute(() -> {
+            try {
+                EveBackendClient.AppConfigResult cfg = backendClient.fetchPublicAppConfig();
+                cachedAppConfig = cfg;
+                if (cfg != null) {
+                    putSwrJson("app_config", cfg.toJson().toString());
+                }
+                postComplete(callback, cfg, "");
+            } catch (Throwable t) {
+                postComplete(callback, cachedAppConfig, t.getMessage() != null ? t.getMessage() : "Could not check server status.");
+            }
+        });
+    }
+
+    public long getLastSeenAnnouncementMs() {
+        try {
+            Context ctx = ApplicationLoader.applicationContext;
+            if (ctx == null) return 0L;
+            return ctx.getSharedPreferences(PREFS_CACHE, Context.MODE_PRIVATE).getLong(KEY_LAST_SEEN_ANNOUNCEMENT_MS, 0L);
+        } catch (Throwable ignored) {
+            return 0L;
+        }
+    }
+
+    public void markAllAnnouncementsSeen(long latestTimestampMs) {
+        long ts = Math.max(getLastSeenAnnouncementMs(), Math.max(System.currentTimeMillis(), latestTimestampMs));
+        try {
+            Context ctx = ApplicationLoader.applicationContext;
+            if (ctx != null) {
+                ctx.getSharedPreferences(PREFS_CACHE, Context.MODE_PRIVATE).edit()
+                        .putLong(KEY_LAST_SEEN_ANNOUNCEMENT_MS, ts).apply();
+            }
+        } catch (Throwable ignored) {
+        }
+        AnnouncementChannelSummary prev = cachedChannelSummary;
+        if (prev != null) {
+            cachedChannelSummary = new AnnouncementChannelSummary(
+                    prev.channelName, prev.channelAvatarUrl, prev.latestPreview,
+                    prev.latestTimestampSec, Math.max(prev.latestTimestampMs, ts), 0);
+        }
+    }
+
+    public AnnouncementChannelSummary getCachedAnnouncementChannelSummary() {
+        if (cachedChannelSummary != null) {
+            return cachedChannelSummary;
+        }
+        EveBackendClient.AppConfigResult cfg = cachedAppConfig;
+        List<EveExamModels.BroadcastItem> broadcasts = getCachedBroadcasts();
+        List<EvePollModel> polls = getCachedActivePolls();
+        if (cfg == null && broadcasts.isEmpty() && polls.isEmpty()) {
+            return null;
+        }
+        return buildChannelSummary(cfg, broadcasts, polls, getLastSeenAnnouncementMs());
+    }
+
+    public void loadAnnouncementChannelSummary(ApiCallback<AnnouncementChannelSummary> callback) {
+        AnnouncementChannelSummary immediate = getCachedAnnouncementChannelSummary();
+        if (immediate != null && callback != null) {
+            cachedChannelSummary = immediate;
+        }
+        EveAuthManager authManager = EveAuthManager.getInstance();
+        authManager.ensureInitialized();
+        FirebaseUser user = authManager.getCurrentUser();
+        ioExecutor.execute(() -> {
+            Future<EveBackendClient.AppConfigResult> cfgFuture = ioExecutor.submit(() -> {
+                try {
+                    EveBackendClient.AppConfigResult cfg = backendClient.fetchPublicAppConfig();
+                    cachedAppConfig = cfg;
+                    if (cfg != null) putSwrJson("app_config", cfg.toJson().toString());
+                    return cfg;
+                } catch (Throwable ignored) {
+                    return cachedAppConfig;
+                }
+            });
+            String token = null;
+            if (user != null) {
+                try {
+                    com.google.android.gms.tasks.Task<com.google.firebase.auth.GetTokenResult> t = user.getIdToken(false);
+                    com.google.android.gms.tasks.Tasks.await(t, 5, java.util.concurrent.TimeUnit.SECONDS);
+                    if (t.isSuccessful() && t.getResult() != null) {
+                        token = t.getResult().getToken();
+                    }
+                } catch (Throwable ignored) {
+                }
+            }
+            final String authToken = token;
+            Future<List<EveExamModels.BroadcastItem>> bcFuture = ioExecutor.submit(() -> {
+                if (authToken == null || authToken.isEmpty()) return getCachedBroadcasts();
+                try {
+                    JSONObject root = backendClient.getJsonRoot("/api/broadcasts?limit=50", authToken);
+                    JSONArray arr = root.optJSONArray("data");
+                    if (arr != null) putSwrJson("broadcasts_all", arr.toString());
+                    return parseBroadcastsArray(arr);
+                } catch (Throwable ignored) {
+                    return getCachedBroadcasts();
+                }
+            });
+            Future<List<EvePollModel>> pollFuture = ioExecutor.submit(() -> {
+                if (authToken == null || authToken.isEmpty()) return getCachedActivePolls();
+                try {
+                    JSONObject root = backendClient.getJsonRoot("/api/polls", authToken);
+                    JSONArray arr = root.optJSONArray("data");
+                    if (arr != null) putSwrJson("polls_active", arr.toString());
+                    return parsePollsFromArray(arr, authToken);
+                } catch (Throwable ignored) {
+                    return getCachedActivePolls();
+                }
+            });
+            try {
+                AnnouncementChannelSummary summary = buildChannelSummary(
+                        cfgFuture.get(), bcFuture.get(), pollFuture.get(), getLastSeenAnnouncementMs());
+                cachedChannelSummary = summary;
+                postComplete(callback, summary, "");
+            } catch (Throwable t) {
+                postComplete(callback, getCachedAnnouncementChannelSummary(),
+                        t.getMessage() != null ? t.getMessage() : "Unable to load channel summary.");
+            }
+        });
+    }
+
+    private static AnnouncementChannelSummary buildChannelSummary(
+            EveBackendClient.AppConfigResult cfg,
+            List<EveExamModels.BroadcastItem> broadcasts,
+            List<EvePollModel> polls,
+            long lastSeenMs) {
+        String name = cfg != null ? cfg.announcementChannelName : "Announcements";
+        String avatarUrl = cfg != null ? cfg.announcementChannelAvatarUrl : "";
+        String preview = "Broadcasts & live polls";
+        long latestMs = 0L;
+        int unread = 0;
+
+        if (broadcasts != null) {
+            for (EveExamModels.BroadcastItem b : broadcasts) {
+                if (b == null) continue;
+                if (b.sentAtMs > latestMs) {
+                    latestMs = b.sentAtMs;
+                    preview = !b.message.trim().isEmpty()
+                            ? (b.title + ": " + b.message.trim())
+                            : b.title;
+                }
+                if (b.sentAtMs > lastSeenMs) {
+                    unread++;
+                }
+            }
+        }
+        if (polls != null) {
+            for (EvePollModel p : polls) {
+                if (p == null) continue;
+                if (p.createdAt > latestMs) {
+                    latestMs = p.createdAt;
+                    preview = "Poll: " + p.question;
+                }
+                if (p.createdAt > lastSeenMs) {
+                    unread++;
+                }
+            }
+        }
+        int tsSec = latestMs > 0L ? (int) (latestMs / 1000L) : 0;
+        return new AnnouncementChannelSummary(name, avatarUrl, preview, tsSec, latestMs, unread);
     }
 
     public void fetchMyPollVote(String pollId, ApiCallback<Integer> callback) {
@@ -685,6 +1020,10 @@ public final class EveExamRepository {
     }
 
     private <T> void withFreshToken(ApiCallback<T> callback, TokenTask task) {
+        withFreshTokenInternal(callback, task, true);
+    }
+
+    private <T> void withFreshTokenInternal(ApiCallback<T> callback, TokenTask task, boolean allowRetryOn401) {
         EveAuthManager authManager = EveAuthManager.getInstance();
         authManager.ensureInitialized();
         FirebaseUser user = authManager.getCurrentUser();
@@ -692,16 +1031,29 @@ public final class EveExamRepository {
             postComplete(callback, null, "Sign in to EVE Cloud to continue.");
             return;
         }
-        user.getIdToken(false)
+        user.getIdToken(!allowRetryOn401)
                 .addOnSuccessListener(result -> {
                     String token = result != null ? result.getToken() : null;
                     if (token == null || token.trim().isEmpty()) {
+                        if (allowRetryOn401) {
+                            withFreshTokenInternal(callback, task, false);
+                            return;
+                        }
                         postComplete(callback, null, "Authentication token unavailable.");
                         return;
                     }
                     ioExecutor.execute(() -> {
                         try {
                             task.execute(token);
+                        } catch (EveBackendClient.BackendException be) {
+                            if (be.unauthorized && allowRetryOn401) {
+                                withFreshTokenInternal(callback, task, false);
+                                return;
+                            }
+                            String msg = be.getMessage() != null && !be.getMessage().trim().isEmpty()
+                                    ? be.getMessage()
+                                    : "Request to EVE Cloud failed.";
+                            postComplete(callback, null, msg);
                         } catch (Throwable t) {
                             String msg = t.getMessage() != null && !t.getMessage().trim().isEmpty()
                                     ? t.getMessage()
@@ -710,7 +1062,13 @@ public final class EveExamRepository {
                         }
                     });
                 })
-                .addOnFailureListener(e -> postComplete(callback, null, "Could not verify EVE Cloud session."));
+                .addOnFailureListener(e -> {
+                    if (allowRetryOn401) {
+                        withFreshTokenInternal(callback, task, false);
+                        return;
+                    }
+                    postComplete(callback, null, "Could not verify EVE Cloud session.");
+                });
     }
 
     private <T> void postComplete(ApiCallback<T> callback, T data, String error) {
@@ -1102,7 +1460,10 @@ public final class EveExamRepository {
                     obj.optLong("generatedAt", 0L),
                     obj.optString("status", "paused"),
                     obj.optInt("questionCount", 0),
-                    obj.optLong("availableFrom", 0L)
+                    obj.optLong("availableFrom", 0L),
+                    firstNonEmpty(obj, "avatarUrl", ""),
+                    firstNonEmpty(obj, "avatarEmoji", ""),
+                    obj.isNull("avatarColor") ? -1 : obj.optInt("avatarColor", -1)
             ));
         }
         return list;

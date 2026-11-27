@@ -7,7 +7,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.view.View;
-import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
@@ -23,6 +22,7 @@ import org.telegram.ui.ActionBar.ActionBar;
 import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.Theme;
+import org.telegram.ui.Cells.TextCheckCell;
 import org.telegram.ui.Components.BulletinFactory;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.UItem;
@@ -43,7 +43,6 @@ import java.util.Locale;
  */
 public class EveAdminPackManagerFragment extends BaseFragment {
 
-    private static final int MENU_REFRESH = 1;
     private static final int MENU_CREATE = 2;
 
     private static final int ID_IMPORT_TELEGRAM = 101;
@@ -78,14 +77,11 @@ public class EveAdminPackManagerFragment extends BaseFragment {
         actionBar.setTitle(LocaleController.getString(R.string.EveAdminPackManager));
         actionBar.setSubtitle("Worker + R2/Storage + D1");
         actionBar.createMenu().addItem(MENU_CREATE, R.drawable.msg_add);
-        actionBar.createMenu().addItem(MENU_REFRESH, R.drawable.msg_retry);
         actionBar.setActionBarMenuOnItemClick(new ActionBar.ActionBarMenuOnItemClick() {
             @Override
             public void onItemClick(int id) {
                 if (id == -1) {
                     finishFragment();
-                } else if (id == MENU_REFRESH) {
-                    refreshCatalog();
                 } else if (id == MENU_CREATE) {
                     showCreatePackDialog();
                 }
@@ -228,8 +224,9 @@ public class EveAdminPackManagerFragment extends BaseFragment {
         Spinner tierSpinner = new Spinner(activity);
         tierSpinner.setAdapter(new ArrayAdapter<>(activity, android.R.layout.simple_spinner_dropdown_item,
                 new String[] { "free", "premium" }));
-        CheckBox featuredCheck = new CheckBox(activity);
-        featuredCheck.setText("Featured in Library");
+        TextCheckCell featuredCheck = new TextCheckCell(activity);
+        featuredCheck.setTextAndCheck("Featured in Library", false, false);
+        featuredCheck.setOnClickListener(v -> featuredCheck.setChecked(!featuredCheck.isChecked()));
 
         box.addView(titleInput);
         box.addView(slugInput);

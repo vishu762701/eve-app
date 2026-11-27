@@ -133,6 +133,16 @@ public class EveAdminStudentsFragment extends BaseFragment {
             summaryPremium = cached.activePremiumUsers;
             summaryOnline = cached.activeStudents;
         }
+        EveAdminRepository.StudentsPageResult cachedStudents = repo.getCachedStudentsDefault();
+        if (cachedStudents != null && !cachedStudents.users.isEmpty()) {
+            students.clear();
+            students.addAll(cachedStudents.users);
+            summaryTotal = cachedStudents.totalCount;
+            summaryPremium = cachedStudents.premiumCount;
+            summaryOnline = cachedStudents.onlineCount;
+            summaryBanned = cachedStudents.bannedCount;
+            loading = false;
+        }
 
         overviewHeader = new StudentsOverviewView(context, getResourceProvider(), filter -> {
             if (!Objects.equals(currentFilter, filter)) {
@@ -151,7 +161,7 @@ public class EveAdminStudentsFragment extends BaseFragment {
                 glassEngine,
                 getResourceProvider(),
                 "Students",
-                "Loading directory...",
+                students.isEmpty() ? "Loading directory..." : summaryTotal + " registered",
                 false,
                 this::fillItems,
                 this::onClick,

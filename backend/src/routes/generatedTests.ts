@@ -12,6 +12,14 @@ import { GeminiProviderError } from "../ai/generator";
 import { requireAdmin, requirePermission } from "../middleware/authMiddleware";
 import { AuthUser, Env, ExamRow, GeneratedTestRow } from "../types";
 import { prepareAdminAuditLog } from "../util/auditLog";
+import { AssetStorage } from "../storage";
+import {
+  detectAvatarImage,
+  extractStorageAvatarKey,
+  getTableColumns,
+  parseAvatarUploadPayload,
+  serveStoredAvatarResponse,
+} from "../util/avatarMedia";
 
 export const generatedTestRoutes = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
 
@@ -70,6 +78,9 @@ generatedTestRoutes.get("/", async (c) => {
       status: r.status,
       questionCount: questionCount || 0,
       availableFrom: r.available_from || 0,
+      avatarUrl: String(r.avatar_url || "").trim(),
+      avatarEmoji: String(r.avatar_emoji || "").trim(),
+      avatarColor: typeof r.avatar_color === "number" ? r.avatar_color : null,
       questions: [],
     };
   });
@@ -126,9 +137,167 @@ generatedTestRoutes.get("/:id", async (c) => {
       status: row.status,
       questionCount: questionCount || 0,
       availableFrom: row.available_from || 0,
+      avatarUrl: String(row.avatar_url || "").trim(),
+      avatarEmoji: String(row.avatar_emoji || "").trim(),
+      avatarColor: typeof row.avatar_color === "number" ? row.avatar_color : null,
       questions: (!canManage || hideAnswers(c)) ? questions.map((q) => ({ ...q, correctAnswer: "", correct_answer: "", answer: "", explanation: "", explanationHi: "", explanation_hi: "" })) : questions,
     },
   });
+});
+
+// GET /api/generated-tests/:id/avatar - Public asset reader for mock test avatars
+generatedTestRoutes.get("/:id/avatar", async (c) => {
+  const id = c.req.param("id") || "";
+  const db = c.env.DB;
+  const cols = await getTableColumns(db, "generated_tests");
+  const row = await db.prepare("SELECT * FROM generated_tests WHERE id = ?").bind(id).first<GeneratedTestRow>();
+  if (!row) {
+    return c.json({ success: false, error: "Test not found" }, 404);
+  }
+  const storedUrl = cols.has("avatar_url") ? String(row.avatar_url || "").trim() : "";
+  return serveStoredAvatarResponse(c, storedUrl, "test-avatars/");
+});
+
+// POST /api/generated-tests/:id/avatar - Upload photo/GIF/WebP or emoji avatar for mock test (Admin)
+generatedTestRoutes.post("/:id/avatar", requirePermission("manage_generated_tests"), async (c) => {
+  const user = c.get("user");
+  const id = c.req.param("id") || "";
+  const db = c.env.DB;
+  const existing = await db.prepare("SELECT * FROM generated_tests WHERE id = ?").bind(id).first<GeneratedTestRow>();
+  if (!existing) {
+    return c.json({ success: false, error: "Test not found" }, 404);
+  }
+
+  const cols = await getTableColumns(db, "generated_tests");
+  const hasAvatarUrl = cols.has("avatar_url");
+  const hasAvatarEmoji = cols.has("avatar_emoji");
+  const hasAvatarColor = cols.has("avatar_color");
+  if (!hasAvatarUrl && !hasAvatarEmoji && !hasAvatarColor) {
+    return c.json({ success: false, error: "Generated test avatar columns require migration 0035 first" }, 503);
+  }
+
+  const oldKey = extractStorageAvatarKey(String(existing.avatar_url || ""), "test-avatars/");
+  const parsed = await parseAvatarUploadPayload(c);
+  if (parsed.error) {
+    return c.json({ success: false, error: parsed.error }, 400);
+  }
+  const { imageBytes, declaredMime, parsedBody } = parsed;
+  const storage = new AssetStorage(c.env);
+
+  if (imageBytes !== null) {
+    if (!hasAvatarUrl) {
+      return c.json({ success: false, error: "Generated test avatar_url column requires migration 0035 first" }, 503);
+    }
+    const detected = detectAvatarImage(imageBytes, declaredMime);
+    if (!detected) {
+      return c.json({ success: false, error: "Supported avatar formats: JPEG, PNG, WebP, GIF (max 5MB)" }, 400);
+    }
+    const storagePath = `test-avatars/${id}/${crypto.randomUUID()}.${detected.ext}`;
+    const storedLocation = await storage.uploadFile(storagePath, imageBytes, detected.mime);
+    const avatarUrl = storedLocation.startsWith("r2://")
+      ? `/api/generated-tests/${encodeURIComponent(id)}/avatar?k=${encodeURIComponent(storagePath)}&v=${Date.now()}`
+      : storedLocation;
+
+    const sets: string[] = ["avatar_url = ?"];
+    const binds: Array<string | number | null> = [avatarUrl];
+    if (hasAvatarEmoji) sets.push("avatar_emoji = ''");
+    if (hasAvatarColor) sets.push("avatar_color = NULL");
+    binds.push(id);
+
+    const updateStmt = db.prepare(`UPDATE generated_tests SET ${sets.join(", ")} WHERE id = ?`).bind(...binds);
+    const { stmt: auditStmt } = prepareAdminAuditLog(db, user, {
+      actionType: "GENERATED_TEST_AVATAR_UPDATED",
+      description: `Uploaded ${detected.ext.toUpperCase()} avatar for test '${existing.title}'`,
+      targetType: "generated_test",
+      targetId: id,
+      metadata: { mode: "image", mime: detected.mime },
+    });
+    try {
+      const results = await db.batch([updateStmt, auditStmt]);
+      if ((results[0]?.meta?.changes ?? 0) !== 1) throw new Error("Test update not confirmed");
+    } catch {
+      try { await storage.deleteFiles([storagePath]); } catch {}
+      return c.json({ success: false, error: "Could not save test avatar; please retry" }, 409);
+    }
+    if (oldKey && oldKey !== storagePath) {
+      try { await storage.deleteFiles([oldKey]); } catch {}
+    }
+    return c.json({ success: true, data: { avatarUrl, avatarEmoji: "", avatarColor: null } });
+  }
+
+  const emojiRaw = typeof parsedBody?.avatarEmoji === "string" ? parsedBody.avatarEmoji.trim() : "";
+  if (emojiRaw.length > 32) {
+    return c.json({ success: false, error: "avatarEmoji must be 32 characters or fewer" }, 400);
+  }
+  let avatarColor: number | null = null;
+  if (parsedBody?.avatarColor !== undefined && parsedBody.avatarColor !== null && parsedBody.avatarColor !== "") {
+    const num = Number(parsedBody.avatarColor);
+    if (!Number.isInteger(num) || num < 0 || num > 31) {
+      return c.json({ success: false, error: "avatarColor must be an integer between 0 and 31" }, 400);
+    }
+    avatarColor = num;
+  }
+  if (!emojiRaw && avatarColor === null) {
+    return c.json({ success: false, error: "Provide an image file or emoji/color avatar (use DELETE to reset)" }, 400);
+  }
+
+  const sets: string[] = [];
+  const binds: Array<string | number | null> = [];
+  if (hasAvatarUrl) sets.push("avatar_url = ''");
+  if (hasAvatarEmoji) {
+    sets.push("avatar_emoji = ?");
+    binds.push(emojiRaw);
+  }
+  if (hasAvatarColor) {
+    sets.push("avatar_color = ?");
+    binds.push(avatarColor);
+  }
+  binds.push(id);
+
+  const updateStmt = db.prepare(`UPDATE generated_tests SET ${sets.join(", ")} WHERE id = ?`).bind(...binds);
+  const { stmt: auditStmt } = prepareAdminAuditLog(db, user, {
+    actionType: "GENERATED_TEST_AVATAR_UPDATED",
+    description: `Set emoji/color avatar for test '${existing.title}'`,
+    targetType: "generated_test",
+    targetId: id,
+    metadata: { mode: "emoji", avatarEmoji: emojiRaw, avatarColor },
+  });
+  await db.batch([updateStmt, auditStmt]);
+  if (oldKey) {
+    try { await storage.deleteFiles([oldKey]); } catch {}
+  }
+  return c.json({ success: true, data: { avatarUrl: "", avatarEmoji: emojiRaw, avatarColor } });
+});
+
+// DELETE /api/generated-tests/:id/avatar - Clear mock test avatar (Admin)
+generatedTestRoutes.delete("/:id/avatar", requirePermission("manage_generated_tests"), async (c) => {
+  const user = c.get("user");
+  const id = c.req.param("id") || "";
+  const db = c.env.DB;
+  const existing = await db.prepare("SELECT * FROM generated_tests WHERE id = ?").bind(id).first<GeneratedTestRow>();
+  if (!existing) {
+    return c.json({ success: false, error: "Test not found" }, 404);
+  }
+  const cols = await getTableColumns(db, "generated_tests");
+  const oldKey = extractStorageAvatarKey(String(existing.avatar_url || ""), "test-avatars/");
+  const sets: string[] = [];
+  if (cols.has("avatar_url")) sets.push("avatar_url = ''");
+  if (cols.has("avatar_emoji")) sets.push("avatar_emoji = ''");
+  if (cols.has("avatar_color")) sets.push("avatar_color = NULL");
+  if (sets.length > 0) {
+    const updateStmt = db.prepare(`UPDATE generated_tests SET ${sets.join(", ")} WHERE id = ?`).bind(id);
+    const { stmt: auditStmt } = prepareAdminAuditLog(db, user, {
+      actionType: "GENERATED_TEST_AVATAR_DELETED",
+      description: `Cleared avatar for test '${existing.title}'`,
+      targetType: "generated_test",
+      targetId: id,
+    });
+    await db.batch([updateStmt, auditStmt]);
+  }
+  if (oldKey) {
+    try { await new AssetStorage(c.env).deleteFiles([oldKey]); } catch {}
+  }
+  return c.json({ success: true, data: { avatarUrl: "", avatarEmoji: "", avatarColor: null } });
 });
 
 // PUT /api/generated-tests/:id/schedule - Schedule test (Admin)
@@ -246,11 +415,29 @@ generatedTestRoutes.post("/generate-now", requirePermission("manage_generated_te
   const targetCount = Number(body.questionCount ?? exam.question_count ?? 20);
   if (!Number.isInteger(targetCount) || targetCount < 1 || targetCount > 200) return c.json({ success: false, error: "questionCount must be an integer between 1 and 200" }, 400);
   const testNumber = String(body.testNumber || exam.test_number || "Test 1").trim();
-  const customPrompt = String(body.customPromptNotes || exam.generation_prompt || exam.custom_prompt_notes || "").trim();
+  const customPrompt = String(
+    body.aiPrompt || body.customPromptNotes || exam.ai_prompt || exam.generation_prompt || exam.custom_prompt_notes || ""
+  ).trim();
+
+  let effectiveExam = exam;
+  if (body.aiLanguage !== undefined && body.aiLanguage !== null && String(body.aiLanguage).trim() !== "") {
+    const lang = String(body.aiLanguage).trim().toLowerCase();
+    if (lang !== "english" && lang !== "hindi" && lang !== "bilingual") {
+      return c.json({ success: false, error: "aiLanguage must be 'english', 'hindi', or 'bilingual'" }, 400);
+    }
+    effectiveExam = { ...effectiveExam, ai_language: lang };
+  }
+  if (body.aiDifficulty !== undefined && body.aiDifficulty !== null && String(body.aiDifficulty).trim() !== "") {
+    const diff = String(body.aiDifficulty).trim().toLowerCase();
+    if (diff !== "easy" && diff !== "medium" && diff !== "hard" && diff !== "mixed") {
+      return c.json({ success: false, error: "aiDifficulty must be 'easy', 'medium', 'hard', or 'mixed'" }, 400);
+    }
+    effectiveExam = { ...effectiveExam, ai_difficulty: diff };
+  }
 
   try {
     // Generation and its admin audit commit together before acknowledgment.
-    const data = await runGeneration(c.env, exam, targetCount, testNumber, customPrompt,
+    const data = await runGeneration(c.env, effectiveExam, targetCount, testNumber, customPrompt,
       "manual", body.requestId ? String(body.requestId).slice(0, 100) : undefined, user);
     return c.json({ success: true, data });
   } catch (err: any) {

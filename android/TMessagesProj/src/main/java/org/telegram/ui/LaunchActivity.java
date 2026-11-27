@@ -6584,9 +6584,47 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
             // Re-check if the user updated their email from another client
             MessagesController.getInstance(currentAccount).checkPromoInfo(true);
         }
+        checkEveMaintenanceOnResume();
         //if (refreshRateController != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
         //    refreshRateController.start();
         //}
+    }
+
+    private void checkEveMaintenanceOnResume() {
+        org.telegram.ui.eve.auth.EveBackendClient.setMaintenanceSignalListener(message -> AndroidUtilities.runOnUIThread(() -> {
+            if (!org.telegram.ui.eve.admin.EveAdminConfig.isAdminAvailable()) {
+                presentEveMaintenanceOverlay(message);
+            }
+        }));
+        org.telegram.ui.eve.exams.EveExamRepository examRepo = org.telegram.ui.eve.exams.EveExamRepository.getInstance();
+        org.telegram.ui.eve.auth.EveBackendClient.AppConfigResult cached = examRepo.getCachedAppConfig();
+        if (cached != null && cached.maintenanceMode && !org.telegram.ui.eve.admin.EveAdminConfig.isAdminAvailable()) {
+            presentEveMaintenanceOverlay(cached.maintenanceMessage);
+        }
+        examRepo.fetchAppConfig((cfg, err) -> {
+            if (cfg != null && cfg.maintenanceMode && !org.telegram.ui.eve.admin.EveAdminConfig.isAdminAvailable()) {
+                presentEveMaintenanceOverlay(cfg.maintenanceMessage);
+            }
+        });
+    }
+
+    private void presentEveMaintenanceOverlay(String message) {
+        if (actionBarLayout == null || isFinishing()) {
+            return;
+        }
+        BaseFragment top = actionBarLayout.getLastFragment();
+        if (top instanceof org.telegram.ui.eve.auth.EveSignInFragment
+                || top instanceof LoginActivity
+                || top instanceof IntroActivity) {
+            return;
+        }
+        if (top instanceof org.telegram.ui.eve.auth.EveMaintenanceFragment) {
+            ((org.telegram.ui.eve.auth.EveMaintenanceFragment) top).updateMessage(message);
+            return;
+        }
+        actionBarLayout.presentFragment(
+                new org.telegram.ui.eve.auth.EveMaintenanceFragment(message, this::checkEveMaintenanceOnResume),
+                false, true, true, false);
     }
 
     public static Runnable whenResumed;

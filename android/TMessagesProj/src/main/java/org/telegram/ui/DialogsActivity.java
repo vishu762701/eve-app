@@ -328,10 +328,23 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     private EveExamModels.ExamCatalogResult lastBoundExamCatalogResult;
     private java.util.List<org.telegram.ui.eve.admin.EveAdminModels.BannerItem> eveHomeBanners = java.util.Collections.emptyList();
     private final java.util.Set<EveHomeBannerCarouselView> eveBannerCarousels = new java.util.HashSet<>();
+    private EveExamRepository.AnnouncementChannelSummary eveAnnouncementChannel =
+            EveExamRepository.getInstance().getCachedAnnouncementChannelSummary();
+    private TextView eveMaintenanceNoticeBar;
     private boolean eveSwipeHandled;
 
     public java.util.List<org.telegram.ui.eve.admin.EveAdminModels.BannerItem> getEveHomeBanners() {
         return eveHomeBanners;
+    }
+
+    public EveExamRepository.AnnouncementChannelSummary getEveAnnouncementChannelSummary() {
+        if (eveAnnouncementChannel != null) {
+            return eveAnnouncementChannel;
+        }
+        EveExamRepository.AnnouncementChannelSummary cached = EveExamRepository.getInstance().getCachedAnnouncementChannelSummary();
+        return cached != null
+                ? cached
+                : new EveExamRepository.AnnouncementChannelSummary("Announcements", "", "Broadcasts & live polls", 0, 0L, 0);
     }
 
     public void registerEveBannerCarouselView(EveHomeBannerCarouselView view) {
@@ -353,6 +366,80 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 }
             }
         });
+    }
+
+    private void loadEveAnnouncementChannel() {
+        if (!isEveExamsMode()) return;
+        EveExamRepository.getInstance().loadAnnouncementChannelSummary((summary, err) -> {
+            if (!isEveExamsMode() || summary == null) return;
+            eveAnnouncementChannel = summary;
+            if (viewPages != null) {
+                for (ViewPage vp : viewPages) {
+                    if (vp != null && vp.dialogsAdapter != null) {
+                        vp.dialogsAdapter.updateList(null);
+                    }
+                }
+            }
+        });
+    }
+
+    private void checkEveMaintenanceMode() {
+        if (!isEveExamsMode()) return;
+        org.telegram.ui.eve.auth.EveBackendClient.setMaintenanceSignalListener(message -> AndroidUtilities.runOnUIThread(() -> {
+            if (getParentActivity() == null) return;
+            if (!org.telegram.ui.eve.admin.EveAdminConfig.isAdminAvailable()) {
+                presentEveMaintenanceBlocker(message);
+            } else {
+                updateEveMaintenanceNoticeBar(true);
+            }
+        }));
+
+        org.telegram.ui.eve.auth.EveBackendClient.AppConfigResult cachedCfg = EveExamRepository.getInstance().getCachedAppConfig();
+        if (cachedCfg != null) {
+            applyEveAppConfig(cachedCfg);
+        }
+        EveExamRepository.getInstance().fetchAppConfig((cfg, err) -> {
+            if (cfg != null) {
+                applyEveAppConfig(cfg);
+            }
+        });
+    }
+
+    private void applyEveAppConfig(org.telegram.ui.eve.auth.EveBackendClient.AppConfigResult cfg) {
+        boolean maintOn = cfg != null && cfg.maintenanceMode;
+        boolean isAdmin = org.telegram.ui.eve.admin.EveAdminConfig.isAdminAvailable();
+        updateEveMaintenanceNoticeBar(maintOn && isAdmin);
+        if (maintOn && !isAdmin) {
+            presentEveMaintenanceBlocker(cfg.maintenanceMessage);
+        }
+    }
+
+    private void updateEveMaintenanceNoticeBar(boolean visible) {
+        if (eveMaintenanceNoticeBar != null) {
+            int redBold = getThemedColor(Theme.key_text_RedBold);
+            eveMaintenanceNoticeBar.setTextColor(redBold);
+            eveMaintenanceNoticeBar.setBackgroundColor(Theme.multAlpha(redBold, 0.12f));
+        }
+        if (topPanelLayout != null && eveMaintenanceNoticeBar != null) {
+            topPanelLayout.setViewVisible(eveMaintenanceNoticeBar, visible, true);
+        }
+    }
+
+    private void presentEveMaintenanceBlocker(String message) {
+        if (parentLayout == null || getParentActivity() == null) {
+            return;
+        }
+        BaseFragment top = parentLayout.getLastFragment();
+        if (top instanceof org.telegram.ui.eve.auth.EveMaintenanceFragment) {
+            ((org.telegram.ui.eve.auth.EveMaintenanceFragment) top).updateMessage(message);
+            return;
+        }
+        presentFragment(new org.telegram.ui.eve.auth.EveMaintenanceFragment(message, () -> {
+            checkEveMaintenanceMode();
+            EveExamRepository.getInstance().loadExams(true);
+            loadEveHomeBanners();
+            loadEveAnnouncementChannel();
+        }), false, true);
     }
 
     private void handleEveExamPinSwipe(RecyclerView.ViewHolder viewHolder, DialogCell dialogCell) {
@@ -3261,6 +3348,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
         authHintCell = null;
         dialogsHintCell = null;
+        eveMaintenanceNoticeBar = null;
         communityPendingRequests = null;
         topPanelLayout = null;
 
@@ -4913,6 +5001,18 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 updateDialogsHint();
             });
             topPanelLayout.addView(dialogsHintCell);
+
+            eveMaintenanceNoticeBar = new TextView(context);
+            eveMaintenanceNoticeBar.setText("Maintenance Mode is ON (Students blocked)");
+            eveMaintenanceNoticeBar.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13.5f);
+            eveMaintenanceNoticeBar.setTypeface(AndroidUtilities.bold());
+            eveMaintenanceNoticeBar.setGravity(Gravity.CENTER);
+            eveMaintenanceNoticeBar.setPadding(dp(14), dp(10), dp(14), dp(10));
+            eveMaintenanceNoticeBar.setOnClickListener(v -> presentFragment(
+                    new org.telegram.ui.eve.admin.EveAdminMaintenanceConfigFragment(null, this::checkEveMaintenanceMode)));
+            topPanelLayout.addView(eveMaintenanceNoticeBar);
+            topPanelLayout.setPriority(eveMaintenanceNoticeBar, 6);
+            topPanelLayout.setViewVisible(eveMaintenanceNoticeBar, false, false);
 
 
             if (communityId != 0) {
@@ -6832,6 +6932,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         if (isEveExamsMode()) {
             EveExamRepository.getInstance().loadExams(false);
             loadEveHomeBanners();
+            loadEveAnnouncementChannel();
+            checkEveMaintenanceMode();
             for (EveHomeBannerCarouselView carousel : eveBannerCarousels) {
                 carousel.onResumeCarousel();
             }
@@ -7648,6 +7750,16 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 filterId = dialogFilter == null ? 0 : dialogFilter.id;
             }
             Object object = dialogsAdapter.getItem(position);
+            if (object instanceof EveExamRepository.AnnouncementChannelSummary) {
+                EveExamRepository.AnnouncementChannelSummary ch = (EveExamRepository.AnnouncementChannelSummary) object;
+                EveExamRepository.getInstance().markAllAnnouncementsSeen(ch.latestTimestampMs);
+                eveAnnouncementChannel = EveExamRepository.getInstance().getCachedAnnouncementChannelSummary();
+                if (viewPages != null && viewPages[0] != null && viewPages[0].dialogsAdapter != null) {
+                    viewPages[0].dialogsAdapter.updateList(null);
+                }
+                presentFragment(new org.telegram.ui.eve.exams.EveAnnouncementsFragment());
+                return;
+            }
             if (object instanceof EveExamModels.ExamSummary) {
                 EveExamModels.ExamSummary tapped = (EveExamModels.ExamSummary) object;
                 List<EveExamModels.ExamSummary> subs = EveExamRepository.getInstance().getSubExamsForParent(tapped.id);
@@ -12023,6 +12135,12 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         }
         if (authHintCell != null) {
             SimpleThemeDescription.add(arrayList, authHintCell::updateColors, Theme.key_windowBackgroundWhite, Theme.key_windowBackgroundWhiteBlackText, Theme.key_windowBackgroundWhiteGrayText, Theme.key_windowBackgroundWhiteValueText, Theme.key_text_RedBold);
+        }
+        if (eveMaintenanceNoticeBar != null) {
+            SimpleThemeDescription.add(arrayList, () -> {
+                org.telegram.ui.eve.auth.EveBackendClient.AppConfigResult cfg = EveExamRepository.getInstance().getCachedAppConfig();
+                updateEveMaintenanceNoticeBar(cfg != null && cfg.maintenanceMode && org.telegram.ui.eve.admin.EveAdminConfig.isAdminAvailable());
+            }, Theme.key_text_RedBold);
         }
 
 

@@ -95,11 +95,18 @@ public class EveAdminExamsFragment extends BaseFragment {
         destroyed = false;
         setHasOwnBackground(true);
 
-        EveAdminModels.DashboardSnapshot cached = repo.getCachedSnapshot();
-        if (cached != null) {
-            exams = cached.exams;
-            generatedTests = cached.generatedTests;
+        EveAdminRepository.ExamsCatalogData cachedCatalog = repo.getCachedExamsCatalog();
+        if (cachedCatalog != null && !cachedCatalog.exams.isEmpty()) {
+            exams = cachedCatalog.exams;
+            generatedTests = cachedCatalog.generatedTests;
+        } else {
+            EveAdminModels.DashboardSnapshot cached = repo.getCachedSnapshot();
+            if (cached != null) {
+                exams = cached.exams;
+                generatedTests = cached.generatedTests;
+            }
         }
+        loading = exams.isEmpty();
 
         EveAdminUiChrome.Chrome chrome = EveAdminUiChrome.setup(
                 this,

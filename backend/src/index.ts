@@ -9,6 +9,8 @@ import { operationMonitor } from "./middleware/operationMonitor";
 import { Context, Hono } from "hono";
 import { cors } from "hono/cors";
 import { handleScheduledTestGeneration } from "./cron/scheduledTestGeneration";
+import { readAppConfig } from "./util/appConfig";
+import { serveStoredAvatarResponse } from "./util/avatarMedia";
 import { authMiddleware } from "./middleware/authMiddleware";
 import { ipRateLimit, userRateLimit } from "./middleware/rateLimiter";
 import { adminRoutes } from "./routes/admin";
@@ -70,35 +72,29 @@ app.get("/api/health", (c) => {
   });
 });
 
-// Public App Config (Force Update & Maintenance Mode)
+// Public App Config (Force Update, Maintenance Mode & Announcement Channel Metadata)
 app.get("/api/app-config", async (c) => {
   c.header("Cache-Control", "no-store");
-  const db = c.env.DB;
   try {
-    const row = await db.prepare("SELECT body FROM app_content WHERE id = 'app_config'").first<{ body: string }>();
-    if (row && row.body) {
-      const config = JSON.parse(row.body);
-      if (!config || typeof config !== "object" || Array.isArray(config) ||
-          (config.maintenance_mode !== undefined && typeof config.maintenance_mode !== "boolean")) {
-        throw new Error("Invalid stored configuration");
-      }
-      if (!config.default_publish_mode) {
-        config.default_publish_mode = "paused";
-      }
-      return c.json({ success: true, data: config });
-    }
+    const config = await readAppConfig(c.env.DB);
+    return c.json({ success: true, data: config });
   } catch {
     return c.json({ success: false, error: "App configuration unavailable" }, 503);
   }
-  return c.json({
-    success: true,
-    data: {
-      minimum_supported_version_code: 1,
-      maintenance_mode: false,
-      maintenance_message: "Eve Mock Test is currently undergoing scheduled maintenance. Please check back shortly.",
-      default_publish_mode: "paused",
-    },
-  });
+});
+
+// Public Announcement Channel Avatar Reader
+app.get("/api/announcement-channel/avatar", async (c) => {
+  try {
+    const config = await readAppConfig(c.env.DB);
+    return await serveStoredAvatarResponse(
+      c,
+      config.announcementChannelAvatarUrl,
+      "channel-avatars/"
+    );
+  } catch {
+    return c.json({ success: false, error: "Channel avatar unavailable" }, 404);
+  }
 });
 
 // Public Floating Community Link

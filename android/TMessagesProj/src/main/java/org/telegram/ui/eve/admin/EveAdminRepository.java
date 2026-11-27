@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -42,6 +43,7 @@ public final class EveAdminRepository {
     private static volatile EveAdminRepository instance;
 
     private static final String PREFS_DASHBOARD_CACHE = "eve_admin_dashboard_cache";
+    private static final String PREFS_ADMIN_SWR = "eve_admin_swr_cache";
     private static final String KEY_SNAPSHOT_PREFIX = "dashboard_snapshot_v2_";
     private static final long DASHBOARD_STALE_AFTER_MS = 60_000L;
 
@@ -50,9 +52,38 @@ public final class EveAdminRepository {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final Object dashboardLock = new Object();
     private final List<ResultCallback<EveAdminModels.DashboardSnapshot>> pendingDashboardCallbacks = new ArrayList<>();
+    private final ConcurrentHashMap<String, String> swrMemory = new ConcurrentHashMap<>();
     private boolean dashboardRefreshInFlight;
     private volatile EveAdminModels.DashboardSnapshot cachedSnapshot;
     private volatile long cachedSnapshotAtMs;
+
+    private void putSwrJson(String key, String raw) {
+        if (key == null || raw == null) return;
+        swrMemory.put(key, raw);
+        try {
+            Context ctx = ApplicationLoader.applicationContext;
+            if (ctx == null) return;
+            ctx.getSharedPreferences(PREFS_ADMIN_SWR, Context.MODE_PRIVATE).edit().putString(key, raw).apply();
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private String getSwrJson(String key) {
+        if (key == null) return "";
+        String mem = swrMemory.get(key);
+        if (mem != null && !mem.isEmpty()) return mem;
+        try {
+            Context ctx = ApplicationLoader.applicationContext;
+            if (ctx == null) return "";
+            String disk = ctx.getSharedPreferences(PREFS_ADMIN_SWR, Context.MODE_PRIVATE).getString(key, "");
+            if (disk != null && !disk.isEmpty()) {
+                swrMemory.put(key, disk);
+                return disk;
+            }
+        } catch (Throwable ignored) {
+        }
+        return "";
+    }
 
     public static EveAdminRepository getInstance() {
         EveAdminRepository current = instance;
@@ -130,19 +161,73 @@ public final class EveAdminRepository {
         }
     }
 
+    public ExamsCatalogData getCachedExamsCatalog() {
+        String exRaw = getSwrJson("catalog_exams");
+        String tsRaw = getSwrJson("catalog_tests");
+        if (exRaw.isEmpty()) return null;
+        try {
+            List<EveAdminModels.AdminExamItem> ex = EveAdminModels.AdminExamItem.parseList(new JSONArray(exRaw));
+            List<EveAdminModels.AdminGeneratedTestItem> ts = tsRaw.isEmpty()
+                    ? Collections.emptyList()
+                    : EveAdminModels.AdminGeneratedTestItem.parseList(new JSONArray(tsRaw));
+            return new ExamsCatalogData(ex, ts);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    public List<EveAdminModels.AdminGeneratedTestItem> getCachedGeneratedTests(String examId) {
+        String key = examId != null && !examId.trim().isEmpty()
+                ? "tests_" + examId.trim() : "catalog_tests";
+        String raw = getSwrJson(key);
+        if (raw.isEmpty() && !"catalog_tests".equals(key)) {
+            String allRaw = getSwrJson("catalog_tests");
+            if (!allRaw.isEmpty()) {
+                try {
+                    List<EveAdminModels.AdminGeneratedTestItem> out = new ArrayList<>();
+                    for (EveAdminModels.AdminGeneratedTestItem t : EveAdminModels.AdminGeneratedTestItem.parseList(new JSONArray(allRaw))) {
+                        if (examId.trim().equals(t.examId)) out.add(t);
+                    }
+                    return out;
+                } catch (Throwable ignored) {}
+            }
+            return Collections.emptyList();
+        }
+        if (raw.isEmpty()) return Collections.emptyList();
+        try {
+            return EveAdminModels.AdminGeneratedTestItem.parseList(new JSONArray(raw));
+        } catch (Throwable ignored) {
+            return Collections.emptyList();
+        }
+    }
+
     public void loadExamsCatalogAsync(ResultCallback<ExamsCatalogData> callback) {
         withAdminToken(callback, token -> {
-            Future<List<EveAdminModels.AdminExamItem>> examsFuture = executor.submit(() ->
-                    EveAdminModels.AdminExamItem.parseList(client.fetchExamsJson(token)));
-            Future<List<EveAdminModels.AdminGeneratedTestItem>> testsFuture = executor.submit(() ->
-                    EveAdminModels.AdminGeneratedTestItem.parseList(client.fetchGeneratedTestsJson(token, null)));
+            Future<JSONArray> examsArrFuture = executor.submit(() -> client.fetchExamsJson(token));
+            Future<JSONArray> testsArrFuture = executor.submit(() -> client.fetchGeneratedTestsJson(token, null));
             try {
-                ExamsCatalogData result = new ExamsCatalogData(examsFuture.get(), testsFuture.get());
+                JSONArray exArr = examsArrFuture.get();
+                JSONArray tsArr = testsArrFuture.get();
+                if (exArr != null) putSwrJson("catalog_exams", exArr.toString());
+                if (tsArr != null) putSwrJson("catalog_tests", tsArr.toString());
+                ExamsCatalogData result = new ExamsCatalogData(
+                        EveAdminModels.AdminExamItem.parseList(exArr),
+                        EveAdminModels.AdminGeneratedTestItem.parseList(tsArr));
                 postSuccess(callback, result);
             } catch (Exception ex) {
                 throw unwrapBackendException(ex, "/api/exams");
             }
         });
+    }
+
+    public List<EveAdminModels.AdminGeneratedTestItem> fetchGeneratedTests(String token, String examId) throws EveBackendClient.BackendException {
+        JSONArray arr = client.fetchGeneratedTestsJson(token, examId);
+        if (arr != null) {
+            String key = examId != null && !examId.trim().isEmpty()
+                    ? "tests_" + examId.trim() : "catalog_tests";
+            putSwrJson(key, arr.toString());
+        }
+        return EveAdminModels.AdminGeneratedTestItem.parseList(arr);
     }
 
     public void loadInsightsOverviewAsync(EveAdminModels.AdminProfile profile, ResultCallback<InsightsBundle> callback) {
@@ -632,15 +717,71 @@ public final class EveAdminRepository {
             int questionCount,
             String testNumber,
             String customPromptNotes) throws EveBackendClient.BackendException {
+        return generateTestNow(token, examId, questionCount, testNumber, customPromptNotes, null, null);
+    }
+
+    public JSONObject generateTestNow(
+            String token,
+            String examId,
+            int questionCount,
+            String testNumber,
+            String customPromptNotes,
+            String aiLanguage,
+            String aiDifficulty) throws EveBackendClient.BackendException {
         JSONObject payload = new JSONObject();
         try {
             payload.put("examId", examId);
             payload.put("questionCount", questionCount);
             payload.put("testNumber", testNumber);
             payload.put("customPromptNotes", customPromptNotes != null ? customPromptNotes : "");
+            if (customPromptNotes != null) {
+                payload.put("aiPrompt", customPromptNotes);
+            }
+            if (aiLanguage != null && !aiLanguage.trim().isEmpty()) {
+                payload.put("aiLanguage", aiLanguage.trim().toLowerCase(Locale.US));
+            }
+            if (aiDifficulty != null && !aiDifficulty.trim().isEmpty()) {
+                payload.put("aiDifficulty", aiDifficulty.trim().toLowerCase(Locale.US));
+            }
         } catch (JSONException ignored) {
         }
         return client.postJsonRoot("/api/generated-tests/generate-now", token, payload);
+    }
+
+    public void saveExamAiSettings(
+            String token,
+            String examId,
+            String aiPrompt,
+            String aiLanguage,
+            String aiDifficulty) throws EveBackendClient.BackendException {
+        JSONObject payload = new JSONObject();
+        try {
+            String cleanPrompt = aiPrompt != null ? aiPrompt.trim() : "";
+            payload.put("aiPrompt", cleanPrompt);
+            payload.put("generationPrompt", cleanPrompt);
+            if (aiLanguage != null && !aiLanguage.trim().isEmpty()) {
+                payload.put("aiLanguage", aiLanguage.trim().toLowerCase(Locale.US));
+            }
+            if (aiDifficulty != null && !aiDifficulty.trim().isEmpty()) {
+                payload.put("aiDifficulty", aiDifficulty.trim().toLowerCase(Locale.US));
+            }
+        } catch (JSONException ignored) {
+        }
+        client.putJsonRoot("/api/exams/" + encode(examId), token, payload);
+    }
+
+    public JSONObject uploadGeneratedTestAvatarImage(String token, String testId, byte[] imageBytes, String mimeType) throws EveBackendClient.BackendException {
+        if (imageBytes == null || imageBytes.length == 0) {
+            throw new IllegalArgumentException("Avatar image is empty");
+        }
+        String effectiveMime = mimeType != null && !mimeType.trim().isEmpty() ? mimeType.trim() : "image/jpeg";
+        JSONObject root = client.postBinaryRoot("/api/generated-tests/" + encode(testId) + "/avatar", token, effectiveMime, imageBytes);
+        return root != null ? root.optJSONObject("data") : null;
+    }
+
+    public JSONObject deleteGeneratedTestAvatar(String token, String testId) throws EveBackendClient.BackendException {
+        JSONObject root = client.deleteJsonRoot("/api/generated-tests/" + encode(testId) + "/avatar", token);
+        return root != null ? root.optJSONObject("data") : null;
     }
 
     public void updateGeneratedTestStatus(String token, String testId, String status) throws EveBackendClient.BackendException {
@@ -748,15 +889,18 @@ public final class EveAdminRepository {
         }
     }
 
-    public StudentsPageResult searchStudentsWithSummary(String token, String query, String filter, int page, int pageSize) throws EveBackendClient.BackendException {
-        String path = "/api/admin/users?page=" + page + "&pageSize=" + pageSize;
-        if (query != null && !query.trim().isEmpty()) {
-            path += "&q=" + encode(query.trim());
+    public StudentsPageResult getCachedStudentsDefault() {
+        String raw = getSwrJson("students_all_p1");
+        if (raw.isEmpty()) return null;
+        try {
+            JSONObject root = new JSONObject(raw);
+            return parseStudentsPageResult(root);
+        } catch (Throwable ignored) {
+            return null;
         }
-        if (filter != null && !filter.trim().isEmpty() && !"all".equalsIgnoreCase(filter.trim())) {
-            path += "&filter=" + encode(filter.trim().toLowerCase(Locale.US));
-        }
-        JSONObject root = client.getJsonRoot(path, token);
+    }
+
+    private static StudentsPageResult parseStudentsPageResult(JSONObject root) {
         List<EveAdminModels.AdminStudentItem> list = EveAdminModels.AdminStudentItem.parseList(root.optJSONArray("data"));
         JSONObject summary = root.optJSONObject("summary");
         JSONObject pagination = root.optJSONObject("pagination");
@@ -772,6 +916,24 @@ public final class EveAdminRepository {
             }
         }
         return new StudentsPageResult(list, total, premium, online, banned);
+    }
+
+    public StudentsPageResult searchStudentsWithSummary(String token, String query, String filter, int page, int pageSize) throws EveBackendClient.BackendException {
+        boolean isDefaultPage = (query == null || query.trim().isEmpty())
+                && (filter == null || filter.trim().isEmpty() || "all".equalsIgnoreCase(filter.trim()))
+                && page == 1;
+        String path = "/api/admin/users?page=" + page + "&pageSize=" + pageSize;
+        if (query != null && !query.trim().isEmpty()) {
+            path += "&q=" + encode(query.trim());
+        }
+        if (filter != null && !filter.trim().isEmpty() && !"all".equalsIgnoreCase(filter.trim())) {
+            path += "&filter=" + encode(filter.trim().toLowerCase(Locale.US));
+        }
+        JSONObject root = client.getJsonRoot(path, token);
+        if (isDefaultPage && root != null) {
+            putSwrJson("students_all_p1", root.toString());
+        }
+        return parseStudentsPageResult(root);
     }
 
     public List<EveAdminModels.AdminStudentItem> searchStudents(String token, String query, int page, int pageSize) throws EveBackendClient.BackendException {
@@ -957,14 +1119,8 @@ public final class EveAdminRepository {
         if (imageBytes == null || imageBytes.length == 0) {
             throw new IllegalArgumentException("Avatar image is empty");
         }
-        String b64 = android.util.Base64.encodeToString(imageBytes, android.util.Base64.NO_WRAP);
-        JSONObject payload = new JSONObject();
-        try {
-            payload.put("base64", b64);
-            payload.put("mimeType", mimeType != null && !mimeType.trim().isEmpty() ? mimeType : "image/jpeg");
-        } catch (JSONException ignored) {
-        }
-        JSONObject root = client.postJsonRoot("/api/exams/" + encode(examId) + "/avatar", token, payload);
+        String effectiveMime = mimeType != null && !mimeType.trim().isEmpty() ? mimeType.trim() : "image/jpeg";
+        JSONObject root = client.postBinaryRoot("/api/exams/" + encode(examId) + "/avatar", token, effectiveMime, imageBytes);
         return root != null ? root.optJSONObject("data") : null;
     }
 
@@ -988,6 +1144,20 @@ public final class EveAdminRepository {
         return root != null ? root.optJSONObject("data") : null;
     }
 
+    public JSONObject uploadExamSyllabusPdf(String token, String examId, String fileName, byte[] pdfBytes) throws EveBackendClient.BackendException {
+        if (pdfBytes == null || pdfBytes.length == 0) {
+            throw new IllegalArgumentException("Syllabus PDF is empty");
+        }
+        JSONObject payload = new JSONObject();
+        try {
+            payload.put("fileName", fileName != null && !fileName.trim().isEmpty() ? fileName.trim() : "syllabus.pdf");
+            payload.put("base64", android.util.Base64.encodeToString(pdfBytes, android.util.Base64.NO_WRAP));
+        } catch (JSONException ignored) {
+        }
+        JSONObject root = client.postJsonRoot("/api/exams/" + encode(examId) + "/syllabus", token, payload);
+        return root != null ? root.optJSONObject("data") : null;
+    }
+
     public void removeSyllabus(String token, String examId) throws EveBackendClient.BackendException {
         client.deleteJsonRoot("/api/exams/" + encode(examId) + "/syllabus", token);
     }
@@ -1006,10 +1176,22 @@ public final class EveAdminRepository {
         return EveAdminModels.PremiumUserItem.parseList(root.optJSONArray("data"));
     }
 
+    public List<EveAdminModels.BannerItem> getCachedBanners() {
+        String raw = getSwrJson("banners");
+        if (raw.isEmpty()) return Collections.emptyList();
+        try {
+            return EveAdminModels.BannerItem.parseList(new JSONArray(raw));
+        } catch (Throwable ignored) {
+            return Collections.emptyList();
+        }
+    }
+
     public List<EveAdminModels.BannerItem> fetchBanners(String token) throws EveBackendClient.BackendException {
         try {
             JSONObject root = client.getJsonRoot("/api/banners/manage", token);
-            return EveAdminModels.BannerItem.parseList(root.optJSONArray("data"));
+            JSONArray arr = root.optJSONArray("data");
+            if (arr != null) putSwrJson("banners", arr.toString());
+            return EveAdminModels.BannerItem.parseList(arr);
         } catch (EveBackendClient.BackendException e) {
             if (e.httpStatus != 404) {
                 throw e;
@@ -1097,9 +1279,21 @@ public final class EveAdminRepository {
         client.putJsonRoot("/api/admin/floating-link", token, payload);
     }
 
+    public List<EveAdminModels.PollItem> getCachedPolls() {
+        String raw = getSwrJson("polls");
+        if (raw.isEmpty()) return Collections.emptyList();
+        try {
+            return EveAdminModels.PollItem.parseList(new JSONArray(raw));
+        } catch (Throwable ignored) {
+            return Collections.emptyList();
+        }
+    }
+
     public List<EveAdminModels.PollItem> fetchPolls(String token) throws EveBackendClient.BackendException {
         JSONObject root = client.getJsonRoot("/api/polls", token);
-        return EveAdminModels.PollItem.parseList(root.optJSONArray("data"));
+        JSONArray arr = root.optJSONArray("data");
+        if (arr != null) putSwrJson("polls", arr.toString());
+        return EveAdminModels.PollItem.parseList(arr);
     }
 
     public void createPoll(String token, String question, List<String> options) throws EveBackendClient.BackendException {
@@ -1138,9 +1332,21 @@ public final class EveAdminRepository {
         client.deleteJsonRoot("/api/polls/" + encode(pollId), token);
     }
 
+    public List<EveAdminModels.BroadcastItem> getCachedBroadcasts() {
+        String raw = getSwrJson("broadcasts");
+        if (raw.isEmpty()) return Collections.emptyList();
+        try {
+            return EveAdminModels.BroadcastItem.parseList(new JSONArray(raw));
+        } catch (Throwable ignored) {
+            return Collections.emptyList();
+        }
+    }
+
     public List<EveAdminModels.BroadcastItem> fetchBroadcasts(String token) throws EveBackendClient.BackendException {
         JSONObject root = client.getJsonRoot("/api/broadcasts?limit=50", token);
-        return EveAdminModels.BroadcastItem.parseList(root.optJSONArray("data"));
+        JSONArray arr = root.optJSONArray("data");
+        if (arr != null) putSwrJson("broadcasts", arr.toString());
+        return EveAdminModels.BroadcastItem.parseList(arr);
     }
 
     public void sendBroadcast(String token, String title, String message) throws EveBackendClient.BackendException {
@@ -1157,10 +1363,51 @@ public final class EveAdminRepository {
         client.deleteJsonRoot("/api/broadcasts/" + encode(id), token);
     }
 
+    public List<EveAdminModels.QuestionReportItem> getCachedReports(String type) {
+        String raw = getSwrJson("reports_" + (type != null ? type : ""));
+        if (raw.isEmpty()) return Collections.emptyList();
+        try {
+            return EveAdminModels.QuestionReportItem.parseList(new JSONArray(raw));
+        } catch (Throwable ignored) {
+            return Collections.emptyList();
+        }
+    }
+
     public List<EveAdminModels.QuestionReportItem> fetchReports(String token, String type) throws EveBackendClient.BackendException {
         String path = "/api/admin/reports" + (type != null && !type.isEmpty() ? "?type=" + encode(type) : "");
         JSONObject root = client.getJsonRoot(path, token);
-        return EveAdminModels.QuestionReportItem.parseList(root.optJSONArray("data"));
+        JSONArray arr = root.optJSONArray("data");
+        if (arr != null) putSwrJson("reports_" + (type != null ? type : ""), arr.toString());
+        return EveAdminModels.QuestionReportItem.parseList(arr);
+    }
+
+    public EveAdminModels.AdminQuestionItem fetchQuestionById(String token, String questionId) throws EveBackendClient.BackendException {
+        JSONObject root = client.getJsonRoot("/api/questions/" + encode(questionId), token);
+        JSONObject data = root != null ? root.optJSONObject("data") : null;
+        if (data == null) return null;
+        JSONArray arr = new JSONArray();
+        arr.put(data);
+        List<EveAdminModels.AdminQuestionItem> list = EveAdminModels.AdminQuestionItem.parseList(arr);
+        return list.isEmpty() ? null : list.get(0);
+    }
+
+    public void fixFlaggedQuestion(
+            String token,
+            String reportId,
+            String questionText,
+            String optionA,
+            String optionB,
+            String optionC,
+            String optionD,
+            String correctAnswer,
+            String explanation,
+            String topic) throws EveBackendClient.BackendException {
+        JSONObject payload = buildQuestionPayload("", questionText, optionA, optionB, optionC, optionD, correctAnswer, explanation, topic);
+        client.putJsonRoot("/api/admin/reports/" + encode(reportId) + "/fix-question", token, payload);
+    }
+
+    public void deleteFlaggedQuestion(String token, String reportId) throws EveBackendClient.BackendException {
+        client.deleteJsonRoot("/api/admin/reports/" + encode(reportId) + "/question", token);
     }
 
     public void dismissReport(String token, String id) throws EveBackendClient.BackendException {
@@ -1169,6 +1416,36 @@ public final class EveAdminRepository {
 
     public void deleteReport(String token, String id) throws EveBackendClient.BackendException {
         client.deleteJsonRoot("/api/admin/reports/" + encode(id), token);
+    }
+
+    public EveAdminModels.AppConfigModel updateAnnouncementChannelName(String token, String channelName) throws EveBackendClient.BackendException {
+        JSONObject payload = new JSONObject();
+        try {
+            payload.put("announcementChannelName", channelName != null ? channelName.trim() : "Announcements");
+        } catch (JSONException ignored) {
+        }
+        JSONObject root = client.putJsonRoot("/api/admin/announcement-channel", token, payload);
+        JSONObject data = root != null ? root.optJSONObject("data") : null;
+        if (data != null) putSwrJson("app_config", data.toString());
+        return EveAdminModels.AppConfigModel.fromJson(data);
+    }
+
+    public EveAdminModels.AppConfigModel uploadAnnouncementChannelAvatar(String token, byte[] imageBytes, String mimeType) throws EveBackendClient.BackendException {
+        if (imageBytes == null || imageBytes.length == 0) {
+            throw new IllegalArgumentException("Channel avatar image is empty");
+        }
+        String effectiveMime = mimeType != null && !mimeType.trim().isEmpty() ? mimeType.trim() : "image/jpeg";
+        JSONObject root = client.postBinaryRoot("/api/admin/announcement-channel/avatar", token, effectiveMime, imageBytes);
+        JSONObject data = root != null ? root.optJSONObject("data") : null;
+        if (data != null) putSwrJson("app_config", data.toString());
+        return EveAdminModels.AppConfigModel.fromJson(data);
+    }
+
+    public EveAdminModels.AppConfigModel deleteAnnouncementChannelAvatar(String token) throws EveBackendClient.BackendException {
+        JSONObject root = client.deleteJsonRoot("/api/admin/announcement-channel/avatar", token);
+        JSONObject data = root != null ? root.optJSONObject("data") : null;
+        if (data != null) putSwrJson("app_config", data.toString());
+        return EveAdminModels.AppConfigModel.fromJson(data);
     }
 
     public List<EveAdminModels.FeedbackMessageItem> fetchFeedbackMessages(String token) throws EveBackendClient.BackendException {
@@ -1226,9 +1503,21 @@ public final class EveAdminRepository {
         client.putJsonRoot("/api/app-content/" + encode(type), token, payload);
     }
 
+    public EveAdminModels.AppConfigModel getCachedAppConfig() {
+        String raw = getSwrJson("app_config");
+        if (raw.isEmpty()) return null;
+        try {
+            return EveAdminModels.AppConfigModel.fromJson(new JSONObject(raw));
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
     public EveAdminModels.AppConfigModel fetchAppConfig(String token) throws EveBackendClient.BackendException {
         JSONObject root = client.getJsonRoot("/api/app-config", token);
-        return EveAdminModels.AppConfigModel.fromJson(root.optJSONObject("data"));
+        JSONObject data = root.optJSONObject("data");
+        if (data != null) putSwrJson("app_config", data.toString());
+        return EveAdminModels.AppConfigModel.fromJson(data);
     }
 
     public EveAdminModels.AppConfigModel updateAppConfig(
@@ -1246,12 +1535,26 @@ public final class EveAdminRepository {
         } catch (JSONException ignored) {
         }
         JSONObject root = client.putJsonRoot("/api/admin/config", token, payload);
-        return EveAdminModels.AppConfigModel.fromJson(root.optJSONObject("data"));
+        JSONObject data = root.optJSONObject("data");
+        if (data != null) putSwrJson("app_config", data.toString());
+        return EveAdminModels.AppConfigModel.fromJson(data);
+    }
+
+    public List<EveAdminModels.ExamAnalyticsItem> getCachedExamAnalytics() {
+        String raw = getSwrJson("exam_analytics");
+        if (raw.isEmpty()) return Collections.emptyList();
+        try {
+            return EveAdminModels.ExamAnalyticsItem.parseList(new JSONArray(raw));
+        } catch (Throwable ignored) {
+            return Collections.emptyList();
+        }
     }
 
     public List<EveAdminModels.ExamAnalyticsItem> fetchExamAnalytics(String token) throws EveBackendClient.BackendException {
         JSONObject root = client.getJsonRoot("/api/admin/analytics/exams", token);
-        return EveAdminModels.ExamAnalyticsItem.parseList(root.optJSONArray("data"));
+        JSONArray arr = root.optJSONArray("data");
+        if (arr != null) putSwrJson("exam_analytics", arr.toString());
+        return EveAdminModels.ExamAnalyticsItem.parseList(arr);
     }
 
     public List<EveAdminModels.CrashSignatureItem> fetchCrashSignatures(String token) throws EveBackendClient.BackendException {

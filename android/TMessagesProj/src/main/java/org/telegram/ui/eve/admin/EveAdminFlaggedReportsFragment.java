@@ -253,7 +253,8 @@ public class EveAdminFlaggedReportsFragment extends BaseFragment {
         }
         int idx = item.id - BASE_REPORT_ID;
         if (idx >= 0 && idx < filteredReports.size()) {
-            showReportDetail(filteredReports.get(idx));
+            presentFragment(new EveAdminFlaggedQuestionFixFragment(
+                    filteredReports.get(idx), EveAdminFlaggedReportsFragment.this::reload));
         }
     }
 

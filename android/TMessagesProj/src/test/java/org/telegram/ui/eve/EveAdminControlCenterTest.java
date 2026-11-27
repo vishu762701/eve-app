@@ -518,4 +518,110 @@ public class EveAdminControlCenterTest {
         assertTrue(parsedUsers.get(0).isPremium);
         assertTrue(parsedUsers.get(0).isOnline);
     }
+
+    @Test
+    public void sixUpgradesContracts_coverAiPromptStudioTestAvatarsChannelAndFlagFix() throws Exception {
+        ClassLoader cl = EveAdminControlCenterTest.class.getClassLoader();
+        for (String cls : new String[] {
+                "org.telegram.ui.eve.admin.EveTelegramAvatarPicker",
+                "org.telegram.ui.eve.auth.EveMaintenanceFragment",
+                "org.telegram.ui.eve.admin.EveAdminFlaggedQuestionFixFragment",
+                "org.telegram.ui.eve.admin.EveAdminExamPromptFragment"
+        }) {
+            assertNotNull(Class.forName(cls, false, cl));
+        }
+
+        final java.util.List<String> requests = new java.util.ArrayList<>();
+        final Map<String, String> bodies = new HashMap<>();
+        EveBackendClient client = new EveBackendClient("https://eve-backend.anyqueairdrop.workers.dev", (method, url, token, body) -> {
+            requests.add(method + " " + url);
+            bodies.put(method + " " + url, body != null ? body : "");
+            if (url.endsWith("/api/questions/gt-1_2")) {
+                return new EveBackendClient.HttpResponse(200, "{\"success\":true,\"data\":{"
+                        + "\"id\":\"gt-1_2\",\"examId\":\"ex-1\",\"questionText\":\"Old Q\","
+                        + "\"optionA\":\"A1\",\"optionB\":\"B1\",\"optionC\":\"C1\",\"optionD\":\"D1\","
+                        + "\"correctAnswer\":\"B\",\"explanation\":\"Because\",\"topic\":\"Polity\"}}");
+            }
+            if (url.endsWith("/api/admin/announcement-channel") || url.endsWith("/api/admin/announcement-channel/avatar")) {
+                return new EveBackendClient.HttpResponse(200, "{\"success\":true,\"data\":{"
+                        + "\"maintenanceMode\":false,\"maintenanceMessage\":\"Ok\","
+                        + "\"minSupportedVersionCode\":1,\"defaultPublishMode\":\"paused\","
+                        + "\"announcementChannelName\":\"EVE Official\","
+                        + "\"announcementChannelAvatarUrl\":\"/api/announcement-channel/avatar?v=2\"}}");
+            }
+            if (url.endsWith("/api/generated-tests/generate-now")) {
+                return new EveBackendClient.HttpResponse(200, "{\"success\":true,\"data\":{\"title\":\"SSC Bilingual 1\",\"status\":\"draft\"}}");
+            }
+            return new EveBackendClient.HttpResponse(200, "{\"success\":true,\"data\":{}}");
+        });
+
+        EveAdminRepository repo = new EveAdminRepository(client);
+
+        // 1. AI Exam Prompt Studio contracts
+        org.json.JSONArray examArr = new org.json.JSONArray("[{"
+                + "\"id\":\"ex-9\",\"examName\":\"SSC GD\",\"category\":\"SSC\","
+                + "\"aiPrompt\":\"Focus on PYQs\",\"aiLanguage\":\"bilingual\",\"aiDifficulty\":\"hard\""
+                + "}]");
+        java.util.List<EveAdminModels.AdminExamItem> exams = EveAdminModels.AdminExamItem.parseList(examArr);
+        assertEquals(1, exams.size());
+        assertEquals("Focus on PYQs", exams.get(0).aiPrompt);
+        assertEquals("bilingual", exams.get(0).aiLanguage);
+        assertEquals("hard", exams.get(0).aiDifficulty);
+        EveAdminModels.AdminExamItem updatedExam = exams.get(0).withAiSettings("Hindi focus", "hindi", "medium");
+        assertEquals("Hindi focus", updatedExam.aiPrompt);
+        assertEquals("hindi", updatedExam.aiLanguage);
+        assertEquals("medium", updatedExam.aiDifficulty);
+
+        repo.saveExamAiSettings("admin-jwt", "ex-9", "Hindi focus", "hindi", "medium");
+        assertTrue(requests.get(requests.size() - 1).equals("PUT https://eve-backend.anyqueairdrop.workers.dev/api/exams/ex-9"));
+        JSONObject aiPayload = new JSONObject(bodies.get("PUT https://eve-backend.anyqueairdrop.workers.dev/api/exams/ex-9"));
+        assertEquals("Hindi focus", aiPayload.getString("aiPrompt"));
+        assertEquals("hindi", aiPayload.getString("aiLanguage"));
+        assertEquals("medium", aiPayload.getString("aiDifficulty"));
+
+        JSONObject genRes = repo.generateTestNow("admin-jwt", "ex-9", 25, "Mock 9", "Hindi focus", "bilingual", "hard");
+        assertEquals("SSC Bilingual 1", genRes.getJSONObject("data").getString("title"));
+        JSONObject genBody = new JSONObject(bodies.get("POST https://eve-backend.anyqueairdrop.workers.dev/api/generated-tests/generate-now"));
+        assertEquals("bilingual", genBody.getString("aiLanguage"));
+        assertEquals("hard", genBody.getString("aiDifficulty"));
+
+        // 2. Mock Test avatar fields + delete route
+        org.json.JSONArray testArr = new org.json.JSONArray("[{"
+                + "\"id\":\"gt-1\",\"examId\":\"ex-9\",\"title\":\"Mock 9\",\"status\":\"live\","
+                + "\"questionCount\":25,\"generatedAt\":1000,\"avatarUrl\":\"/api/generated-tests/gt-1/avatar?v=1\""
+                + "}]");
+        java.util.List<EveAdminModels.AdminGeneratedTestItem> tests = EveAdminModels.AdminGeneratedTestItem.parseList(testArr);
+        assertEquals(1, tests.size());
+        assertEquals("/api/generated-tests/gt-1/avatar?v=1", tests.get(0).avatarUrl);
+        repo.deleteGeneratedTestAvatar("admin-jwt", "gt-1");
+        assertEquals("DELETE https://eve-backend.anyqueairdrop.workers.dev/api/generated-tests/gt-1/avatar",
+                requests.get(requests.size() - 1));
+
+        // 3. Flagged Question Fixer contracts (Question Bank & Generated Test index ID)
+        org.json.JSONArray repArr = new org.json.JSONArray("[{"
+                + "\"id\":\"rep-1\",\"questionId\":\"gt-1_2\",\"examName\":\"SSC GD\","
+                + "\"questionText\":\"Old Q\",\"reason\":\"Wrong Answer\",\"status\":\"pending\""
+                + "}]");
+        java.util.List<EveAdminModels.QuestionReportItem> reps = EveAdminModels.QuestionReportItem.parseList(repArr);
+        assertEquals("gt-1_2", reps.get(0).questionId);
+
+        EveAdminModels.AdminQuestionItem qItem = repo.fetchQuestionById("admin-jwt", "gt-1_2");
+        assertNotNull(qItem);
+        assertEquals("B", qItem.correctAnswer);
+
+        repo.fixFlaggedQuestion("admin-jwt", "rep-1", "Fixed Q", "A", "B", "C", "D", "C", "Fixed exp", "Polity");
+        assertEquals("PUT https://eve-backend.anyqueairdrop.workers.dev/api/admin/reports/rep-1/fix-question",
+                requests.get(requests.size() - 1));
+        repo.deleteFlaggedQuestion("admin-jwt", "rep-1");
+        assertEquals("DELETE https://eve-backend.anyqueairdrop.workers.dev/api/admin/reports/rep-1/question",
+                requests.get(requests.size() - 1));
+
+        // 4. Announcements Channel Name & Avatar Admin routes
+        EveAdminModels.AppConfigModel chCfg = repo.updateAnnouncementChannelName("admin-jwt", "EVE Official");
+        assertEquals("EVE Official", chCfg.announcementChannelName);
+        assertEquals("/api/announcement-channel/avatar?v=2", chCfg.announcementChannelAvatarUrl);
+        repo.deleteAnnouncementChannelAvatar("admin-jwt");
+        assertEquals("DELETE https://eve-backend.anyqueairdrop.workers.dev/api/admin/announcement-channel/avatar",
+                requests.get(requests.size() - 1));
+    }
 }

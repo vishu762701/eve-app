@@ -3,11 +3,13 @@
 // ============================================================================
 
 import { Hono } from "hono";
+import { parseAndValidateQuestions } from "../ai/generator";
 import { getAdminPermissions } from "../auth";
 import { requireAdmin, requirePermission } from "../middleware/authMiddleware";
 import { checkRateLimit } from "../middleware/rateLimiter";
-import { AuthUser, Env, QuestionReportRow, AdminAuditLogRow } from "../types";
+import { AuthUser, Env, GeneratedTestRow, QuestionReportRow, AdminAuditLogRow, QuestionRow } from "../types";
 import { prepareAdminAuditLog, recordAdminAction, runBatch } from "../util/auditLog";
+import { parseGeneratedQuestionId } from "./attempts";
 
 export const reportRoutes = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
 export const adminReportRoutes = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
@@ -196,6 +198,254 @@ adminReportRoutes.put("/:id/dismiss", async (c) => {
     return c.json({ success: false, error: "Report dismissal not confirmed; reload before retrying" }, 409);
   }
   return c.json({ success: true });
+});
+
+// PUT /api/admin/reports/:id/fix-question - Atomically update reported question + dismiss pending reports + audit
+adminReportRoutes.put("/:id/fix-question", async (c) => {
+  const id = c.req.param("id");
+  if (!validReportId(id)) {
+    return c.json({ success: false, error: "Invalid report ID" }, 400);
+  }
+  const body = await c.req.json().catch(() => null);
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return c.json({ success: false, error: "Provide question fields to fix" }, 400);
+  }
+
+  let validated: ReturnType<typeof parseAndValidateQuestions>[0];
+  try {
+    validated = parseAndValidateQuestions(JSON.stringify([body]))[0];
+  } catch (err: any) {
+    return c.json({ success: false, error: err?.message || "Invalid question text, options, or answer" }, 400);
+  }
+
+  const db = c.env.DB;
+  const user = c.get("user");
+  const report = await db
+    .prepare("SELECT * FROM question_reports WHERE id = ?")
+    .bind(id)
+    .first<QuestionReportRow>();
+  if (!report) {
+    return c.json({ success: false, error: "Report not found" }, 404);
+  }
+
+  const qId = String(report.question_id || "").trim();
+  const topic = typeof body.topic === "string" ? body.topic.trim() : undefined;
+  const qTextHi = typeof body.questionTextHi === "string" ? body.questionTextHi.trim() : undefined;
+  const optAHi = typeof body.optionAHi === "string" ? body.optionAHi.trim() : undefined;
+  const optBHi = typeof body.optionBHi === "string" ? body.optionBHi.trim() : undefined;
+  const optCHi = typeof body.optionCHi === "string" ? body.optionCHi.trim() : undefined;
+  const optDHi = typeof body.optionDHi === "string" ? body.optionDHi.trim() : undefined;
+  const expHi = typeof body.explanationHi === "string" ? body.explanationHi.trim() : undefined;
+
+  const bankRow = await db.prepare("SELECT * FROM questions WHERE id = ?").bind(qId).first<QuestionRow>();
+  if (bankRow) {
+    const updateQuestion = db
+      .prepare(
+        `UPDATE questions SET
+          question_text = ?, option_a = ?, option_b = ?, option_c = ?, option_d = ?,
+          correct_answer = ?, explanation = ?, topic = ?,
+          question_text_hi = ?, option_a_hi = ?, option_b_hi = ?, option_c_hi = ?, option_d_hi = ?, explanation_hi = ?
+         WHERE id = ?`
+      )
+      .bind(
+        validated.questionText,
+        validated.optionA,
+        validated.optionB,
+        validated.optionC,
+        validated.optionD,
+        validated.correctAnswer,
+        validated.explanation,
+        topic !== undefined ? topic : (bankRow.topic || ""),
+        qTextHi !== undefined ? qTextHi : (bankRow.question_text_hi || ""),
+        optAHi !== undefined ? optAHi : (bankRow.option_a_hi || ""),
+        optBHi !== undefined ? optBHi : (bankRow.option_b_hi || ""),
+        optCHi !== undefined ? optCHi : (bankRow.option_c_hi || ""),
+        optDHi !== undefined ? optDHi : (bankRow.option_d_hi || ""),
+        expHi !== undefined ? expHi : (bankRow.explanation_hi || ""),
+        qId
+      );
+    const resolveReports = db
+      .prepare("UPDATE question_reports SET status = 'dismissed' WHERE question_id = ? AND status = 'pending'")
+      .bind(qId);
+    const { stmt: audit } = prepareAdminAuditLog(db, user, {
+      actionType: "FLAGGED_QUESTION_FIXED",
+      description: `Fixed flagged question '${qId}' via report '${id}'`,
+      targetType: "question",
+      targetId: qId,
+      metadata: { reportId: id, sourceType: "bank" },
+    });
+    const results = await runBatch(db, [updateQuestion, resolveReports, audit]);
+    if (results[0]?.meta?.changes !== 1 || results[2]?.meta?.changes !== 1) {
+      return c.json({ success: false, error: "Question fix was not confirmed; retry" }, 409);
+    }
+    return c.json({
+      success: true,
+      data: {
+        reportId: id,
+        questionId: qId,
+        resolvedReportsCount: Number(results[1]?.meta?.changes || 0),
+        sourceType: "bank",
+      },
+    });
+  }
+
+  const parsedGen = parseGeneratedQuestionId(qId);
+  if (parsedGen) {
+    const test = await db
+      .prepare("SELECT * FROM generated_tests WHERE id = ?")
+      .bind(parsedGen.testId)
+      .first<GeneratedTestRow>();
+    if (test && test.questions_json) {
+      let parsedJson: any = null;
+      try { parsedJson = JSON.parse(test.questions_json); } catch {}
+      const list = Array.isArray(parsedJson)
+        ? parsedJson
+        : Array.isArray(parsedJson?.questions)
+        ? parsedJson.questions
+        : null;
+      if (list && parsedGen.index >= 0 && parsedGen.index < list.length) {
+        const existingItem = list[parsedGen.index] && typeof list[parsedGen.index] === "object"
+          ? list[parsedGen.index]
+          : {};
+        list[parsedGen.index] = {
+          ...existingItem,
+          id: qId,
+          questionText: validated.questionText,
+          optionA: validated.optionA,
+          optionB: validated.optionB,
+          optionC: validated.optionC,
+          optionD: validated.optionD,
+          correctAnswer: validated.correctAnswer,
+          explanation: validated.explanation,
+          ...(topic !== undefined ? { topic } : {}),
+          ...(qTextHi !== undefined ? { questionTextHi: qTextHi } : {}),
+          ...(optAHi !== undefined ? { optionAHi: optAHi } : {}),
+          ...(optBHi !== undefined ? { optionBHi: optBHi } : {}),
+          ...(optCHi !== undefined ? { optionCHi: optCHi } : {}),
+          ...(optDHi !== undefined ? { optionDHi: optDHi } : {}),
+          ...(expHi !== undefined ? { explanationHi: expHi } : {}),
+        };
+        const updatedJson = Array.isArray(parsedJson)
+          ? JSON.stringify(list)
+          : JSON.stringify({ ...parsedJson, questions: list });
+        const updateTest = db
+          .prepare("UPDATE generated_tests SET questions_json = ? WHERE id = ?")
+          .bind(updatedJson, test.id);
+        const resolveReports = db
+          .prepare("UPDATE question_reports SET status = 'dismissed' WHERE question_id = ? AND status = 'pending'")
+          .bind(qId);
+        const { stmt: audit } = prepareAdminAuditLog(db, user, {
+          actionType: "FLAGGED_QUESTION_FIXED",
+          description: `Fixed flagged test question '${qId}' via report '${id}'`,
+          targetType: "generated_test",
+          targetId: test.id,
+          metadata: { reportId: id, questionId: qId, sourceType: "generated_test" },
+        });
+        const results = await runBatch(db, [updateTest, resolveReports, audit]);
+        if (results[0]?.meta?.changes !== 1 || results[2]?.meta?.changes !== 1) {
+          return c.json({ success: false, error: "Generated test question fix was not confirmed; retry" }, 409);
+        }
+        return c.json({
+          success: true,
+          data: {
+            reportId: id,
+            questionId: qId,
+            resolvedReportsCount: Number(results[1]?.meta?.changes || 0),
+            sourceType: "generated_test",
+          },
+        });
+      }
+    }
+  }
+
+  return c.json({ success: false, error: "Referenced question not found" }, 404);
+});
+
+// DELETE /api/admin/reports/:id/question - Delete bad question + dismiss pending reports for it
+adminReportRoutes.delete("/:id/question", async (c) => {
+  const id = c.req.param("id");
+  if (!validReportId(id)) {
+    return c.json({ success: false, error: "Invalid report ID" }, 400);
+  }
+  const db = c.env.DB;
+  const user = c.get("user");
+  const report = await db
+    .prepare("SELECT * FROM question_reports WHERE id = ?")
+    .bind(id)
+    .first<QuestionReportRow>();
+  if (!report) {
+    return c.json({ success: false, error: "Report not found" }, 404);
+  }
+
+  const qId = String(report.question_id || "").trim();
+  const bankRow = await db.prepare("SELECT id FROM questions WHERE id = ?").bind(qId).first<{ id: string }>();
+  if (bankRow) {
+    const deleteQ = db.prepare("DELETE FROM questions WHERE id = ?").bind(qId);
+    const resolveReports = db
+      .prepare("UPDATE question_reports SET status = 'dismissed' WHERE question_id = ? AND status = 'pending'")
+      .bind(qId);
+    const { stmt: audit } = prepareAdminAuditLog(db, user, {
+      actionType: "FLAGGED_QUESTION_DELETED",
+      description: `Deleted flagged question '${qId}' via report '${id}'`,
+      targetType: "question",
+      targetId: qId,
+      metadata: { reportId: id, sourceType: "bank" },
+    });
+    const results = await runBatch(db, [deleteQ, resolveReports, audit]);
+    if (results[0]?.meta?.changes !== 1 || results[2]?.meta?.changes !== 1) {
+      return c.json({ success: false, error: "Question deletion was not confirmed; retry" }, 409);
+    }
+    return c.json({ success: true, data: { questionId: qId, resolvedReportsCount: Number(results[1]?.meta?.changes || 0) } });
+  }
+
+  const parsedGen = parseGeneratedQuestionId(qId);
+  if (parsedGen) {
+    const test = await db
+      .prepare("SELECT * FROM generated_tests WHERE id = ?")
+      .bind(parsedGen.testId)
+      .first<GeneratedTestRow>();
+    if (test && test.questions_json) {
+      let parsedJson: any = null;
+      try { parsedJson = JSON.parse(test.questions_json); } catch {}
+      const list = Array.isArray(parsedJson)
+        ? parsedJson
+        : Array.isArray(parsedJson?.questions)
+        ? parsedJson.questions
+        : null;
+      if (list && parsedGen.index >= 0 && parsedGen.index < list.length) {
+        if (list.length <= 1) {
+          return c.json({
+            success: false,
+            error: "Cannot remove the only remaining question in a generated test; edit it or delete the test.",
+          }, 409);
+        }
+        const nextList = list.filter((_: any, idx: number) => idx !== parsedGen.index);
+        const updatedJson = Array.isArray(parsedJson)
+          ? JSON.stringify(nextList)
+          : JSON.stringify({ ...parsedJson, questions: nextList });
+        const updateTest = db
+          .prepare("UPDATE generated_tests SET questions_json = ?, question_count = ? WHERE id = ?")
+          .bind(updatedJson, nextList.length, test.id);
+        const resolveReports = db
+          .prepare("UPDATE question_reports SET status = 'dismissed' WHERE question_id = ? AND status = 'pending'")
+          .bind(qId);
+        const { stmt: audit } = prepareAdminAuditLog(db, user, {
+          actionType: "FLAGGED_QUESTION_DELETED",
+          description: `Removed flagged test question '${qId}' from '${test.id}'`,
+          targetType: "generated_test",
+          targetId: test.id,
+          metadata: { reportId: id, questionId: qId, sourceType: "generated_test" },
+        });
+        const results = await runBatch(db, [updateTest, resolveReports, audit]);
+        if (results[0]?.meta?.changes !== 1 || results[2]?.meta?.changes !== 1) {
+          return c.json({ success: false, error: "Generated test question removal was not confirmed; retry" }, 409);
+        }
+        return c.json({ success: true, data: { questionId: qId, resolvedReportsCount: Number(results[1]?.meta?.changes || 0) } });
+      }
+    }
+  }
+
+  return c.json({ success: false, error: "Referenced question not found" }, 404);
 });
 
 adminReportRoutes.post("/dismiss-batch", async (c) => {
@@ -423,7 +673,7 @@ const AUDIT_CATEGORY_PREDICATES: Record<string, string> = {
   students:
     "(action_type LIKE 'USER_%' OR action_type LIKE 'PREMIUM_%' OR action_type LIKE 'PAYMENT_%')",
   content:
-    "(action_type LIKE 'POLL_%' OR action_type LIKE 'BROADCAST_%' OR action_type LIKE 'BANNER_%' OR action_type LIKE 'REPORT_%' OR action_type LIKE 'FEEDBACK_%' OR action_type LIKE 'APP_CONTENT_%' OR action_type = 'FLOATING_LINK_UPDATED')",
+    "(action_type LIKE 'POLL_%' OR action_type LIKE 'BROADCAST_%' OR action_type LIKE 'BANNER_%' OR action_type LIKE 'REPORT_%' OR action_type LIKE 'FLAGGED_%' OR action_type LIKE 'ANNOUNCEMENT_CHANNEL_%' OR action_type LIKE 'FEEDBACK_%' OR action_type LIKE 'APP_CONTENT_%' OR action_type = 'FLOATING_LINK_UPDATED')",
 };
 
 // DELETE /api/admin/audit-log - Owner-only audit log clear (all, by category, or by types)

@@ -31,12 +31,41 @@ async function getVoteCountsForPoll(db: D1Database, pollId: string, optionsCount
   return counts;
 }
 
-// GET /api/polls - List all polls
+// GET /api/polls - List all polls (with caller vote included to avoid N+1 fetches)
 pollRoutes.get("/", async (c) => {
   const db = c.env.DB;
+  const user = c.get("user");
   const { results: polls } = await db
     .prepare("SELECT * FROM polls ORDER BY created_at DESC")
     .all<PollRow>();
+
+  const countsByPoll = new Map<string, Record<number, number>>();
+  try {
+    const { results: allCounts } = await db
+      .prepare("SELECT poll_id, option_index, COUNT(*) as vote_count FROM poll_votes GROUP BY poll_id, option_index")
+      .all<{ poll_id: string; option_index: number; vote_count: number }>();
+    for (const r of allCounts || []) {
+      let map = countsByPoll.get(r.poll_id);
+      if (!map) {
+        map = {};
+        countsByPoll.set(r.poll_id, map);
+      }
+      map[Number(r.option_index)] = Number(r.vote_count || 0);
+    }
+  } catch {}
+
+  const userVoteByPoll = new Map<string, number>();
+  if (user?.uid) {
+    try {
+      const { results: myVotes } = await db
+        .prepare("SELECT poll_id, option_index FROM poll_votes WHERE user_id = ?")
+        .bind(user.uid)
+        .all<{ poll_id: string; option_index: number }>();
+      for (const v of myVotes || []) {
+        userVoteByPoll.set(v.poll_id, Number(v.option_index));
+      }
+    } catch {}
+  }
 
   const list: any[] = [];
   for (const p of polls || []) {
@@ -45,7 +74,11 @@ pollRoutes.get("/", async (c) => {
       options = JSON.parse(p.options_json);
     } catch (_e) {}
 
-    const voteCounts = await getVoteCountsForPoll(db, p.id, options.length);
+    const rawCounts = countsByPoll.get(p.id) || {};
+    const voteCounts: Record<string, number> = {};
+    for (let i = 0; i < options.length; i++) {
+      voteCounts[String(i)] = rawCounts[i] || 0;
+    }
     list.push({
       id: p.id,
       question: p.question,
@@ -55,6 +88,7 @@ pollRoutes.get("/", async (c) => {
       active: Boolean(p.active),
       createdBy: p.created_by,
       voteCounts,
+      userVote: userVoteByPoll.has(p.id) ? userVoteByPoll.get(p.id) : null,
     });
   }
 

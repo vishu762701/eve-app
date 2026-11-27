@@ -5,10 +5,11 @@
 import { parseAndValidateQuestions } from "../ai/generator";
 import { Hono } from "hono";
 import { requireAdmin, requirePermission } from "../middleware/authMiddleware";
-import { AuthUser, Env, QuestionRow } from "../types";
+import { AuthUser, Env, GeneratedTestRow, QuestionRow } from "../types";
 import { hideAnswers } from "../util/clientProtocol";
 import { getAdminPermissions } from "../auth";
 import { prepareAdminAuditLog } from "../util/auditLog";
+import { parseGeneratedQuestionId } from "./attempts";
 
 export const questionRoutes = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
 
@@ -148,6 +149,86 @@ questionRoutes.get("/exam/:examId", async (c) => {
     return q;
   });
   return c.json({ success: true, data: list });
+});
+
+// GET /api/questions/:id - Single question lookup (bank question OR generated test question '<testId>_<index>')
+questionRoutes.get("/:id", async (c) => {
+  const user = c.get("user");
+  const db = c.env.DB;
+  const perms = user?.isAdmin ? await getAdminPermissions(db, user.email) : null;
+  const canInspectQuestion =
+    perms?.isOwner === true ||
+    perms?.rights.includes("manage_questions") === true ||
+    perms?.rights.includes("moderate_feedback") === true;
+  if (!canInspectQuestion) {
+    return c.json({ success: false, error: "Forbidden: missing question inspection permission" }, 403);
+  }
+
+  const id = (c.req.param("id") || "").trim();
+  if (!id) {
+    return c.json({ success: false, error: "Question ID is required" }, 400);
+  }
+
+  const row = await db.prepare("SELECT * FROM questions WHERE id = ?").bind(id).first<QuestionRow>();
+  if (row) {
+    return c.json({
+      success: true,
+      data: {
+        ...mapQuestionRow(row),
+        sourceType: "bank",
+      },
+    });
+  }
+
+  const parsedGen = parseGeneratedQuestionId(id);
+  if (parsedGen) {
+    const test = await db
+      .prepare("SELECT * FROM generated_tests WHERE id = ?")
+      .bind(parsedGen.testId)
+      .first<GeneratedTestRow>();
+    if (test && test.questions_json) {
+      try {
+        const parsedJson = JSON.parse(test.questions_json);
+        const list = Array.isArray(parsedJson)
+          ? parsedJson
+          : Array.isArray(parsedJson?.questions)
+          ? parsedJson.questions
+          : [];
+        const q = list[parsedGen.index];
+        if (q && typeof q === "object") {
+          return c.json({
+            success: true,
+            data: {
+              id,
+              examId: test.exam_id,
+              generatedTestId: test.id,
+              questionIndex: parsedGen.index,
+              sourceType: "generated_test",
+              questionText: String(q.question_text || q.questionText || ""),
+              optionA: String(q.option_a || q.optionA || ""),
+              optionB: String(q.option_b || q.optionB || ""),
+              optionC: String(q.option_c || q.optionC || ""),
+              optionD: String(q.option_d || q.optionD || ""),
+              correctAnswer: String(q.correct_answer || q.correctAnswer || q.answer || "").trim().toUpperCase(),
+              explanation: String(q.explanation || ""),
+              topic: String(q.topic || ""),
+              isPyq: false,
+              pyqYear: 0,
+              pyqPaper: "",
+              questionTextHi: String(q.question_text_hi || q.questionTextHi || ""),
+              optionAHi: String(q.option_a_hi || q.optionAHi || ""),
+              optionBHi: String(q.option_b_hi || q.optionBHi || ""),
+              optionCHi: String(q.option_c_hi || q.optionCHi || ""),
+              optionDHi: String(q.option_d_hi || q.optionDHi || ""),
+              explanationHi: String(q.explanation_hi || q.explanationHi || ""),
+            },
+          });
+        }
+      } catch {}
+    }
+  }
+
+  return c.json({ success: false, error: "Question not found" }, 404);
 });
 
 // POST /api/questions - Add single question (Admin)

@@ -143,6 +143,9 @@ public final class EveExamModels {
         public final String status;
         public final int questionCount;
         public final long availableFromMs;
+        public final String avatarUrl;
+        public final String avatarEmoji;
+        public final int avatarColor;
 
         public GeneratedTestSummary(
                 String id,
@@ -154,6 +157,22 @@ public final class EveExamModels {
                 String status,
                 int questionCount,
                 long availableFromMs) {
+            this(id, examId, examName, testNumber, title, generatedAtMs, status, questionCount, availableFromMs, "", "", -1);
+        }
+
+        public GeneratedTestSummary(
+                String id,
+                String examId,
+                String examName,
+                String testNumber,
+                String title,
+                long generatedAtMs,
+                String status,
+                int questionCount,
+                long availableFromMs,
+                String avatarUrl,
+                String avatarEmoji,
+                int avatarColor) {
             this.id = id != null ? id : "";
             this.examId = examId != null ? examId : "";
             this.examName = examName != null ? examName : "";
@@ -163,6 +182,9 @@ public final class EveExamModels {
             this.status = status != null ? status : "paused";
             this.questionCount = Math.max(0, questionCount);
             this.availableFromMs = availableFromMs;
+            this.avatarUrl = avatarUrl != null ? avatarUrl.trim() : "";
+            this.avatarEmoji = avatarEmoji != null ? avatarEmoji.trim() : "";
+            this.avatarColor = avatarColor;
         }
 
         public boolean isLive() {

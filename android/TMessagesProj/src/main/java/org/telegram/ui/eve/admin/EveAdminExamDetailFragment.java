@@ -5,16 +5,11 @@ import static org.telegram.messenger.AndroidUtilities.dp;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
-import android.graphics.Canvas;
-import android.graphics.LinearGradient;
-import android.graphics.Paint;
-import android.graphics.Shader;
-import android.net.Uri;
+import android.graphics.Bitmap;
 import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
-import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -25,7 +20,6 @@ import org.json.JSONObject;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.R;
-import org.telegram.messenger.Utilities;
 import org.telegram.ui.ActionBar.ActionBar;
 import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.BaseFragment;
@@ -33,7 +27,6 @@ import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.AvatarDrawable;
 import org.telegram.ui.Components.BackupImageView;
 import org.telegram.ui.Components.BulletinFactory;
-import org.telegram.ui.Components.EditTextBoldCursor;
 import org.telegram.ui.Components.IconBackgroundColors;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.RecyclerListView;
@@ -44,8 +37,6 @@ import org.telegram.ui.SettingsActivity;
 import org.telegram.ui.eve.exams.EveExamModels;
 import org.telegram.ui.eve.exams.EveExamTestsFragment;
 
-import java.io.ByteArrayOutputStream;
-import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -57,14 +48,6 @@ import java.util.Locale;
  * Mock Tests, Question Bank, Syllabus, Exam Controls, and Safe Deletion.
  */
 public class EveAdminExamDetailFragment extends BaseFragment {
-
-    private static final int REQ_PICK_EXAM_AVATAR = 6201;
-    private static final int MAX_AVATAR_UPLOAD_BYTES = 5 * 1024 * 1024;
-
-    private static final String[] EXAM_AVATAR_EMOJIS = new String[] {
-            "📘", "📚", "📝", "🎯", "🏆", "⚡", "🧠", "🧪",
-            "⚖️", "🏛️", "💻", "📊", "🔬", "🌍", "📐", "🎓"
-    };
 
     private static final int ID_AVATAR_ACTION = 99;
 
@@ -91,6 +74,7 @@ public class EveAdminExamDetailFragment extends BaseFragment {
     private List<EveAdminModels.AdminGeneratedTestItem> allTests = Collections.emptyList();
     private UniversalRecyclerView listView;
     private ExamAvatarHeaderView headerView;
+    private EveTelegramAvatarPicker avatarPicker;
     private boolean destroyed = false;
     private boolean uploadingAvatar = false;
     private final EveAdminUiChrome.AutoSyncController autoSync = new EveAdminUiChrome.AutoSyncController(this::reloadCatalog);
@@ -150,6 +134,17 @@ public class EveAdminExamDetailFragment extends BaseFragment {
 
         headerView = new ExamAvatarHeaderView(context, getResourceProvider(), this::showAvatarPickerDialog);
         headerView.bind(exam);
+        avatarPicker = new EveTelegramAvatarPicker(this, true, new EveTelegramAvatarPicker.Delegate() {
+            @Override
+            public void onAvatarCaptured(@NonNull byte[] imageBytes, @NonNull String mimeType, @Nullable Bitmap previewBitmap) {
+                uploadAvatarBytes(imageBytes, mimeType);
+            }
+
+            @Override
+            public void onAvatarRemoved() {
+                resetExamAvatar();
+            }
+        });
 
         EveAdminUiChrome.Chrome chrome = EveAdminUiChrome.setup(
                 this,
@@ -188,11 +183,17 @@ public class EveAdminExamDetailFragment extends BaseFragment {
     @Override
     public void onResume() {
         super.onResume();
+        if (avatarPicker != null) {
+            avatarPicker.onResume();
+        }
         autoSync.onResume();
     }
 
     @Override
     public void onPause() {
+        if (avatarPicker != null) {
+            avatarPicker.onPause();
+        }
         autoSync.onPause();
         super.onPause();
     }
@@ -201,7 +202,27 @@ public class EveAdminExamDetailFragment extends BaseFragment {
     public void onFragmentDestroy() {
         destroyed = true;
         autoSync.destroy();
+        if (avatarPicker != null) {
+            avatarPicker.destroy();
+            avatarPicker = null;
+        }
         super.onFragmentDestroy();
+    }
+
+    @Override
+    public void onActivityResultFragment(int requestCode, int resultCode, Intent data) {
+        if (avatarPicker != null) {
+            avatarPicker.onActivityResult(requestCode, resultCode, data);
+        }
+        super.onActivityResultFragment(requestCode, resultCode, data);
+    }
+
+    @Override
+    public void onRequestPermissionsResultFragment(int requestCode, String[] permissions, int[] grantResults) {
+        if (avatarPicker != null) {
+            avatarPicker.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        }
+        super.onRequestPermissionsResultFragment(requestCode, permissions, grantResults);
     }
 
     private String buildSubtitle() {
@@ -336,8 +357,8 @@ public class EveAdminExamDetailFragment extends BaseFragment {
                 ID_GENERATE_TEST,
                 IconBackgroundColors.PURPLE.top, IconBackgroundColors.PURPLE.bottom,
                 R.drawable.msg_add,
-                "Generate AI Test Now",
-                "Create a new mock test set for this exam",
+                "AI Prompt & Question Studio",
+                "Edit master prompt, language, difficulty & generate mock test",
                 null));
         items.add(SettingsActivity.SettingCell.Factory.of(
                 ID_PREVIEW_STUDENT,
@@ -436,7 +457,7 @@ public class EveAdminExamDetailFragment extends BaseFragment {
                 EveAdminDialogs.showCreateOrEditExamDialog(this, repo, exam, this::notifyParentAndReload);
                 break;
             case ID_GENERATE_TEST:
-                EveAdminDialogs.showGeneratePromptDialog(this, repo, exam, this::notifyParentAndReload);
+                presentFragment(new EveAdminExamPromptFragment(exam, allExams, this::notifyParentAndReload));
                 break;
             case ID_PREVIEW_STUDENT:
                 EveExamModels.ExamSummary summary = new EveExamModels.ExamSummary(
@@ -620,96 +641,14 @@ public class EveAdminExamDetailFragment extends BaseFragment {
     }
 
     private void showAvatarPickerDialog() {
-        Activity act = getParentActivity();
-        if (act == null || exam == null) return;
-        List<String> options = new ArrayList<>();
-        options.add("Choose Photo / GIF from Gallery");
-        options.add("Choose Emoji & Color Avatar");
-        if (exam.hasCustomAvatar()) {
-            options.add("Remove Avatar");
-        }
-        AlertDialog.Builder builder = new AlertDialog.Builder(act, getResourceProvider());
-        builder.setTitle("Exam Avatar");
-        builder.setItems(options.toArray(new String[0]), (d, which) -> {
-            if (which == 0) {
-                launchGalleryImagePicker();
-            } else if (which == 1) {
-                showEmojiAndColorAvatarSheet();
-            } else if (which == 2) {
-                resetExamAvatar();
-            }
-        });
-        builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
-        showDialog(builder.create());
-    }
-
-    private void launchGalleryImagePicker() {
-        try {
-            Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
-            intent.setType("image/*");
-            intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[] {
-                    "image/jpeg", "image/png", "image/webp", "image/gif"
-            });
-            intent.addCategory(Intent.CATEGORY_OPENABLE);
-            startActivityForResult(Intent.createChooser(intent, "Set Exam Photo or GIF"), REQ_PICK_EXAM_AVATAR);
-        } catch (Throwable t) {
-            BulletinFactory.of(this).createErrorBulletin("Unable to open gallery picker.").show();
-        }
-    }
-
-    @Override
-    public void onActivityResultFragment(int requestCode, int resultCode, Intent data) {
-        super.onActivityResultFragment(requestCode, resultCode, data);
-        if (requestCode != REQ_PICK_EXAM_AVATAR || resultCode != Activity.RESULT_OK || data == null || data.getData() == null) {
-            return;
-        }
-        Context ctx = getParentActivity();
-        if (ctx == null || exam == null) {
-            return;
-        }
-        final Uri uri = data.getData();
-        uploadingAvatar = true;
-        updateList();
-
-        Utilities.globalQueue.postRunnable(() -> {
-            try (InputStream is = ctx.getContentResolver().openInputStream(uri);
-                 ByteArrayOutputStream bos = new ByteArrayOutputStream()) {
-                if (is == null) {
-                    throw new IllegalStateException("Cannot read selected image.");
-                }
-                byte[] buf = new byte[8192];
-                int n;
-                while ((n = is.read(buf)) != -1) {
-                    bos.write(buf, 0, n);
-                    if (bos.size() > MAX_AVATAR_UPLOAD_BYTES) {
-                        throw new IllegalArgumentException("Image exceeds 5MB limit.");
-                    }
-                }
-                final byte[] bytes = bos.toByteArray();
-                String mime = ctx.getContentResolver().getType(uri);
-                String lowerUri = uri.toString().toLowerCase(Locale.US);
-                if (mime == null || mime.isEmpty() || "application/octet-stream".equals(mime)) {
-                    if (lowerUri.endsWith(".png")) mime = "image/png";
-                    else if (lowerUri.endsWith(".webp")) mime = "image/webp";
-                    else if (lowerUri.endsWith(".gif")) mime = "image/gif";
-                    else mime = "image/jpeg";
-                }
-                final String finalMime = mime;
-                AndroidUtilities.runOnUIThread(() -> uploadAvatarBytes(bytes, finalMime));
-            } catch (Throwable t) {
-                AndroidUtilities.runOnUIThread(() -> {
-                    uploadingAvatar = false;
-                    updateList();
-                    BulletinFactory.of(this).createErrorBulletin(
-                            t.getMessage() != null ? t.getMessage() : "Could not read selected image."
-                    ).show();
-                });
-            }
-        });
+        if (avatarPicker == null || exam == null) return;
+        avatarPicker.open(exam.hasCustomAvatar());
     }
 
     private void uploadAvatarBytes(byte[] bytes, String mimeType) {
         if (destroyed || exam == null) return;
+        uploadingAvatar = true;
+        updateList();
         EveAdminRepository.ResultCallback<JSONObject> cb = new EveAdminRepository.ResultCallback<JSONObject>() {
             @Override
             public void onSuccess(JSONObject data) {
@@ -738,141 +677,6 @@ public class EveAdminExamDetailFragment extends BaseFragment {
         });
     }
 
-    private void showEmojiAndColorAvatarSheet() {
-        Activity act = getParentActivity();
-        if (act == null || exam == null) return;
-        Theme.ResourcesProvider rp = getResourceProvider();
-
-        final String[] chosenEmoji = new String[] { !exam.avatarEmoji.isEmpty() ? exam.avatarEmoji : "📘" };
-        final int[] chosenColor = new int[] { exam.avatarColor >= 0 && exam.avatarColor < Theme.keys_avatar_background.length ? exam.avatarColor : 0 };
-
-        LinearLayout root = new LinearLayout(act);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(20), dp(12), dp(20), dp(8));
-
-        AvatarDrawable previewDrawable = new AvatarDrawable();
-        BackupImageView previewView = new BackupImageView(act);
-        previewView.setRoundRadius(dp(34));
-        root.addView(previewView, LayoutHelper.createLinear(68, 68, Gravity.CENTER_HORIZONTAL, 0, 0, 0, 12));
-
-        Runnable refreshPreview = () -> EveAdminUiChrome.bindExamAvatar(
-                previewView, previewDrawable, exam.id, exam.examName, "", chosenEmoji[0], chosenColor[0], 68, rp);
-        refreshPreview.run();
-
-        EditTextBoldCursor customInput = new EditTextBoldCursor(act);
-        customInput.setHint("Type custom emoji (optional)");
-        customInput.setText(chosenEmoji[0]);
-        customInput.setSingleLine(true);
-        customInput.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, rp));
-        customInput.setHintTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteHintText, rp));
-        customInput.setBackground(Theme.createRoundRectDrawable(dp(10), Theme.multAlpha(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, rp), 0.12f)));
-        customInput.setPadding(dp(12), dp(8), dp(12), dp(8));
-        customInput.addTextChangedListener(new android.text.TextWatcher() {
-            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
-            @Override
-            public void afterTextChanged(android.text.Editable s) {
-                chosenEmoji[0] = s != null ? s.toString().trim() : "";
-                refreshPreview.run();
-            }
-        });
-        root.addView(customInput, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 12));
-
-        TextView emojiLabel = new TextView(act);
-        emojiLabel.setText("Quick Emojis");
-        emojiLabel.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12);
-        emojiLabel.setTypeface(AndroidUtilities.bold());
-        emojiLabel.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, rp));
-        root.addView(emojiLabel, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 6));
-
-        for (int rowIdx = 0; rowIdx < 2; rowIdx++) {
-            LinearLayout emojiRow = new LinearLayout(act);
-            emojiRow.setOrientation(LinearLayout.HORIZONTAL);
-            emojiRow.setGravity(Gravity.CENTER_HORIZONTAL);
-            for (int col = 0; col < 8; col++) {
-                String emojiVal = EXAM_AVATAR_EMOJIS[rowIdx * 8 + col];
-                TextView btn = new TextView(act);
-                btn.setText(emojiVal);
-                btn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20);
-                btn.setGravity(Gravity.CENTER);
-                btn.setOnClickListener(v -> {
-                    chosenEmoji[0] = emojiVal;
-                    customInput.setText(emojiVal);
-                    refreshPreview.run();
-                });
-                emojiRow.addView(btn, LayoutHelper.createLinear(0, 38, 1f));
-            }
-            root.addView(emojiRow, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 4));
-        }
-
-        TextView colorLabel = new TextView(act);
-        colorLabel.setText("Avatar Color");
-        colorLabel.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12);
-        colorLabel.setTypeface(AndroidUtilities.bold());
-        colorLabel.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, rp));
-        root.addView(colorLabel, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 8, 0, 8));
-
-        HorizontalScrollView colorScroll = new HorizontalScrollView(act);
-        colorScroll.setHorizontalScrollBarEnabled(false);
-        LinearLayout colorRow = new LinearLayout(act);
-        colorRow.setOrientation(LinearLayout.HORIZONTAL);
-        List<SwatchView> swatchViews = new ArrayList<>();
-        for (int idx = 0; idx < Theme.keys_avatar_background.length; idx++) {
-            final int colorIdx = idx;
-            int topC = Theme.getColor(Theme.keys_avatar_background[idx], rp);
-            int botC = Theme.getColor(Theme.keys_avatar_background2[idx], rp);
-            SwatchView swatch = new SwatchView(act, topC, botC);
-            swatch.setSelectedSwatch(chosenColor[0] == colorIdx);
-            swatch.setOnClickListener(v -> {
-                chosenColor[0] = colorIdx;
-                for (int i = 0; i < swatchViews.size(); i++) {
-                    swatchViews.get(i).setSelectedSwatch(i == colorIdx);
-                }
-                refreshPreview.run();
-            });
-            swatchViews.add(swatch);
-            colorRow.addView(swatch, LayoutHelper.createLinear(36, 36, 0, 0, 8, 0));
-        }
-        colorScroll.addView(colorRow);
-        root.addView(colorScroll, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
-
-        AlertDialog.Builder builder = new AlertDialog.Builder(act, rp);
-        builder.setTitle("Emoji & Color Avatar");
-        builder.setView(root);
-        builder.setPositiveButton("Save", (d, w) -> saveEmojiAvatar(chosenEmoji[0], chosenColor[0]));
-        builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
-        showDialog(builder.create());
-    }
-
-    private void saveEmojiAvatar(String emoji, int colorIndex) {
-        if (destroyed || exam == null) return;
-        String cleanEmoji = emoji != null ? emoji.trim() : "";
-        EveAdminRepository.ResultCallback<JSONObject> cb = new EveAdminRepository.ResultCallback<JSONObject>() {
-            @Override
-            public void onSuccess(JSONObject data) {
-                if (destroyed) return;
-                String savedEmoji = data != null ? data.optString("avatarEmoji", cleanEmoji) : cleanEmoji;
-                int savedColor = data != null && !data.isNull("avatarColor") ? data.optInt("avatarColor", colorIndex) : colorIndex;
-                exam = exam.withAvatar("", savedEmoji, savedColor);
-                updateList();
-                BulletinFactory.of(EveAdminExamDetailFragment.this)
-                        .createSimpleBulletin(R.raw.contact_check, "Exam avatar saved.").show();
-                notifyParentAndReload();
-            }
-
-            @Override
-            public void onError(String message, int httpStatus) {
-                if (destroyed) return;
-                BulletinFactory.of(EveAdminExamDetailFragment.this)
-                        .createErrorBulletin(message != null ? message : "Failed to save avatar.").show();
-            }
-        };
-        repo.runWithAdminToken(cb, token -> {
-            JSONObject res = repo.setExamAvatarEmoji(token, exam.id, cleanEmoji, colorIndex);
-            repo.postSuccess(cb, res);
-        });
-    }
-
     private void resetExamAvatar() {
         if (destroyed || exam == null) return;
         EveAdminRepository.ResultCallback<JSONObject> cb = new EveAdminRepository.ResultCallback<JSONObject>() {
@@ -897,47 +701,6 @@ public class EveAdminExamDetailFragment extends BaseFragment {
             JSONObject res = repo.deleteExamAvatar(token, exam.id);
             repo.postSuccess(cb, res);
         });
-    }
-
-    private static final class SwatchView extends View {
-        private final Paint fillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final Paint ringPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final int topColor;
-        private final int bottomColor;
-        private boolean selected;
-
-        SwatchView(Context context, int topColor, int bottomColor) {
-            super(context);
-            this.topColor = topColor;
-            this.bottomColor = bottomColor;
-            ringPaint.setStyle(Paint.Style.STROKE);
-            ringPaint.setStrokeWidth(dp(2.5f));
-            ringPaint.setColor(0xFFFFFFFF);
-        }
-
-        void setSelectedSwatch(boolean selected) {
-            this.selected = selected;
-            invalidate();
-        }
-
-        @Override
-        protected void onSizeChanged(int w, int h, int oldw, int oldh) {
-            super.onSizeChanged(w, h, oldw, oldh);
-            if (h > 0) {
-                fillPaint.setShader(new LinearGradient(0, 0, 0, h, topColor, bottomColor, Shader.TileMode.CLAMP));
-            }
-        }
-
-        @Override
-        protected void onDraw(@NonNull Canvas canvas) {
-            float cx = getWidth() / 2f;
-            float cy = getHeight() / 2f;
-            float r = Math.min(cx, cy) - dp(2);
-            canvas.drawCircle(cx, cy, r, fillPaint);
-            if (selected) {
-                canvas.drawCircle(cx, cy, r - dp(3), ringPaint);
-            }
-        }
     }
 
     private static final class ExamAvatarHeaderView extends LinearLayout implements Theme.Colorable {

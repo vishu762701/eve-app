@@ -261,43 +261,8 @@ public final class EveAdminDialogs {
         }
         new AlertDialog.Builder(activity)
                 .setTitle("Select Exam to Generate Mock Test")
-                .setItems(labels, (d, which) -> showGeneratePromptDialog(fragment, repo, exams.get(which), onGenerated))
-                .setNegativeButton("Cancel", null)
-                .show();
-    }
-
-    public static void showGeneratePromptDialog(
-            BaseFragment fragment,
-            EveAdminRepository repo,
-            EveAdminModels.AdminExamItem exam,
-            Runnable onGenerated) {
-        Activity activity = fragment.getParentActivity();
-        if (activity == null) return;
-        LinearLayout container = makeFormContainer(activity);
-        EditText testNumberInput = addField(activity, container, "Test Label / Number", exam.testNumber, InputType.TYPE_CLASS_TEXT);
-        EditText countInput = addField(activity, container, "Question Count (1-200)", String.valueOf(Math.max(5, Math.min(exam.questionCount, 200))), InputType.TYPE_CLASS_NUMBER);
-        EditText notesInput = addField(activity, container, "Custom Topic / Prompt Notes (optional)", exam.generationPrompt, InputType.TYPE_CLASS_TEXT);
-
-        new AlertDialog.Builder(activity)
-                .setTitle("Generate Test: " + exam.examName)
-                .setView(wrapScroll(activity, container))
-                .setPositiveButton("Generate Now", (d, w) -> {
-                    String label = textOr(testNumberInput, "Mock Test");
-                    int count = parseIntBounded(countInput, exam.questionCount, 1, 200);
-                    String notes = text(notesInput);
-                    showInfo(fragment, "Generating mock test on EVE Cloud...");
-                    EveAdminRepository.ResultCallback<String> cb = callback(fragment, msg -> {
-                        showInfo(fragment, msg);
-                        if (onGenerated != null) onGenerated.run();
-                    });
-                    repo.runWithAdminToken(cb, token -> {
-                        JSONObject res = repo.generateTestNow(token, exam.id, count, label, notes);
-                        JSONObject data = res.optJSONObject("data");
-                        String title = data != null ? data.optString("title", label) : label;
-                        String status = data != null ? data.optString("status", "draft") : "draft";
-                        repo.postSuccess(cb, "Generated '" + title + "' (status: " + status + ").");
-                    });
-                })
+                .setItems(labels, (d, which) -> fragment.presentFragment(
+                        new EveAdminExamPromptFragment(exams.get(which), exams, onGenerated)))
                 .setNegativeButton("Cancel", null)
                 .show();
     }
@@ -1178,7 +1143,6 @@ public final class EveAdminDialogs {
         EditText minutesInput = addField(activity, container, "Time Limit (minutes 1-600)", String.valueOf(parentExam.timeLimitMinutes > 0 ? parentExam.timeLimitMinutes : 60), InputType.TYPE_CLASS_NUMBER, rp);
         EditText countInput = addField(activity, container, "Questions Per Test (1-200)", String.valueOf(parentExam.questionCount > 0 ? parentExam.questionCount : 25), InputType.TYPE_CLASS_NUMBER, rp);
         EditText negInput = addField(activity, container, "Negative Marking (0, 0.25, 1/3, 0.5)", parentExam.negativeMarkingText, InputType.TYPE_CLASS_TEXT, rp);
-        EditText emojiInput = addField(activity, container, "Sub-Exam Logo Emoji (optional, e.g. 📘 🎯)", "📘", InputType.TYPE_CLASS_TEXT, rp);
         EditText promptInput = addField(activity, container, "AI Prompt Notes (optional)", "", InputType.TYPE_CLASS_TEXT, rp);
 
         final String[] modeLabels = new String[] { "Live", "Paused", "Inherit" };
@@ -1215,13 +1179,12 @@ public final class EveAdminDialogs {
                     int minutes = parseIntBounded(minutesInput, 60, 1, 600);
                     int qCount = parseIntBounded(countInput, 25, 1, 200);
                     String neg = textOr(negInput, "0");
-                    String emoji = text(emojiInput);
                     String prompt = text(promptInput);
                     String mode = selectedMode[0];
 
                     EveAdminRepository.ResultCallback<EveAdminModels.AdminExamItem> cb = callback(fragment, createdItem -> {
                         BulletinFactory.of(fragment).createSimpleBulletin(R.raw.contact_check,
-                                "Sub-exam created! Opening details to customize photo or settings.").show();
+                                "Sub-exam created! Tap its avatar to customize photo.").show();
                         repo.invalidateCache();
                         if (onCreated != null) onCreated.run();
                         if (createdItem != null) {
@@ -1232,20 +1195,10 @@ public final class EveAdminDialogs {
                         String newId = repo.createExamWithParent(
                                 token, name, parentExam.category, minutes, qCount, "Test 1",
                                 neg, mode, prompt, parentExam.id);
-                        String avEmoji = "";
-                        int avColor = -1;
-                        if (!newId.isEmpty() && !emoji.isEmpty()) {
-                            avColor = Math.abs(newId.hashCode()) % 7;
-                            try {
-                                repo.setExamAvatarEmoji(token, newId, emoji, avColor);
-                                avEmoji = emoji;
-                            } catch (Throwable ignored) {
-                            }
-                        }
                         EveAdminModels.AdminExamItem item = !newId.isEmpty()
                                 ? new EveAdminModels.AdminExamItem(
                                         newId, name, parentExam.category, minutes, qCount, "Test 1",
-                                        neg, mode, prompt, parentExam.id, "", "", "", "", avEmoji, avColor)
+                                        neg, mode, prompt, parentExam.id, "", "", "", "", "", -1)
                                 : null;
                         repo.postSuccess(cb, item);
                     });

@@ -53,7 +53,6 @@ public class EvePackLibraryFragment extends BaseFragment {
     private static final int TAB_INSTALLED = 2;
 
     private static final int MENU_SEARCH = 1;
-    private static final int MENU_REFRESH = 2;
 
     private int activeTab = TAB_STICKERS;
     private String searchQuery = "";
@@ -113,15 +112,12 @@ public class EvePackLibraryFragment extends BaseFragment {
                     }
                 });
         searchItem.setSearchFieldHint(LocaleController.getString(R.string.Search));
-        menu.addItem(MENU_REFRESH, R.drawable.msg_retry);
 
         actionBar.setActionBarMenuOnItemClick(new ActionBar.ActionBarMenuOnItemClick() {
             @Override
             public void onItemClick(int id) {
                 if (id == -1) {
                     finishFragment();
-                } else if (id == MENU_REFRESH) {
-                    loadCloudCatalogue();
                 }
             }
         });

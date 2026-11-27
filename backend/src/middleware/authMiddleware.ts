@@ -5,6 +5,22 @@
 import { Context, Next } from "hono";
 import { AdminRight, getAdminPermissions, isUserAdmin, verifyFirebaseIdToken } from "../auth";
 import { AuthUser, Env } from "../types";
+import { readAppConfig } from "../util/appConfig";
+
+export function isStudentMaintenanceGuardedPath(path: string): boolean {
+  return (
+    path === "/api/exams" ||
+    path.startsWith("/api/exams/") ||
+    path === "/api/generated-tests" ||
+    path.startsWith("/api/generated-tests/") ||
+    path === "/api/attempts" ||
+    path.startsWith("/api/attempts/") ||
+    path === "/api/leaderboard" ||
+    path.startsWith("/api/leaderboard/") ||
+    path === "/api/polls" ||
+    path.startsWith("/api/polls/")
+  );
+}
 
 async function recordSecurityEvent(
   db: D1Database | undefined,
@@ -31,6 +47,32 @@ async function recordSecurityEvent(
   }
 }
 
+export async function enforceStudentMaintenanceMode(
+  c: Context<{ Bindings: Env; Variables: any }, any, any>,
+  user: AuthUser,
+  path: string
+) {
+  if (!user.isAdmin && isStudentMaintenanceGuardedPath(path)) {
+    try {
+      const config = await readAppConfig(c.env.DB);
+      if (config.maintenanceMode) {
+        return c.json(
+          {
+            success: false,
+            code: "MAINTENANCE_MODE",
+            error: config.maintenanceMessage,
+            maintenanceMessage: config.maintenanceMessage,
+          },
+          503
+        );
+      }
+    } catch {
+      // Keep API functional if optional config row is temporarily unreadable.
+    }
+  }
+  return null;
+}
+
 export async function authMiddleware(c: Context<{ Bindings: Env; Variables: { user: AuthUser } }>, next: Next) {
   const path = c.req.path;
   const method = c.req.method;
@@ -48,7 +90,9 @@ export async function authMiddleware(c: Context<{ Bindings: Env; Variables: { us
     (path === "/api/banners" && method === "GET") ||
     (path.startsWith("/api/banners/") && path.endsWith("/media") && method === "GET") ||
     (path === "/api/typography/published" && method === "GET") ||
-    (path.startsWith("/api/exams/") && path.endsWith("/avatar") && method === "GET")
+    (path.startsWith("/api/exams/") && path.endsWith("/avatar") && method === "GET") ||
+    (path.startsWith("/api/generated-tests/") && path.endsWith("/avatar") && method === "GET") ||
+    (path === "/api/announcement-channel/avatar" && method === "GET")
   ) {
     return next();
   }
@@ -79,6 +123,12 @@ export async function authMiddleware(c: Context<{ Bindings: Env; Variables: { us
     const profile = await c.env.DB.prepare("SELECT disabled FROM users WHERE id = ?").bind(user.uid).first<{ disabled?: number }>();
     if (profile?.disabled === 1) return c.json({ success: false, error: "This account is disabled. Contact an administrator." }, 403);
     c.set("user", user);
+
+    // Server-side Maintenance Mode enforcement for student API endpoints (Admins/Owners always bypass).
+    const maintenanceBlocked = await enforceStudentMaintenanceMode(c, user, path);
+    if (maintenanceBlocked) {
+      return maintenanceBlocked;
+    }
 
     // Keep 'Online Now' truthful by updating last_active on authenticated activity (throttled to at most once per 2 minutes)
     try {

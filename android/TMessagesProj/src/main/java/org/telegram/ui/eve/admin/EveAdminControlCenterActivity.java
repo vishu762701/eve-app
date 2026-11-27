@@ -34,6 +34,7 @@ public class EveAdminControlCenterActivity extends BaseFragment {
     private static final int ID_ADMIN_SIGN_IN = 1002;
 
     private static final int ID_MOD_EXAMS = 1101;
+    private static final int ID_MOD_AI_STUDIO = 1102;
     private static final int ID_MOD_CONTENT_COMMS = 1601;
 
     private static final int ID_MOD_STUDENTS = 1301;
@@ -274,6 +275,13 @@ public class EveAdminControlCenterActivity extends BaseFragment {
                                 ? (snapshot.publishedExams + " live • " + snapshot.draftExams + " paused")
                                 : "Manage exams, tests & question banks",
                         hasSnapshot ? String.valueOf(snapshot.totalExams) : null));
+                items.add(SettingsActivity.SettingCell.Factory.of(
+                        ID_MOD_AI_STUDIO,
+                        IconBackgroundColors.PURPLE.top, IconBackgroundColors.PURPLE.bottom,
+                        R.drawable.msg_send,
+                        "AI Prompt Studio",
+                        "Master prompts, language, difficulty & generate mock tests",
+                        null));
             }
             if (canContent) {
                 items.add(SettingsActivity.SettingCell.Factory.of(
@@ -378,6 +386,9 @@ public class EveAdminControlCenterActivity extends BaseFragment {
             case ID_MOD_EXAMS:
                 presentFragment(new EveAdminExamsFragment());
                 break;
+            case ID_MOD_AI_STUDIO:
+                openAiPromptStudio();
+                break;
             case ID_MOD_CONTENT_COMMS:
                 presentFragment(new EveAdminContentAndCommsFragment(profile));
                 break;
@@ -403,6 +414,24 @@ public class EveAdminControlCenterActivity extends BaseFragment {
                 presentFragment(new EveAdminAuditLogFragment());
                 break;
         }
+    }
+
+    private void openAiPromptStudio() {
+        List<EveAdminModels.AdminExamItem> examList = snapshot != null && !snapshot.exams.isEmpty()
+                ? snapshot.exams
+                : null;
+        if (examList == null) {
+            EveAdminRepository.ExamsCatalogData cat = repo.getCachedExamsCatalog();
+            if (cat != null && !cat.exams.isEmpty()) {
+                examList = cat.exams;
+            }
+        }
+        if (examList == null || examList.isEmpty()) {
+            BulletinFactory.of(this).createErrorBulletin("Create an exam first under Exams & Syllabus.").show();
+            presentFragment(new EveAdminExamsFragment());
+            return;
+        }
+        presentFragment(new EveAdminExamPromptFragment(examList.get(0), examList, this::refreshDashboard));
     }
 
     private void startAdminSignIn() {

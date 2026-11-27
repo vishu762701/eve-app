@@ -80,6 +80,21 @@ public class EveAdminExamAnalyticsFragment extends BaseFragment {
         destroyed = false;
         setHasOwnBackground(true);
 
+        List<EveAdminModels.ExamAnalyticsItem> cachedAnalytics = repo.getCachedExamAnalytics();
+        if (cachedAnalytics != null && !cachedAnalytics.isEmpty()) {
+            List<EveAdminModels.ExamAnalyticsItem> sortedCached = new ArrayList<>(cachedAnalytics);
+            Collections.sort(sortedCached, new Comparator<EveAdminModels.ExamAnalyticsItem>() {
+                @Override
+                public int compare(EveAdminModels.ExamAnalyticsItem a, EveAdminModels.ExamAnalyticsItem b) {
+                    int byAttempts = Integer.compare(b.attemptCount, a.attemptCount);
+                    if (byAttempts != 0) return byAttempts;
+                    return a.examName.compareToIgnoreCase(b.examName);
+                }
+            });
+            analytics = sortedCached;
+            loading = false;
+        }
+
         EveAdminUiChrome.Chrome chrome = EveAdminUiChrome.setup(
                 this,
                 context,
@@ -88,7 +103,7 @@ public class EveAdminExamAnalyticsFragment extends BaseFragment {
                 glassEngine,
                 getResourceProvider(),
                 "Exam & Score Analytics",
-                "Loading analytics...",
+                analytics.isEmpty() ? "Loading analytics..." : analytics.size() + " exams tracked",
                 true,
                 true,
                 this::fillItems,

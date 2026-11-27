@@ -79,6 +79,7 @@ import org.telegram.ui.DialogsActivity;
 import org.telegram.ui.community.CommunityUtils;
 import org.telegram.ui.eve.exams.EveExamDialogsMapper;
 import org.telegram.ui.eve.exams.EveExamModels;
+import org.telegram.ui.eve.exams.EveExamRepository;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -291,12 +292,19 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
         TL_chatlists.TL_chatlists_chatlistUpdates chatlistUpdates;
         private int emptyType;
         EveExamModels.ExamSummary exam;
+        EveExamRepository.AnnouncementChannelSummary announcementChannel;
         java.util.List<org.telegram.ui.eve.admin.EveAdminModels.BannerItem> eveBanners;
 
         public ItemInternal(java.util.List<org.telegram.ui.eve.admin.EveAdminModels.BannerItem> eveBanners) {
             super(VIEW_TYPE_EVE_BANNERS, false);
             this.eveBanners = eveBanners != null ? new ArrayList<>(eveBanners) : new ArrayList<>();
             this.stableId = 90001;
+        }
+
+        public ItemInternal(EveExamRepository.AnnouncementChannelSummary announcementChannel) {
+            super(VIEW_TYPE_EXAM, true);
+            this.announcementChannel = announcementChannel;
+            this.stableId = 90002;
         }
 
         public ItemInternal(EveExamModels.ExamSummary exam) {
@@ -452,6 +460,9 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
                 return contact != null && itemInternal.contact != null && contact.user_id == itemInternal.contact.user_id;
             }
             if (viewType == VIEW_TYPE_EXAM) {
+                if (announcementChannel != null || itemInternal.announcementChannel != null) {
+                    return announcementChannel != null && itemInternal.announcementChannel != null;
+                }
                 return exam != null && itemInternal.exam != null && Objects.equals(exam.id, itemInternal.exam.id);
             }
             if (viewType == VIEW_TYPE_EVE_BANNERS) {
@@ -471,6 +482,14 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
                 return false;
             }
             if (viewType == VIEW_TYPE_EXAM) {
+                if (announcementChannel != null || itemInternal.announcementChannel != null) {
+                    return announcementChannel != null && itemInternal.announcementChannel != null
+                            && Objects.equals(announcementChannel.channelName, itemInternal.announcementChannel.channelName)
+                            && Objects.equals(announcementChannel.channelAvatarUrl, itemInternal.announcementChannel.channelAvatarUrl)
+                            && Objects.equals(announcementChannel.latestPreview, itemInternal.announcementChannel.latestPreview)
+                            && announcementChannel.latestTimestampSec == itemInternal.announcementChannel.latestTimestampSec
+                            && announcementChannel.unreadCount == itemInternal.announcementChannel.unreadCount;
+                }
                 return exam != null && itemInternal.exam != null
                         && Objects.equals(exam.id, itemInternal.exam.id)
                         && Objects.equals(exam.examName, itemInternal.exam.examName)
@@ -518,7 +537,9 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
 
         final ItemInternal item = itemInternals.get(i);
 
-        if (item.exam != null) {
+        if (item.announcementChannel != null) {
+            return item.announcementChannel;
+        } else if (item.exam != null) {
             return item.exam;
         } else if (item.title != null) {
             return item.title;
@@ -1157,7 +1178,10 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
                 cell.useSeparator = false;
                 cell.fullSeparator = false;
                 cell.setCustomMessage(null);
-                if (item instanceof EveExamModels.ExamSummary) {
+                if (item instanceof EveExamRepository.AnnouncementChannelSummary) {
+                    cell.setDialog(EveExamDialogsMapper.toAnnouncementChannelDialog((EveExamRepository.AnnouncementChannelSummary) item));
+                    cell.setEveSwipePinMode(false, false);
+                } else if (item instanceof EveExamModels.ExamSummary) {
                     EveExamModels.ExamSummary exam = (EveExamModels.ExamSummary) item;
                     cell.setDialog(EveExamDialogsMapper.toCustomDialog(exam));
                     cell.setEveSwipePinMode(true, exam.isPinned);
@@ -1758,9 +1782,13 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
             if (!hasQuery && banners != null && !banners.isEmpty()) {
                 itemInternals.add(new ItemInternal(banners));
             }
+            EveExamRepository.AnnouncementChannelSummary channel = parentFragment.getEveAnnouncementChannelSummary();
+            if (!hasQuery && channel != null) {
+                itemInternals.add(new ItemInternal(channel));
+            }
             java.util.List<EveExamModels.ExamSummary> exams = parentFragment.getFilteredEveExams();
             dialogsCount = exams.size();
-            if (exams.isEmpty()) {
+            if (exams.isEmpty() && channel == null) {
                 isEmpty = true;
                 itemInternals.add(new ItemInternal(VIEW_TYPE_EMPTY, dialogsEmptyType()));
             } else {
