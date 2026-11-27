@@ -51,7 +51,7 @@ public final class EvePremiumQrSheet extends QRCodeBottomSheet {
         this.onSaveQr = onSaveQr;
         this.onOpenUpi = onOpenUpi;
         this.onVerify = onVerify;
-        setCenterImage(null);
+        setCenterImage((android.graphics.drawable.Drawable) null);
     }
 
     @Override
@@ -130,7 +130,7 @@ public final class EvePremiumQrSheet extends QRCodeBottomSheet {
 
     public static void showStudentCheckout(
             @NonNull BaseFragment fragment,
-            @NonNull EvePremiumRepository.CheckoutOrder order,
+            @NonNull EvePremiumRepository.PaymentOrder order,
             @NonNull Runnable onVerified) {
         Activity activity = fragment.getParentActivity();
         if (activity == null) return;

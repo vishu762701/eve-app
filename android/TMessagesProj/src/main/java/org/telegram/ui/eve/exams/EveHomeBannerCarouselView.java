@@ -283,7 +283,7 @@ public class EveHomeBannerCarouselView extends FrameLayout implements Theme.Colo
                 textureView.setVisibility(GONE);
                 imageView.setVisibility(VISIBLE);
                 if (!resolvedUrl.isEmpty()) {
-                    imageView.setImage(ImageLocation.getForPath(resolvedUrl), null, null, null);
+                    imageView.setImage(ImageLocation.getForPath(resolvedUrl), null, (android.graphics.drawable.Drawable) null, null);
                 } else {
                     imageView.setImageBitmap(null);
                 }

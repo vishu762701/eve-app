@@ -492,7 +492,7 @@ public class EveAdminBannersFragment extends BaseFragment {
 
             String resolvedUrl = EveBackendClient.resolveMediaUrl(b.imageUrl);
             if (!isVideo && !resolvedUrl.isEmpty()) {
-                thumbView.setImage(ImageLocation.getForPath(resolvedUrl), "100_100", null, null);
+                thumbView.setImage(ImageLocation.getForPath(resolvedUrl), "100_100", (android.graphics.drawable.Drawable) null, null);
             } else {
                 thumbView.setImageBitmap(null);
             }

@@ -470,7 +470,7 @@ public class EveAdminBannerEditorFragment extends BaseFragment {
                 videoTexture.setVisibility(GONE);
                 imageView.setVisibility(VISIBLE);
                 if (uri != null && (bytes == null || bytes.length == 0)) {
-                    imageView.setImage(ImageLocation.getForPath(uri.toString()), null, null, null);
+                    imageView.setImage(ImageLocation.getForPath(uri.toString()), null, (android.graphics.drawable.Drawable) null, null);
                 } else {
                     imageView.setImageBitmap(BitmapFactory.decodeByteArray(bytes, 0, bytes.length));
                 }

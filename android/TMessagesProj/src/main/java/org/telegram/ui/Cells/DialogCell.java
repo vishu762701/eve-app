@@ -3277,6 +3277,7 @@ public class DialogCell extends BaseCell implements Theme.Colorable {
                         "100_100",
                         avatarDrawable,
                         null,
+                        null,
                         0
                 );
             } else {
