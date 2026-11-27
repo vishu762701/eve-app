@@ -424,13 +424,13 @@ public class EveAdminControlCenterTest {
                 return new EveBackendClient.HttpResponse(200, "{\"success\":true,\"deletedCount\":7}");
             }
             if (url.contains("/api/admin/system/crashes") && "GET".equals(method)) {
-                return new EveBackendClient.HttpResponse(200, "{\"crashes\":[" + crashJson.toString() + "]}");
+                return new EveBackendClient.HttpResponse(200, "{\"success\":true,\"data\":[" + crashJson.toString() + "]}");
             }
             if (url.endsWith("/api/admin/system/security-events")) {
-                return new EveBackendClient.HttpResponse(200, "{\"events\":[]}");
+                return new EveBackendClient.HttpResponse(200, "{\"success\":true,\"data\":{\"events\":[],\"securityCount\":0,\"errorCount\":0}}");
             }
             if (url.contains("/api/admin/users/stu-1")) {
-                return new EveBackendClient.HttpResponse(200, "{\"user\":{\"id\":\"stu-1\",\"displayName\":\"Riya\",\"name\":\"Riya\",\"email\":\"riya@example.com\"}}");
+                return new EveBackendClient.HttpResponse(200, "{\"success\":true,\"data\":{\"id\":\"stu-1\",\"displayName\":\"Riya\",\"email\":\"riya@example.com\"}}");
             }
             return new EveBackendClient.HttpResponse(200, "{\"success\":true}");
         });
