@@ -22,6 +22,7 @@ import { AssetStorage } from "../storage";
 import { AuthUser, Env, ExamRow, GeneratedTestRow, PremiumOrderRow } from "../types";
 import { normalizeAppConfigObject, readAppConfig, VALID_AI_PROVIDERS } from "../util/appConfig";
 import { prepareAdminAuditLog, recordAdminAction, runBatch } from "../util/auditLog";
+import { batchReadRows, getReadDb, parseAppConfigRow } from "../util/d1Session";
 import { purgeEdgeCache } from "../util/edgeCache";
 import { activateUserPremium } from "./premium";
 
@@ -128,44 +129,47 @@ async function findStudentByIdentifier(db: D1Database, identifier: string): Prom
 }
 
 async function buildLiveStatusSnapshot(env: Env, origin: string) {
-  const db = env.DB;
+  const readDb = getReadDb(env.DB);
   const now = Date.now();
   const onlineCutoff = now - 5 * 60 * 1000;
 
-  const safeFirst = async <T>(sql: string, binds: any[] = [], fallback: T): Promise<T> => {
-    try {
-      const row = await db.prepare(sql).bind(...binds).first<T>();
-      return row || fallback;
-    } catch {
-      return fallback;
-    }
-  };
+  const [
+    examsRows,
+    liveTestsRows,
+    draftTestsRows,
+    usersRows,
+    onlineRows,
+    premRows,
+    pendingUpiRows,
+    flagsRows,
+    cfgRows,
+  ] = await batchReadRows<any>(readDb, [
+    readDb.prepare("SELECT COUNT(*) AS c FROM exams"),
+    readDb.prepare("SELECT COUNT(*) AS c FROM generated_tests WHERE status IN ('live', 'published')"),
+    readDb.prepare("SELECT COUNT(*) AS c FROM generated_tests WHERE status IN ('draft', 'paused')"),
+    readDb.prepare("SELECT COUNT(*) AS c FROM users"),
+    readDb.prepare("SELECT COUNT(*) AS c FROM users WHERE last_active >= ?").bind(onlineCutoff),
+    readDb
+      .prepare(
+        "SELECT COUNT(*) AS c FROM premium_entitlements WHERE status = 'ACTIVE' AND (is_lifetime = 1 OR expires_at IS NULL OR expires_at > ?)"
+      )
+      .bind(now),
+    readDb.prepare("SELECT COUNT(*) AS c FROM premium_orders WHERE status IN ('CREATED', 'PENDING')"),
+    readDb.prepare("SELECT COUNT(*) AS c FROM question_reports WHERE status = 'pending'"),
+    readDb.prepare("SELECT body FROM app_content WHERE id = 'app_config' LIMIT 1"),
+  ]);
 
-  const [examsRow, liveTestsRow, draftTestsRow, usersRow, onlineRow, premRow, pendingUpiRow, flagsRow, cfg] =
-    await Promise.all([
-      safeFirst("SELECT COUNT(*) AS c FROM exams", [], { c: 0 }),
-      safeFirst("SELECT COUNT(*) AS c FROM generated_tests WHERE status IN ('live', 'published')", [], { c: 0 }),
-      safeFirst("SELECT COUNT(*) AS c FROM generated_tests WHERE status IN ('draft', 'paused')", [], { c: 0 }),
-      safeFirst("SELECT COUNT(*) AS c FROM users", [], { c: 0 }),
-      safeFirst("SELECT COUNT(*) AS c FROM users WHERE last_active >= ?", [onlineCutoff], { c: 0 }),
-      safeFirst(
-        "SELECT COUNT(*) AS c FROM premium_entitlements WHERE status = 'ACTIVE' AND (is_lifetime = 1 OR expires_at IS NULL OR expires_at > ?)",
-        [now],
-        { c: 0 }
-      ),
-      safeFirst("SELECT COUNT(*) AS c FROM premium_orders WHERE status IN ('CREATED', 'PENDING')", [], { c: 0 }),
-      safeFirst("SELECT COUNT(*) AS c FROM question_reports WHERE status = 'pending'", [], { c: 0 }),
-      readAppConfig(db).catch(() => normalizeAppConfigObject({})),
-    ]);
+  const countVal = (rows: any[]) => Number(rows?.[0]?.c ?? 0);
+  const cfg = parseAppConfigRow(cfgRows?.[0]);
 
   const text =
     `📊 <b>Eve Mock Test — Live Control Status</b>\n\n` +
-    `📚 <b>Exams:</b> ${examsRow.c}\n` +
-    `📝 <b>Tests:</b> ${liveTestsRow.c} Live · ${draftTestsRow.c} Draft/Paused\n` +
-    `👥 <b>Students:</b> ${usersRow.c} Total · 🟢 ${onlineRow.c} Online Now\n` +
-    `💎 <b>Premium Active:</b> ${premRow.c}\n` +
-    `💳 <b>Pending UPI Orders:</b> ${pendingUpiRow.c}\n` +
-    `🚩 <b>Flagged Questions:</b> ${flagsRow.c}\n` +
+    `📚 <b>Exams:</b> ${countVal(examsRows)}\n` +
+    `📝 <b>Tests:</b> ${countVal(liveTestsRows)} Live · ${countVal(draftTestsRows)} Draft/Paused\n` +
+    `👥 <b>Students:</b> ${countVal(usersRows)} Total · 🟢 ${countVal(onlineRows)} Online Now\n` +
+    `💎 <b>Premium Active:</b> ${countVal(premRows)}\n` +
+    `💳 <b>Pending UPI Orders:</b> ${countVal(pendingUpiRows)}\n` +
+    `🚩 <b>Flagged Questions:</b> ${countVal(flagsRows)}\n` +
     `🤖 <b>AI Engine:</b> <code>${escapeTelegramHtml(cfg.aiProvider)}</code>` +
     (cfg.aiModel ? ` / <code>${escapeTelegramHtml(cfg.aiModel)}</code>` : "") +
     `\n🛠 <b>Maintenance Mode:</b> ${cfg.maintenanceMode ? "🔴 ON" : "🟢 OFF"}`;
@@ -300,7 +304,8 @@ telegramWebhookRoutes.post("/", async (c) => {
       await editOrReplyMessage(c.env, chatId, messageId, snap.text, snap.keyboard);
       alertText = `Maintenance ${nextMode ? "ON" : "OFF"}`;
     } else if (data === "cb:exams") {
-      const { results: exams } = await db
+      const readDb = getReadDb(db);
+      const { results: exams } = await readDb
         .prepare("SELECT id, exam_name, category, question_count FROM exams ORDER BY created_at DESC LIMIT 8")
         .all<ExamRow>();
       const lines = (exams || []).map(
@@ -316,7 +321,8 @@ telegramWebhookRoutes.post("/", async (c) => {
       ]);
       alertText = "Exams loaded";
     } else if (data === "cb:orders") {
-      const { results: orders } = await db
+      const readDb = getReadDb(db);
+      const { results: orders } = await readDb
         .prepare(
           "SELECT id, user_email, amount, plan_name, created_at FROM premium_orders WHERE status IN ('CREATED', 'PENDING') ORDER BY created_at DESC LIMIT 5"
         )
@@ -341,7 +347,8 @@ telegramWebhookRoutes.post("/", async (c) => {
       }
       alertText = "Orders loaded";
     } else if (data === "cb:flags") {
-      const { results: flags } = await db
+      const readDb = getReadDb(db);
+      const { results: flags } = await readDb
         .prepare(
           "SELECT id, exam_name, reason, question_text FROM question_reports WHERE status = 'pending' ORDER BY timestamp DESC LIMIT 5"
         )
@@ -365,7 +372,7 @@ telegramWebhookRoutes.post("/", async (c) => {
       }
       alertText = "Flags loaded";
     } else if (data === "cb:system") {
-      const cfg = await readAppConfig(db).catch(() => normalizeAppConfigObject({}));
+      const cfg = await readAppConfig(getReadDb(db)).catch(() => normalizeAppConfigObject({}));
       const text =
         `📢 <b>System, AI & Broadcast Controls</b>\n\n` +
         `🛠 <b>Maintenance:</b> ${cfg.maintenanceMode ? "🔴 ON" : "🟢 OFF"}\n` +

@@ -17,6 +17,7 @@ import { isTelegramOwner } from "../services/telegramAdminAlerts";
 import { AuthUser, Env, ExamRow, GeneratedTestRow, PremiumOrderRow } from "../types";
 import { normalizeAppConfigObject, readAppConfig, VALID_AI_PROVIDERS } from "../util/appConfig";
 import { prepareAdminAuditLog, runBatch } from "../util/auditLog";
+import { batchReadRows, getReadDb, parseAppConfigRow } from "../util/d1Session";
 import { purgeEdgeCache } from "../util/edgeCache";
 import { activateUserPremium } from "./premium";
 
@@ -150,62 +151,56 @@ telegramMiniAppApi.use("*", async (c, next) => {
   await next();
 });
 
-async function safeCount(db: D1Database, sql: string, binds: any[] = []): Promise<number> {
-  try {
-    const row = await db.prepare(sql).bind(...binds).first<{ c: number }>();
-    return Number(row?.c ?? 0);
-  } catch {
-    return 0;
-  }
-}
-
 // GET /api/telegram/miniapp/overview
 telegramMiniAppApi.get("/overview", async (c) => {
-  const db = c.env.DB;
+  const readDb = getReadDb(c.env.DB);
   const now = Date.now();
   const onlineCutoff = now - 5 * 60 * 1000;
 
   const [
-    totalExams,
-    liveTests,
-    draftTests,
-    totalStudents,
-    onlineStudents,
-    activePremium,
-    pendingOrders,
-    pendingFlags,
-    openCrashes,
-    config,
-  ] = await Promise.all([
-    safeCount(db, "SELECT COUNT(*) AS c FROM exams"),
-    safeCount(db, "SELECT COUNT(*) AS c FROM generated_tests WHERE status IN ('live', 'published')"),
-    safeCount(db, "SELECT COUNT(*) AS c FROM generated_tests WHERE status IN ('draft', 'paused')"),
-    safeCount(db, "SELECT COUNT(*) AS c FROM users"),
-    safeCount(db, "SELECT COUNT(*) AS c FROM users WHERE last_active >= ?", [onlineCutoff]),
-    safeCount(
-      db,
-      "SELECT COUNT(*) AS c FROM premium_entitlements WHERE status = 'ACTIVE' AND (is_lifetime = 1 OR expires_at IS NULL OR expires_at > ?)",
-      [now]
-    ),
-    safeCount(db, "SELECT COUNT(*) AS c FROM premium_orders WHERE status IN ('CREATED', 'PENDING')"),
-    safeCount(db, "SELECT COUNT(*) AS c FROM question_reports WHERE status = 'pending'"),
-    safeCount(db, "SELECT COUNT(*) AS c FROM crash_signatures WHERE status = 'open'"),
-    readAppConfig(db).catch(() => normalizeAppConfigObject({})),
+    examsRows,
+    liveTestsRows,
+    draftTestsRows,
+    usersRows,
+    onlineRows,
+    premRows,
+    ordersRows,
+    flagsRows,
+    crashesRows,
+    cfgRows,
+  ] = await batchReadRows<any>(readDb, [
+    readDb.prepare("SELECT COUNT(*) AS c FROM exams"),
+    readDb.prepare("SELECT COUNT(*) AS c FROM generated_tests WHERE status IN ('live', 'published')"),
+    readDb.prepare("SELECT COUNT(*) AS c FROM generated_tests WHERE status IN ('draft', 'paused')"),
+    readDb.prepare("SELECT COUNT(*) AS c FROM users"),
+    readDb.prepare("SELECT COUNT(*) AS c FROM users WHERE last_active >= ?").bind(onlineCutoff),
+    readDb
+      .prepare(
+        "SELECT COUNT(*) AS c FROM premium_entitlements WHERE status = 'ACTIVE' AND (is_lifetime = 1 OR expires_at IS NULL OR expires_at > ?)"
+      )
+      .bind(now),
+    readDb.prepare("SELECT COUNT(*) AS c FROM premium_orders WHERE status IN ('CREATED', 'PENDING')"),
+    readDb.prepare("SELECT COUNT(*) AS c FROM question_reports WHERE status = 'pending'"),
+    readDb.prepare("SELECT COUNT(*) AS c FROM crash_signatures WHERE status = 'open'"),
+    readDb.prepare("SELECT body FROM app_content WHERE id = 'app_config' LIMIT 1"),
   ]);
+
+  const countVal = (rows: any[]) => Number(rows?.[0]?.c ?? 0);
+  const config = parseAppConfigRow(cfgRows?.[0]);
 
   return c.json({
     success: true,
     data: {
       kpis: {
-        totalExams,
-        liveTests,
-        draftTests,
-        totalStudents,
-        onlineStudents,
-        activePremium,
-        pendingOrders,
-        pendingFlags,
-        openCrashes,
+        totalExams: countVal(examsRows),
+        liveTests: countVal(liveTestsRows),
+        draftTests: countVal(draftTestsRows),
+        totalStudents: countVal(usersRows),
+        onlineStudents: countVal(onlineRows),
+        activePremium: countVal(premRows),
+        pendingOrders: countVal(ordersRows),
+        pendingFlags: countVal(flagsRows),
+        openCrashes: countVal(crashesRows),
       },
       config,
     },
@@ -272,16 +267,16 @@ telegramMiniAppApi.post("/config", async (c) => {
 
 // GET /api/telegram/miniapp/exams
 telegramMiniAppApi.get("/exams", async (c) => {
-  const db = c.env.DB;
-  const [examsRes, testsRes] = await Promise.all([
-    db.prepare("SELECT * FROM exams ORDER BY created_at DESC").all<ExamRow>(),
-    db
-      .prepare("SELECT id, exam_id, title, test_number, status, question_count, generated_at FROM generated_tests ORDER BY generated_at DESC LIMIT 120")
-      .all<GeneratedTestRow>(),
+  const readDb = getReadDb(c.env.DB);
+  const [examsList, testsList] = await batchReadRows<any>(readDb, [
+    readDb.prepare("SELECT * FROM exams ORDER BY created_at DESC"),
+    readDb.prepare(
+      "SELECT id, exam_id, title, test_number, status, question_count, generated_at FROM generated_tests ORDER BY generated_at DESC LIMIT 120"
+    ),
   ]);
 
   const testsByExam = new Map<string, any[]>();
-  for (const t of testsRes.results || []) {
+  for (const t of (testsList || []) as GeneratedTestRow[]) {
     if (!testsByExam.has(t.exam_id)) testsByExam.set(t.exam_id, []);
     testsByExam.get(t.exam_id)!.push({
       id: t.id,
@@ -295,7 +290,7 @@ telegramMiniAppApi.get("/exams", async (c) => {
 
   return c.json({
     success: true,
-    data: (examsRes.results || []).map((e) => ({
+    data: ((examsList || []) as ExamRow[]).map((e) => ({
       id: e.id,
       examName: e.exam_name,
       category: e.category || "",
@@ -439,15 +434,14 @@ telegramMiniAppApi.delete("/tests/:id", async (c) => {
 
 // GET /api/telegram/miniapp/students?filter=all|online|premium|banned&q=...
 telegramMiniAppApi.get("/students", async (c) => {
-  const db = c.env.DB;
+  const readDb = getReadDb(c.env.DB);
   const filter = String(c.req.query("filter") || "all").toLowerCase();
   const q = String(c.req.query("q") || "").trim().toLowerCase();
   const now = Date.now();
   const onlineCutoff = now - 5 * 60 * 1000;
 
-  let users: any[] = [];
-  try {
-    const { results } = await db
+  let [users, orders] = await batchReadRows<any>(readDb, [
+    readDb
       .prepare(
         `SELECT u.id, u.eve_id, u.email, u.display_name, u.last_active, COALESCE(u.disabled, 0) AS disabled,
                 CASE WHEN EXISTS (
@@ -458,14 +452,17 @@ telegramMiniAppApi.get("/students", async (c) => {
          FROM users u
          ORDER BY u.last_active DESC LIMIT 150`
       )
-      .bind(now)
-      .all<any>();
-    users = results || [];
-  } catch {
-    const { results } = await db
-      .prepare("SELECT id, email, display_name, last_active, COALESCE(disabled, 0) AS disabled FROM users ORDER BY last_active DESC LIMIT 150")
-      .all<any>();
-    users = results || [];
+      .bind(now),
+    readDb.prepare("SELECT * FROM premium_orders WHERE status IN ('CREATED', 'PENDING') ORDER BY created_at DESC LIMIT 30"),
+  ]);
+
+  if (!users.length) {
+    try {
+      const legacy = await readDb
+        .prepare("SELECT id, email, display_name, last_active, COALESCE(disabled, 0) AS disabled FROM users ORDER BY last_active DESC LIMIT 150")
+        .all<any>();
+      users = legacy?.results || [];
+    } catch {}
   }
 
   const filtered = users.filter((u) => {
@@ -482,11 +479,6 @@ telegramMiniAppApi.get("/students", async (c) => {
     return true;
   });
 
-  const { results: orders } = await db
-    .prepare("SELECT * FROM premium_orders WHERE status IN ('CREATED', 'PENDING') ORDER BY created_at DESC LIMIT 30")
-    .all<PremiumOrderRow>()
-    .catch(() => ({ results: [] as PremiumOrderRow[] }));
-
   return c.json({
     success: true,
     data: {
@@ -500,7 +492,7 @@ telegramMiniAppApi.get("/students", async (c) => {
         disabled: Boolean(u.disabled),
         lastActive: u.last_active || 0,
       })),
-      pendingOrders: (orders || []).map((o) => ({
+      pendingOrders: ((orders || []) as PremiumOrderRow[]).map((o) => ({
         orderId: o.id,
         userId: o.user_id,
         userEmail: o.user_email,
@@ -614,27 +606,24 @@ telegramMiniAppApi.post("/orders/:id/reject", async (c) => {
 
 // GET /api/telegram/miniapp/moderation
 telegramMiniAppApi.get("/moderation", async (c) => {
-  const db = c.env.DB;
-  const [flagsRes, auditRes, crashRes] = await Promise.all([
-    db
-      .prepare("SELECT id, exam_name, reason, question_text, student_email, timestamp FROM question_reports WHERE status = 'pending' ORDER BY timestamp DESC LIMIT 20")
-      .all<any>()
-      .catch(() => ({ results: [] })),
-    db
-      .prepare("SELECT id, action_type, description, admin_email, timestamp FROM admin_audit_log ORDER BY timestamp DESC LIMIT 20")
-      .all<any>()
-      .catch(() => ({ results: [] })),
-    db
-      .prepare("SELECT signature, exception_class, top_frame, occurrence_count, status, last_seen FROM crash_signatures WHERE status = 'open' ORDER BY last_seen DESC LIMIT 15")
-      .all<any>()
-      .catch(() => ({ results: [] })),
+  const readDb = getReadDb(c.env.DB);
+  const [flags, auditLog, crashes] = await batchReadRows<any>(readDb, [
+    readDb.prepare(
+      "SELECT id, exam_name, reason, question_text, student_email, timestamp FROM question_reports WHERE status = 'pending' ORDER BY timestamp DESC LIMIT 20"
+    ),
+    readDb.prepare(
+      "SELECT id, action_type, description, admin_email, timestamp FROM admin_audit_log ORDER BY timestamp DESC LIMIT 20"
+    ),
+    readDb.prepare(
+      "SELECT signature, exception_class, top_frame, occurrence_count, status, last_seen FROM crash_signatures WHERE status = 'open' ORDER BY last_seen DESC LIMIT 15"
+    ),
   ]);
   return c.json({
     success: true,
     data: {
-      flags: flagsRes.results || [],
-      auditLog: auditRes.results || [],
-      crashes: crashRes.results || [],
+      flags: flags || [],
+      auditLog: auditLog || [],
+      crashes: crashes || [],
     },
   });
 });
@@ -805,8 +794,43 @@ telegramMiniAppPage.get("/", (c) => {
 const tg = window.Telegram && window.Telegram.WebApp;
 if (tg) { tg.ready(); tg.expand(); }
 const initData = (tg && tg.initData) || "";
+const SWR_PREFIX = 'eve_miniapp_swr_v1:';
+const swrRenderedJson = {};
 let currentMaint = false;
 
+function swrGet(key) {
+  try {
+    const raw = localStorage.getItem(SWR_PREFIX + key);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+}
+function swrSet(key, data) {
+  try {
+    const raw = JSON.stringify(data);
+    localStorage.setItem(SWR_PREFIX + key, raw);
+    return raw;
+  } catch (e) { return ''; }
+}
+function swrInvalidate(prefixes) {
+  try {
+    const list = Array.isArray(prefixes) ? prefixes : [prefixes];
+    const toRemove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.indexOf(SWR_PREFIX) === 0) {
+        const shortKey = k.slice(SWR_PREFIX.length);
+        if (list.some(p => shortKey.indexOf(p) === 0)) toRemove.push(k);
+      }
+    }
+    toRemove.forEach(k => localStorage.removeItem(k));
+  } catch (e) {}
+}
+function setSyncBadge(text, ok) {
+  const b = document.getElementById('ownerBadge');
+  if (!b) return;
+  b.textContent = text;
+  b.className = 'badge' + (ok ? ' ok' : '');
+}
 function toast(m) {
   const el = document.getElementById('toast');
   el.textContent = m; el.style.display = 'block';
@@ -834,30 +858,49 @@ function switchTab(name, btn) {
   if (name === 'students') loadStudents();
   if (name === 'mod') loadModeration();
 }
+function renderOverview(data) {
+  if (!data) return;
+  const k = data.kpis || {}, c = data.config || {};
+  currentMaint = !!c.maintenanceMode;
+  document.getElementById('maintStatus').textContent = currentMaint ? 'ACTIVE (Students blocked)' : 'OFF (App normal)';
+  document.getElementById('maintToggleBtn').textContent = currentMaint ? 'Turn OFF' : 'Turn ON';
+  document.getElementById('maintToggleBtn').className = 'btn ' + (currentMaint ? 'ok' : 'danger');
+  document.getElementById('maintMsgInput').value = c.maintenanceMessage || '';
+  document.getElementById('aiProviderSelect').value = c.aiProvider || 'auto';
+  document.getElementById('aiModelInput').value = c.aiModel || '';
+  const cards = [
+    ['Online Now', k.onlineStudents], ['Total Students', k.totalStudents],
+    ['Live / Draft Tests', k.liveTests + ' / ' + k.draftTests], ['Premium Active', k.activePremium],
+    ['Pending UPI', k.pendingOrders], ['Flags / Crashes', k.pendingFlags + ' / ' + k.openCrashes]
+  ];
+  document.getElementById('kpiGrid').innerHTML = cards.map(([l, v]) =>
+    '<div class="kpi"><div class="v">' + esc(v) + '</div><div class="l">' + esc(l) + '</div></div>'
+  ).join('');
+}
 async function loadOverview() {
+  const cached = swrGet('overview');
+  if (cached) {
+    renderOverview(cached);
+    swrRenderedJson['overview'] = JSON.stringify(cached);
+    setSyncBadge('Cached · Syncing', false);
+  } else {
+    setSyncBadge('Syncing...', false);
+  }
   try {
     const { data } = await api('/overview');
-    const k = data.kpis, c = data.config;
-    currentMaint = !!c.maintenanceMode;
-    document.getElementById('maintStatus').textContent = currentMaint ? 'ACTIVE (Students blocked)' : 'OFF (App normal)';
-    document.getElementById('maintToggleBtn').textContent = currentMaint ? 'Turn OFF' : 'Turn ON';
-    document.getElementById('maintToggleBtn').className = 'btn ' + (currentMaint ? 'ok' : 'danger');
-    document.getElementById('maintMsgInput').value = c.maintenanceMessage || '';
-    document.getElementById('aiProviderSelect').value = c.aiProvider || 'auto';
-    document.getElementById('aiModelInput').value = c.aiModel || '';
-    const cards = [
-      ['Online Now', k.onlineStudents], ['Total Students', k.totalStudents],
-      ['Live / Draft Tests', k.liveTests + ' / ' + k.draftTests], ['Premium Active', k.activePremium],
-      ['Pending UPI', k.pendingOrders], ['Flags / Crashes', k.pendingFlags + ' / ' + k.openCrashes]
-    ];
-    document.getElementById('kpiGrid').innerHTML = cards.map(([l, v]) =>
-      '<div class="kpi"><div class="v">' + esc(v) + '</div><div class="l">' + esc(l) + '</div></div>'
-    ).join('');
-  } catch (e) { toast(e.message); }
+    const freshJson = JSON.stringify(data);
+    if (swrRenderedJson['overview'] !== freshJson) {
+      renderOverview(data);
+      swrRenderedJson['overview'] = freshJson;
+    }
+    swrSet('overview', data);
+    setSyncBadge('Live', true);
+  } catch (e) { setSyncBadge(cached ? 'Offline Cache' : 'Error', false); toast(e.message); }
 }
 async function toggleMaint() {
   try {
     await api('/config', { method: 'POST', body: JSON.stringify({ maintenanceMode: !currentMaint }) });
+    swrInvalidate('overview');
     toast('Maintenance toggled'); loadOverview();
   } catch (e) { toast(e.message); }
 }
@@ -871,37 +914,55 @@ async function saveConfig() {
         aiModel: document.getElementById('aiModelInput').value
       })
     });
+    swrInvalidate('overview');
     toast('Config saved'); loadOverview();
   } catch (e) { toast(e.message); }
 }
+function renderExams(data) {
+  document.getElementById('examsList').innerHTML = (data || []).map(ex => {
+    const testsHtml = (ex.tests || []).slice(0, 6).map(t =>
+      '<div class="row" style="justify-content:space-between;padding:6px 0;border-top:1px solid var(--border)">' +
+        '<div><strong>' + esc(t.title) + '</strong> <span class="badge ' + (t.status==='live'?'ok':'') + '">' + esc(t.status) + '</span></div>' +
+        '<div class="row">' +
+          (t.status !== 'live' ? '<button class="btn ok" onclick="setTestStatus(\\'' + esc(t.id) + '\\',\\'live\\')">Publish</button>' : '<button class="btn sec" onclick="setTestStatus(\\'' + esc(t.id) + '\\',\\'paused\\')">Pause</button>') +
+          '<button class="btn danger" onclick="delTest(\\'' + esc(t.id) + '\\')">Del</button>' +
+        '</div>' +
+      '</div>'
+    ).join('');
+    return '<div class="card">' +
+      '<div class="row" style="justify-content:space-between"><strong>' + esc(ex.examName) + '</strong><span class="badge">' + esc(ex.questionCount) + ' Qs</span></div>' +
+      '<div class="row" style="margin-top:8px">' +
+        '<select id="lang-' + esc(ex.id) + '" style="flex:1"><option value="english"' + (ex.aiLanguage==='english'?' selected':'') + '>English</option><option value="hindi"' + (ex.aiLanguage==='hindi'?' selected':'') + '>Hindi</option><option value="bilingual"' + (ex.aiLanguage==='bilingual'?' selected':'') + '>Bilingual</option></select>' +
+        '<select id="diff-' + esc(ex.id) + '" style="flex:1"><option value="mixed"' + (ex.aiDifficulty==='mixed'?' selected':'') + '>Mixed</option><option value="easy"' + (ex.aiDifficulty==='easy'?' selected':'') + '>Easy</option><option value="medium"' + (ex.aiDifficulty==='medium'?' selected':'') + '>Medium</option><option value="hard"' + (ex.aiDifficulty==='hard'?' selected':'') + '>Hard</option></select>' +
+      '</div>' +
+      '<textarea id="pr-' + esc(ex.id) + '" rows="2" style="margin-top:6px" placeholder="Custom AI prompt">' + esc(ex.aiPrompt) + '</textarea>' +
+      '<div class="row" style="margin-top:8px">' +
+        '<button class="btn sec" onclick="saveExamPrompt(\\'' + esc(ex.id) + '\\')">Save Prompt</button>' +
+        '<button class="btn" onclick="genExam(\\'' + esc(ex.id) + '\\')">⚡ AI Generate</button>' +
+        '<button class="btn ok" onclick="asmExam(\\'' + esc(ex.id) + '\\')">🏦 Bank ₹0</button>' +
+      '</div>' + testsHtml +
+    '</div>';
+  }).join('') || '<div class="card">No exams found.</div>';
+}
 async function loadExams() {
+  const cached = swrGet('exams');
+  if (cached) {
+    renderExams(cached);
+    swrRenderedJson['exams'] = JSON.stringify(cached);
+    setSyncBadge('Cached · Syncing', false);
+  } else {
+    setSyncBadge('Syncing...', false);
+  }
   try {
     const { data } = await api('/exams');
-    document.getElementById('examsList').innerHTML = data.map(ex => {
-      const testsHtml = (ex.tests || []).slice(0, 6).map(t =>
-        '<div class="row" style="justify-content:space-between;padding:6px 0;border-top:1px solid var(--border)">' +
-          '<div><strong>' + esc(t.title) + '</strong> <span class="badge ' + (t.status==='live'?'ok':'') + '">' + esc(t.status) + '</span></div>' +
-          '<div class="row">' +
-            (t.status !== 'live' ? '<button class="btn ok" onclick="setTestStatus(\\'' + esc(t.id) + '\\',\\'live\\')">Publish</button>' : '<button class="btn sec" onclick="setTestStatus(\\'' + esc(t.id) + '\\',\\'paused\\')">Pause</button>') +
-            '<button class="btn danger" onclick="delTest(\\'' + esc(t.id) + '\\')">Del</button>' +
-          '</div>' +
-        '</div>'
-      ).join('');
-      return '<div class="card">' +
-        '<div class="row" style="justify-content:space-between"><strong>' + esc(ex.examName) + '</strong><span class="badge">' + esc(ex.questionCount) + ' Qs</span></div>' +
-        '<div class="row" style="margin-top:8px">' +
-          '<select id="lang-' + esc(ex.id) + '" style="flex:1"><option value="english"' + (ex.aiLanguage==='english'?' selected':'') + '>English</option><option value="hindi"' + (ex.aiLanguage==='hindi'?' selected':'') + '>Hindi</option><option value="bilingual"' + (ex.aiLanguage==='bilingual'?' selected':'') + '>Bilingual</option></select>' +
-          '<select id="diff-' + esc(ex.id) + '" style="flex:1"><option value="mixed"' + (ex.aiDifficulty==='mixed'?' selected':'') + '>Mixed</option><option value="easy"' + (ex.aiDifficulty==='easy'?' selected':'') + '>Easy</option><option value="medium"' + (ex.aiDifficulty==='medium'?' selected':'') + '>Medium</option><option value="hard"' + (ex.aiDifficulty==='hard'?' selected':'') + '>Hard</option></select>' +
-        '</div>' +
-        '<textarea id="pr-' + esc(ex.id) + '" rows="2" style="margin-top:6px" placeholder="Custom AI prompt">' + esc(ex.aiPrompt) + '</textarea>' +
-        '<div class="row" style="margin-top:8px">' +
-          '<button class="btn sec" onclick="saveExamPrompt(\\'' + esc(ex.id) + '\\')">Save Prompt</button>' +
-          '<button class="btn" onclick="genExam(\\'' + esc(ex.id) + '\\')">⚡ AI Generate</button>' +
-          '<button class="btn ok" onclick="asmExam(\\'' + esc(ex.id) + '\\')">🏦 Bank ₹0</button>' +
-        '</div>' + testsHtml +
-      '</div>';
-    }).join('') || '<div class="card">No exams found.</div>';
-  } catch (e) { toast(e.message); }
+    const freshJson = JSON.stringify(data);
+    if (swrRenderedJson['exams'] !== freshJson) {
+      renderExams(data);
+      swrRenderedJson['exams'] = freshJson;
+    }
+    swrSet('exams', data);
+    setSyncBadge('Live', true);
+  } catch (e) { setSyncBadge(cached ? 'Offline Cache' : 'Error', false); toast(e.message); }
 }
 async function saveExamPrompt(id) {
   try {
@@ -913,58 +974,95 @@ async function saveExamPrompt(id) {
         aiDifficulty: document.getElementById('diff-' + id).value
       })
     });
+    swrInvalidate('exams');
     toast('Prompt updated');
   } catch (e) { toast(e.message); }
 }
-async function genExam(id) { try { toast('Generating...'); await api('/exams/' + id + '/generate', { method: 'POST' }); toast('AI Test generated!'); loadExams(); } catch (e) { toast(e.message); } }
-async function asmExam(id) { try { await api('/exams/' + id + '/assemble', { method: 'POST' }); toast('Assembled from bank!'); loadExams(); } catch (e) { toast(e.message); } }
-async function setTestStatus(id, st) { try { await api('/tests/' + id + '/status', { method: 'PUT', body: JSON.stringify({ status: st }) }); toast('Updated ' + st); loadExams(); } catch (e) { toast(e.message); } }
-async function delTest(id) { try { await api('/tests/' + id, { method: 'DELETE' }); toast('Deleted test'); loadExams(); } catch (e) { toast(e.message); } }
-async function loadStudents() {
-  try {
-    const f = document.getElementById('studentFilter').value;
-    const q = document.getElementById('studentSearch').value;
-    const { data } = await api('/students?filter=' + encodeURIComponent(f) + '&q=' + encodeURIComponent(q));
-    document.getElementById('ordersList').innerHTML = (data.pendingOrders || []).map(o =>
-      '<div class="row" style="justify-content:space-between;padding:6px 0;border-top:1px solid var(--border)">' +
-        '<div><div><strong>' + esc(o.userEmail || o.userId) + '</strong></div><div style="font-size:11px;color:var(--hint)">₹' + esc(o.amount) + ' · ' + esc(o.orderId) + '</div></div>' +
-        '<div class="row"><button class="btn ok" onclick="approveOrder(\\'' + esc(o.orderId) + '\\')">✅</button><button class="btn danger" onclick="rejectOrder(\\'' + esc(o.orderId) + '\\')">❌</button></div>' +
-      '</div>'
-    ).join('') || '<div style="font-size:12px;color:var(--hint)">No pending orders</div>';
-    document.getElementById('studentsList').innerHTML = (data.students || []).map(u =>
-      '<div class="row" style="justify-content:space-between;padding:7px 0;border-top:1px solid var(--border)">' +
-        '<div><div><strong>' + esc(u.displayName) + '</strong> ' + (u.isOnline?'🟢':'') + (u.isPremium?' 💎':'') + (u.disabled?' 🚫':'') + '</div><div style="font-size:11px;color:var(--hint)">' + esc(u.email) + '</div></div>' +
-        '<div class="row"><button class="btn sec" onclick="grantPrem(\\'' + esc(u.id) + '\\')">+30d</button><button class="btn ' + (u.disabled?'ok':'danger') + '" onclick="toggleBan(\\'' + esc(u.id) + '\\',' + (!u.disabled) + ')">' + (u.disabled?'Unban':'Ban') + '</button></div>' +
-      '</div>'
-    ).join('') || '<div style="font-size:12px;color:var(--hint)">No students matched</div>';
-  } catch (e) { toast(e.message); }
+async function genExam(id) { try { toast('Generating...'); await api('/exams/' + id + '/generate', { method: 'POST' }); swrInvalidate(['exams', 'overview']); toast('AI Test generated!'); loadExams(); } catch (e) { toast(e.message); } }
+async function asmExam(id) { try { await api('/exams/' + id + '/assemble', { method: 'POST' }); swrInvalidate(['exams', 'overview']); toast('Assembled from bank!'); loadExams(); } catch (e) { toast(e.message); } }
+async function setTestStatus(id, st) { try { await api('/tests/' + id + '/status', { method: 'PUT', body: JSON.stringify({ status: st }) }); swrInvalidate(['exams', 'overview']); toast('Updated ' + st); loadExams(); } catch (e) { toast(e.message); } }
+async function delTest(id) { try { await api('/tests/' + id, { method: 'DELETE' }); swrInvalidate(['exams', 'overview']); toast('Deleted test'); loadExams(); } catch (e) { toast(e.message); } }
+function renderStudents(data) {
+  document.getElementById('ordersList').innerHTML = (data.pendingOrders || []).map(o =>
+    '<div class="row" style="justify-content:space-between;padding:6px 0;border-top:1px solid var(--border)">' +
+      '<div><div><strong>' + esc(o.userEmail || o.userId) + '</strong></div><div style="font-size:11px;color:var(--hint)">₹' + esc(o.amount) + ' · ' + esc(o.orderId) + '</div></div>' +
+      '<div class="row"><button class="btn ok" onclick="approveOrder(\\'' + esc(o.orderId) + '\\')">✅</button><button class="btn danger" onclick="rejectOrder(\\'' + esc(o.orderId) + '\\')">❌</button></div>' +
+    '</div>'
+  ).join('') || '<div style="font-size:12px;color:var(--hint)">No pending orders</div>';
+  document.getElementById('studentsList').innerHTML = (data.students || []).map(u =>
+    '<div class="row" style="justify-content:space-between;padding:7px 0;border-top:1px solid var(--border)">' +
+      '<div><div><strong>' + esc(u.displayName) + '</strong> ' + (u.isOnline?'🟢':'') + (u.isPremium?' 💎':'') + (u.disabled?' 🚫':'') + '</div><div style="font-size:11px;color:var(--hint)">' + esc(u.email) + '</div></div>' +
+      '<div class="row"><button class="btn sec" onclick="grantPrem(\\'' + esc(u.id) + '\\')">+30d</button><button class="btn ' + (u.disabled?'ok':'danger') + '" onclick="toggleBan(\\'' + esc(u.id) + '\\',' + (!u.disabled) + ')">' + (u.disabled?'Unban':'Ban') + '</button></div>' +
+    '</div>'
+  ).join('') || '<div style="font-size:12px;color:var(--hint)">No students matched</div>';
 }
-async function approveOrder(id) { try { await api('/orders/' + id + '/approve', { method: 'POST' }); toast('Order approved'); loadStudents(); } catch (e) { toast(e.message); } }
-async function rejectOrder(id) { try { await api('/orders/' + id + '/reject', { method: 'POST' }); toast('Order rejected'); loadStudents(); } catch (e) { toast(e.message); } }
-async function grantPrem(id) { try { await api('/users/' + id + '/premium', { method: 'POST', body: JSON.stringify({ days: 30 }) }); toast('+30d Premium granted'); loadStudents(); } catch (e) { toast(e.message); } }
-async function toggleBan(id, disabled) { try { await api('/users/' + id + '/status', { method: 'POST', body: JSON.stringify({ disabled }) }); toast(disabled ? 'Banned' : 'Unbanned'); loadStudents(); } catch (e) { toast(e.message); } }
+async function loadStudents() {
+  const f = document.getElementById('studentFilter').value;
+  const q = document.getElementById('studentSearch').value;
+  const cacheKey = 'students:' + f + ':' + q;
+  const cached = swrGet(cacheKey);
+  if (cached) {
+    renderStudents(cached);
+    swrRenderedJson[cacheKey] = JSON.stringify(cached);
+    setSyncBadge('Cached · Syncing', false);
+  } else {
+    setSyncBadge('Syncing...', false);
+  }
+  try {
+    const { data } = await api('/students?filter=' + encodeURIComponent(f) + '&q=' + encodeURIComponent(q));
+    const freshJson = JSON.stringify(data);
+    if (swrRenderedJson[cacheKey] !== freshJson) {
+      renderStudents(data);
+      swrRenderedJson[cacheKey] = freshJson;
+    }
+    swrSet(cacheKey, data);
+    setSyncBadge('Live', true);
+  } catch (e) { setSyncBadge(cached ? 'Offline Cache' : 'Error', false); toast(e.message); }
+}
+async function approveOrder(id) { try { await api('/orders/' + id + '/approve', { method: 'POST' }); swrInvalidate(['students:', 'overview']); toast('Order approved'); loadStudents(); } catch (e) { toast(e.message); } }
+async function rejectOrder(id) { try { await api('/orders/' + id + '/reject', { method: 'POST' }); swrInvalidate(['students:', 'overview']); toast('Order rejected'); loadStudents(); } catch (e) { toast(e.message); } }
+async function grantPrem(id) { try { await api('/users/' + id + '/premium', { method: 'POST', body: JSON.stringify({ days: 30 }) }); swrInvalidate(['students:', 'overview']); toast('+30d Premium granted'); loadStudents(); } catch (e) { toast(e.message); } }
+async function toggleBan(id, disabled) { try { await api('/users/' + id + '/status', { method: 'POST', body: JSON.stringify({ disabled }) }); swrInvalidate(['students:', 'overview']); toast(disabled ? 'Banned' : 'Unbanned'); loadStudents(); } catch (e) { toast(e.message); } }
+function renderModeration(data) {
+  document.getElementById('flagsList').innerHTML = (data.flags || []).map(f =>
+    '<div class="row" style="justify-content:space-between;padding:6px 0;border-top:1px solid var(--border)">' +
+      '<div style="flex:1"><strong>' + esc(f.exam_name) + '</strong> (' + esc(f.reason) + ')<div style="font-size:11px;color:var(--hint)">' + esc(String(f.question_text||'').slice(0,90)) + '</div></div>' +
+      '<button class="btn sec" onclick="dismissFlag(\\'' + esc(f.id) + '\\')">Dismiss</button>' +
+    '</div>'
+  ).join('') || '<div style="font-size:12px;color:var(--hint)">No flagged questions</div>';
+  document.getElementById('crashesList').innerHTML = (data.crashes || []).map(cr =>
+    '<div style="padding:6px 0;border-top:1px solid var(--border)"><strong>' + esc(cr.exception_class) + '</strong> ×' + esc(cr.occurrence_count) + '<div style="font-size:11px;color:var(--hint)">' + esc(cr.top_frame) + '</div></div>'
+  ).join('') || '<div style="font-size:12px;color:var(--hint)">Zero open crash signatures</div>';
+  document.getElementById('auditList').innerHTML = (data.auditLog || []).map(a =>
+    '<div style="padding:5px 0;border-top:1px solid var(--border);font-size:12px"><span class="badge">' + esc(a.action_type) + '</span> ' + esc(a.description) + '</div>'
+  ).join('') || '<div style="font-size:12px;color:var(--hint)">No logs</div>';
+}
 async function loadModeration() {
+  const cached = swrGet('moderation');
+  if (cached) {
+    renderModeration(cached);
+    swrRenderedJson['moderation'] = JSON.stringify(cached);
+    setSyncBadge('Cached · Syncing', false);
+  } else {
+    setSyncBadge('Syncing...', false);
+  }
   try {
     const { data } = await api('/moderation');
-    document.getElementById('flagsList').innerHTML = (data.flags || []).map(f =>
-      '<div class="row" style="justify-content:space-between;padding:6px 0;border-top:1px solid var(--border)">' +
-        '<div style="flex:1"><strong>' + esc(f.exam_name) + '</strong> (' + esc(f.reason) + ')<div style="font-size:11px;color:var(--hint)">' + esc(String(f.question_text||'').slice(0,90)) + '</div></div>' +
-        '<button class="btn sec" onclick="dismissFlag(\\'' + esc(f.id) + '\\')">Dismiss</button>' +
-      '</div>'
-    ).join('') || '<div style="font-size:12px;color:var(--hint)">No flagged questions</div>';
-    document.getElementById('crashesList').innerHTML = (data.crashes || []).map(cr =>
-      '<div style="padding:6px 0;border-top:1px solid var(--border)"><strong>' + esc(cr.exception_class) + '</strong> ×' + esc(cr.occurrence_count) + '<div style="font-size:11px;color:var(--hint)">' + esc(cr.top_frame) + '</div></div>'
-    ).join('') || '<div style="font-size:12px;color:var(--hint)">Zero open crash signatures</div>';
-    document.getElementById('auditList').innerHTML = (data.auditLog || []).map(a =>
-      '<div style="padding:5px 0;border-top:1px solid var(--border);font-size:12px"><span class="badge">' + esc(a.action_type) + '</span> ' + esc(a.description) + '</div>'
-    ).join('') || '<div style="font-size:12px;color:var(--hint)">No logs</div>';
-  } catch (e) { toast(e.message); }
+    const freshJson = JSON.stringify(data);
+    if (swrRenderedJson['moderation'] !== freshJson) {
+      renderModeration(data);
+      swrRenderedJson['moderation'] = freshJson;
+    }
+    swrSet('moderation', data);
+    setSyncBadge('Live', true);
+  } catch (e) { setSyncBadge(cached ? 'Offline Cache' : 'Error', false); toast(e.message); }
 }
-async function dismissFlag(id) { try { await api('/reports/' + id + '/dismiss', { method: 'POST' }); toast('Dismissed'); loadModeration(); } catch (e) { toast(e.message); } }
+async function dismissFlag(id) { try { await api('/reports/' + id + '/dismiss', { method: 'POST' }); swrInvalidate(['moderation', 'overview']); toast('Dismissed'); loadModeration(); } catch (e) { toast(e.message); } }
 async function sendBroadcast() {
   try {
     await api('/broadcasts', { method: 'POST', body: JSON.stringify({ title: document.getElementById('bcTitle').value, message: document.getElementById('bcMsg').value }) });
     document.getElementById('bcTitle').value = ''; document.getElementById('bcMsg').value = '';
+    swrInvalidate('moderation');
     toast('Broadcast sent'); loadModeration();
   } catch (e) { toast(e.message); }
 }

@@ -6,6 +6,7 @@ import { Hono } from "hono";
 import { requireAdmin, requirePermission } from "../middleware/authMiddleware";
 import { AuthUser, Env, PollRow } from "../types";
 import { prepareAdminAuditLog } from "../util/auditLog";
+import { batchReadRows, getReadDb } from "../util/d1Session";
 
 export const pollRoutes = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
 
@@ -33,28 +34,24 @@ async function getVoteCountsForPoll(db: D1Database, pollId: string, optionsCount
 
 // GET /api/polls - List all polls (with caller vote included to avoid N+1 fetches)
 pollRoutes.get("/", async (c) => {
-  const db = c.env.DB;
+  const db = getReadDb(c.env.DB);
   const user = c.get("user");
-  const pollsPromise = db
-    .prepare("SELECT * FROM polls ORDER BY created_at DESC")
-    .all<PollRow>();
-  const countsPromise = db
-    .prepare("SELECT poll_id, option_index, COUNT(*) as vote_count FROM poll_votes GROUP BY poll_id, option_index")
-    .all<{ poll_id: string; option_index: number; vote_count: number }>()
-    .catch(() => ({ results: [] as Array<{ poll_id: string; option_index: number; vote_count: number }> }));
-  const myVotesPromise = user?.uid
-    ? db
-        .prepare("SELECT poll_id, option_index FROM poll_votes WHERE user_id = ?")
-        .bind(user.uid)
-        .all<{ poll_id: string; option_index: number }>()
-        .catch(() => ({ results: [] as Array<{ poll_id: string; option_index: number }> }))
-    : Promise.resolve({ results: [] as Array<{ poll_id: string; option_index: number }> });
+  const pollsStmt = db.prepare("SELECT * FROM polls ORDER BY created_at DESC");
+  const countsStmt = db.prepare(
+    "SELECT poll_id, option_index, COUNT(*) as vote_count FROM poll_votes GROUP BY poll_id, option_index"
+  );
+  const stmts = user?.uid
+    ? [
+        pollsStmt,
+        countsStmt,
+        db.prepare("SELECT poll_id, option_index FROM poll_votes WHERE user_id = ?").bind(user.uid),
+      ]
+    : [pollsStmt, countsStmt];
 
-  const [{ results: polls }, { results: allCounts }, { results: myVotes }] = await Promise.all([
-    pollsPromise,
-    countsPromise,
-    myVotesPromise,
-  ]);
+  const batchOut = await batchReadRows<any>(db, stmts);
+  const polls = (batchOut[0] || []) as PollRow[];
+  const allCounts = (batchOut[1] || []) as Array<{ poll_id: string; option_index: number; vote_count: number }>;
+  const myVotes = (batchOut[2] || []) as Array<{ poll_id: string; option_index: number }>;
 
   const countsByPoll = new Map<string, Record<number, number>>();
   for (const r of allCounts || []) {

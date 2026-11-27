@@ -8,6 +8,7 @@ import { requirePermission } from "../middleware/authMiddleware";
 import { AssetStorage } from "../storage";
 import { AuthUser, Env, HomeBannerRow } from "../types";
 import { prepareAdminAuditLog } from "../util/auditLog";
+import { getReadDb } from "../util/d1Session";
 import { matchStudentEdgeCache, purgeEdgeCache, storeStudentEdgeCache } from "../util/edgeCache";
 import { serveCachedStorageMedia } from "../util/mediaCache";
 
@@ -124,7 +125,7 @@ function mapBannerRow(r: HomeBannerRow) {
 bannerRoutes.get("/", async (c) => {
   const cached = await matchStudentEdgeCache(c);
   if (cached) return cached;
-  const db = c.env.DB;
+  const db = getReadDb(c.env.DB);
   const { results } = await db
     .prepare("SELECT * FROM home_banners WHERE active = 1 ORDER BY order_index ASC")
     .all<HomeBannerRow>();
@@ -133,7 +134,7 @@ bannerRoutes.get("/", async (c) => {
 
 // GET /api/banners/manage - List all banners (active & hidden) for Admin
 bannerRoutes.get("/manage", requirePermission("manage_content"), async (c) => {
-  const db = c.env.DB;
+  const db = getReadDb(c.env.DB);
   const { results } = await db
     .prepare("SELECT * FROM home_banners ORDER BY order_index ASC")
     .all<HomeBannerRow>();
@@ -143,7 +144,7 @@ bannerRoutes.get("/manage", requirePermission("manage_content"), async (c) => {
 // GET /api/banners/:id/media - Public asset reader with Cloudflare Edge Cache
 bannerRoutes.get("/:id/media", async (c) => {
   const id = c.req.param("id") || "";
-  const db = c.env.DB;
+  const db = getReadDb(c.env.DB);
   const row = await db
     .prepare("SELECT storage_path FROM home_banners WHERE id = ?")
     .bind(id)

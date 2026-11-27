@@ -11,6 +11,7 @@ import { cors } from "hono/cors";
 import { handleScheduledTestGeneration } from "./cron/scheduledTestGeneration";
 import { readAppConfig } from "./util/appConfig";
 import { serveStoredAvatarResponse } from "./util/avatarMedia";
+import { getReadDb } from "./util/d1Session";
 import { matchStudentEdgeCache, storeStudentEdgeCache } from "./util/edgeCache";
 import { authMiddleware } from "./middleware/authMiddleware";
 import { ipRateLimit, userRateLimit } from "./middleware/rateLimiter";
@@ -86,7 +87,7 @@ app.get("/api/app-config", async (c) => {
     if (cached) {
       return cached;
     }
-    const config = await readAppConfig(c.env.DB);
+    const config = await readAppConfig(getReadDb(c.env.DB));
     if (config.maintenanceMode) {
       c.header("Cache-Control", "no-store");
       return c.json({ success: true, data: config });
@@ -101,7 +102,7 @@ app.get("/api/app-config", async (c) => {
 // Public Announcement Channel Avatar Reader
 app.get("/api/announcement-channel/avatar", async (c) => {
   try {
-    const config = await readAppConfig(c.env.DB);
+    const config = await readAppConfig(getReadDb(c.env.DB));
     return await serveStoredAvatarResponse(
       c,
       config.announcementChannelAvatarUrl,
@@ -114,7 +115,7 @@ app.get("/api/announcement-channel/avatar", async (c) => {
 
 // Public Floating Community Link
 app.get("/api/floating-link", async (c) => {
-  const db = c.env.DB;
+  const db = getReadDb(c.env.DB);
   try {
     const row = await db.prepare("SELECT body FROM app_content WHERE id = 'floating_link'").first<{ body: string }>();
     if (!row || !row.body) {

@@ -13,6 +13,7 @@ import { prepareAdminAuditLog, recordAdminAction, runBatch } from "../util/audit
 import { getMonthlyApiUsage, trackGeminiCall } from "../util/usageTracker";
 import { validateReformatInput, reformatExplanationWithAi } from "../ai/explanationReformat";
 import { normalizeAppConfigObject, readAppConfig, sanitizeTelegramAtUsername, VALID_AI_PROVIDERS } from "../util/appConfig";
+import { getReadDb } from "../util/d1Session";
 import { purgeEdgeCache } from "../util/edgeCache";
 import { callTelegramBotApi } from "../services/telegramAdminAlerts";
 import { AssetStorage } from "../storage";
@@ -51,7 +52,7 @@ adminRoutes.get("/me", async (c) => {
 adminRoutes.get("/dashboard", async (c) => {
   const startedAt = Date.now();
   const user = c.get("user");
-  const db = c.env.DB;
+  const db = getReadDb(c.env.DB);
   const perms = await getAdminPermissions(db, user?.email);
   if (!perms) return c.json({ success: false, error: "Admin permissions could not be verified" }, 403);
 
@@ -527,7 +528,7 @@ adminRoutes.delete("/admins/:email", requirePermission("manage_admins_rights"), 
 
 // GET /api/admin/analytics/exams - Pre-aggregated exam analytics
 adminRoutes.get("/analytics/exams", requirePermission("view_analytics_logs"), async (c) => {
-  const db = c.env.DB;
+  const db = getReadDb(c.env.DB);
   const days = parseInt(c.req.query("days") || "0", 10);
   const cutoff = days > 0 ? Date.now() - days * 24 * 60 * 60 * 1000 : 0;
   try {
@@ -601,7 +602,7 @@ adminRoutes.get("/analytics/exams", requirePermission("view_analytics_logs"), as
 // GET /api/admin/analytics/questions - Pre-aggregated question analytics
 adminRoutes.get("/analytics/questions", requirePermission("view_analytics_logs"), async (c) => {
   const examId = c.req.query("examId");
-  const db = c.env.DB;
+  const db = getReadDb(c.env.DB);
 
   let query = "SELECT * FROM admin_analytics_questions";
   const params: any[] = [];

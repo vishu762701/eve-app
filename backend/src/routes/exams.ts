@@ -19,6 +19,7 @@ import {
 } from "../util/avatarMedia";
 import { serveCachedStorageMedia } from "../util/mediaCache";
 import { matchStudentEdgeCache, purgeEdgeCache, storeStudentEdgeCache } from "../util/edgeCache";
+import { getReadDb } from "../util/d1Session";
 import { getActiveEmojiPlacements } from "./emoji";
 
 const VALID_AI_LANGUAGES = new Set(["english", "hindi", "bilingual"]);
@@ -163,7 +164,7 @@ function mapExamRow(row: ExamRow, emojiPlacement?: EmojiPlacementPublic) {
 examRoutes.get("/", async (c) => {
   const cached = await matchStudentEdgeCache(c);
   if (cached) return cached;
-  const db = c.env.DB;
+  const db = getReadDb(c.env.DB);
   const { results } = await db
     .prepare("SELECT * FROM exams ORDER BY exam_name ASC")
     .all<ExamRow>();
@@ -183,7 +184,7 @@ examRoutes.get("/", async (c) => {
 // GET /api/exams/:id - Single exam details
 examRoutes.get("/:id", async (c) => {
   const id = c.req.param("id") || "";
-  const db = c.env.DB;
+  const db = getReadDb(c.env.DB);
   const row = await db.prepare("SELECT * FROM exams WHERE id = ?").bind(id).first<ExamRow>();
 
   if (!row) {

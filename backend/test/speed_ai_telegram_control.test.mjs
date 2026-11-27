@@ -552,3 +552,101 @@ test("Telegram Mini App HMAC-SHA256 verification and API routes enforce owner ac
     assert.equal(okBody.data.config.aiProvider, "auto");
   });
 });
+
+
+import { batchReadRows, getReadDb } from "../src/util/d1Session.ts";
+
+test("D1 Read Replication session (`getReadDb`) delegates to withSession('first-unconstrained') and falls back cleanly on mock D1", async () => {
+  const mockSessionCalls = [];
+  const sessionDb = { prepare: () => ({}) };
+  const d1WithSession = {
+    withSession(constraint) {
+      mockSessionCalls.push(constraint);
+      return sessionDb;
+    },
+    prepare: () => ({}),
+  };
+  assert.equal(getReadDb(d1WithSession), sessionDb);
+  assert.deepEqual(mockSessionCalls, ["first-unconstrained"]);
+
+  const legacyD1 = { prepare: () => ({}) };
+  assert.equal(getReadDb(legacyD1), legacyD1);
+
+  const throwingD1 = {
+    withSession() {
+      throw new Error("no replica");
+    },
+    prepare: () => ({}),
+  };
+  assert.equal(getReadDb(throwingD1), throwingD1);
+});
+
+test("Mini App routes use D1 read session + single db.batch([...]) round-trip and HTML includes 0ms localStorage SWR cache", async () => {
+  const botToken = "88888:MINIAPP_SWR_TOKEN";
+  const nowSec = Math.floor(Date.now() / 1000);
+  const ownerInitData = await signTelegramInitData(
+    { auth_date: String(nowSec), user: { id: 7777, username: "vishu" } },
+    botToken
+  );
+
+  let batchCalls = 0;
+  let lastBatchCount = 0;
+  const sessionModes = [];
+
+  const sessionReadDb = {
+    prepare(sql) {
+      return {
+        _sql: sql,
+        bind() { return this; },
+        async all() { return { results: [] }; },
+      };
+    },
+    async batch(stmts) {
+      batchCalls++;
+      lastBatchCount = stmts.length;
+      return stmts.map((s) => {
+        if (String(s._sql).includes("app_content")) {
+          return { success: true, results: [{ body: JSON.stringify({ aiProvider: "groq", aiModel: "llama-3.3-70b-versatile" }) }] };
+        }
+        return { success: true, results: [{ c: 42 }] };
+      });
+    },
+  };
+
+  const mockD1 = {
+    withSession(constraint) {
+      sessionModes.push(constraint);
+      return sessionReadDb;
+    },
+    prepare: sessionReadDb.prepare,
+    batch: sessionReadDb.batch,
+  };
+
+  const app = new Hono();
+  app.use("*", async (c, next) => {
+    c.env = { DB: mockD1, TELEGRAM_BOT_TOKEN: botToken, TELEGRAM_OWNER_ID: "7777" };
+    await next();
+  });
+  app.route("/admin-miniapp", telegramMiniAppPage);
+  app.route("/api/telegram/miniapp", telegramMiniAppApi);
+
+  const overviewRes = await app.request("/api/telegram/miniapp/overview", {
+    headers: { "X-Telegram-Init-Data": ownerInitData },
+  });
+  assert.equal(overviewRes.status, 200);
+  const body = await overviewRes.json();
+  assert.equal(body.data.kpis.totalExams, 42);
+  assert.equal(body.data.config.aiProvider, "groq");
+  assert.deepEqual(sessionModes, ["first-unconstrained"]);
+  assert.equal(batchCalls, 1);
+  assert.equal(lastBatchCount, 10);
+
+  // Verify HTML UI contains localStorage SWR cache & diff check
+  const pageRes = await app.request("/admin-miniapp");
+  assert.equal(pageRes.status, 200);
+  const html = await pageRes.text();
+  assert.ok(html.includes("eve_miniapp_swr_v1:"));
+  assert.ok(html.includes("localStorage.getItem"));
+  assert.ok(html.includes("swrInvalidate"));
+  assert.ok(html.includes("Cached · Syncing"));
+});

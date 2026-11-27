@@ -19,6 +19,7 @@ import { AuthUser, Env, ExamRow, GeneratedTestRow } from "../types";
 import { prepareAdminAuditLog } from "../util/auditLog";
 import { AssetStorage } from "../storage";
 import { matchStudentEdgeCache, purgeEdgeCache, storeStudentEdgeCache } from "../util/edgeCache";
+import { getReadDb } from "../util/d1Session";
 import {
   buildAvatarProxyUrl,
   detectAvatarImage,
@@ -34,7 +35,7 @@ export const generatedTestRoutes = new Hono<{ Bindings: Env; Variables: { user: 
 generatedTestRoutes.get("/", async (c) => {
   const user = c.get("user");
   const examId = c.req.query("examId");
-  const db = c.env.DB;
+  const db = getReadDb(c.env.DB);
   // Admin membership alone must not disclose drafts or answer keys.
   const canManage = user.isAdmin && (await getAdminPermissions(db, user.email))?.rights.includes("manage_generated_tests") === true;
 
@@ -107,7 +108,7 @@ generatedTestRoutes.get("/", async (c) => {
 generatedTestRoutes.get("/:id", async (c) => {
   const id = c.req.param("id") || "";
   const user = c.get("user");
-  const db = c.env.DB;
+  const db = getReadDb(c.env.DB);
   const serverNow = Date.now();
   const canManage = user.isAdmin && (await getAdminPermissions(db, user.email))?.rights.includes("manage_generated_tests") === true;
 
