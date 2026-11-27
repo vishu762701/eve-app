@@ -407,7 +407,7 @@ public class EvePackLibraryFragment extends BaseFragment {
         if (downloadProgressByPack.containsKey(pack.id)) {
             return;
         }
-        if (pack.isLockedForUser) {
+        if (pack.isLockedForUser && !org.telegram.ui.eve.admin.EveAdminConfig.hasEvePremiumAccess()) {
             presentFragment(new PremiumPreviewFragment("eve_pack_library"));
             return;
         }

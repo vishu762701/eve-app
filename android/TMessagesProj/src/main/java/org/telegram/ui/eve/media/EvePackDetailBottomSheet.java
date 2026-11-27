@@ -374,7 +374,7 @@ public class EvePackDetailBottomSheet extends BottomSheet {
         if (downloading || packId.isEmpty()) {
             return;
         }
-        if (packSummary != null && packSummary.isLockedForUser) {
+        if (packSummary != null && packSummary.isLockedForUser && !org.telegram.ui.eve.admin.EveAdminConfig.hasEvePremiumAccess()) {
             dismiss();
             if (parentFragment != null) {
                 parentFragment.presentFragment(new PremiumPreviewFragment("eve_pack_library"));

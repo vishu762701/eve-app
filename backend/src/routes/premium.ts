@@ -3,6 +3,7 @@
 // ============================================================================
 
 import { Hono } from "hono";
+import { getAdminPermissions, isOwnerEmail } from "../auth";
 import { AuthUser, Env, PremiumConfigRow, PremiumEntitlementRow, PremiumOrderRow } from "../types";
 import { AuditActionOptions, prepareAdminAuditLog } from "../util/auditLog";
 
@@ -63,6 +64,24 @@ export async function isUserPremium(db: D1Database, uid: string): Promise<boolea
     if (row.expires_at !== null && row.expires_at > Date.now()) return true;
   } catch (_e) {}
   return false;
+}
+
+export async function getAdminOrOwnerPremiumAccess(
+  db: D1Database,
+  user?: Pick<AuthUser, "email" | "isAdmin"> | null
+): Promise<{ isPrivileged: boolean; isOwner: boolean }> {
+  const email = user?.email ? user.email.trim().toLowerCase() : "";
+  if (!email) {
+    return { isPrivileged: false, isOwner: false };
+  }
+  const perms = await getAdminPermissions(db, email).catch(() => null);
+  if (perms) {
+    return { isPrivileged: true, isOwner: perms.isOwner };
+  }
+  if (user?.isAdmin) {
+    return { isPrivileged: true, isOwner: isOwnerEmail(email) };
+  }
+  return { isPrivileged: false, isOwner: false };
 }
 
 export async function activateUserPremium(
@@ -209,6 +228,22 @@ premiumRoutes.get("/status", async (c) => {
   const now = Date.now();
 
   try {
+    const adminAccess = await getAdminOrOwnerPremiumAccess(db, user);
+    if (adminAccess.isPrivileged) {
+      return c.json({
+        success: true,
+        data: {
+          isPremium: true,
+          status: "ACTIVE",
+          planName: adminAccess.isOwner ? "EVE Owner Access" : "EVE Admin Access",
+          activatedAt: 0,
+          expiresAt: null,
+          isLifetime: true,
+          source: adminAccess.isOwner ? "OWNER" : "ADMIN"
+        }
+      });
+    }
+
     const row = await db
       .prepare("SELECT * FROM premium_entitlements WHERE user_id = ?")
       .bind(user.uid)
@@ -367,7 +402,8 @@ premiumRoutes.get("/orders/:orderId/status", async (c) => {
     await db.prepare("UPDATE premium_orders SET status = 'EXPIRED' WHERE id = ?").bind(orderId).run();
   }
 
-  const isPremium = await isUserPremium(db, user.uid);
+  const adminAccess = await getAdminOrOwnerPremiumAccess(db, user);
+  const isPremium = adminAccess.isPrivileged || (await isUserPremium(db, user.uid));
 
   return c.json({
     success: true,

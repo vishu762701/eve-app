@@ -111,14 +111,13 @@ public class EveTelegramChatOnboardingFragment extends BaseFragment implements M
                 EveTelegramSessionManager.getInstance().launchTelegramLogin(EveTelegramChatOnboardingFragment.this));
         contentContainer.addView(connectButton, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48, Gravity.CENTER_HORIZONTAL, 12, 0, 12, 14));
 
-        if (EveTelegramSessionManager.shouldUseTestDc()) {
-            debugCaptionView = new TextView(context);
-            debugCaptionView.setText("Dev Test DC enabled: sign in with +999662XXXX and code 22222");
-            debugCaptionView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12.5f);
-            debugCaptionView.setGravity(Gravity.CENTER);
-            debugCaptionView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, resourceProvider));
-            contentContainer.addView(debugCaptionView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 8, 0, 8, 0));
-        }
+        debugCaptionView = new TextView(context);
+        debugCaptionView.setText("Sign in once with your phone number. Your login code will arrive in your Telegram app and your session will stay signed in across updates.");
+        debugCaptionView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12.5f);
+        debugCaptionView.setGravity(Gravity.CENTER);
+        debugCaptionView.setLineSpacing(dp(2), 1f);
+        debugCaptionView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, resourceProvider));
+        contentContainer.addView(debugCaptionView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 8, 0, 8, 0));
 
         scrollView.addView(contentContainer, LayoutHelper.createScroll(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER));
         root.addView(scrollView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));

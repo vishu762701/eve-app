@@ -76,6 +76,14 @@ public final class EveAdminConfig {
         return isServerAdminSession();
     }
 
+    public static boolean isOwner(EveUserProfile profile) {
+        return isServerAdminProfile(profile);
+    }
+
+    public static boolean hasEvePremiumAccess() {
+        return isAdminAvailable() || isOwner(EveAuthManager.getInstance().getCachedProfile());
+    }
+
     private static SharedPreferences prefs() {
         Context ctx = ApplicationLoader.applicationContext;
         if (ctx == null) {

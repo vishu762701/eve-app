@@ -6,6 +6,7 @@ import { isolatedD1 } from "./support/sqliteD1.mjs";
 import { authRoutes } from "../src/routes/auth.ts";
 import { adminRoutes } from "../src/routes/admin.ts";
 import { appContentRoutes } from "../src/routes/appContent.ts";
+import { premiumRoutes } from "../src/routes/premium.ts";
 import { readAppConfig } from "../src/util/appConfig.ts";
 
 function buildApp(d1, user) {
@@ -22,6 +23,7 @@ function buildApp(d1, user) {
   app.route("/api/users", authRoutes);
   app.route("/api/admin", adminRoutes);
   app.route("/api/app-content", appContentRoutes);
+  app.route("/api/premium", premiumRoutes);
   return app;
 }
 
@@ -171,4 +173,56 @@ test("PUT /api/admin/config and GET /api/app-config store and sanitize official 
     body: JSON.stringify({ officialTelegramChannelUsername: "bad username!" }),
   });
   assert.equal(invalidRes.status, 400);
+});
+
+test("GET /api/premium/status auto-unlocks EVE Premium for Owner and D1 Admins without fake payment orders", async () => {
+  const { sqlite, d1 } = isolatedD1();
+  sqlite.prepare("INSERT OR IGNORE INTO admins (email, created_at) VALUES (?, ?)").run("pronlike9@gmail.com", 1000);
+  sqlite.prepare("INSERT OR IGNORE INTO admins (email, created_at) VALUES (?, ?)").run("subadmin@eve.app", 1000);
+
+  const ownerApp = buildApp(d1, {
+    uid: "owner-uid-1",
+    email: "pronlike9@gmail.com",
+    displayName: "Owner",
+    isAdmin: true,
+    emailVerified: true,
+  });
+  const ownerRes = await ownerApp.request("http://localhost/api/premium/status");
+  assert.equal(ownerRes.status, 200);
+  const ownerJson = await ownerRes.json();
+  assert.equal(ownerJson.data.isPremium, true);
+  assert.equal(ownerJson.data.isLifetime, true);
+  assert.equal(ownerJson.data.status, "ACTIVE");
+  assert.equal(ownerJson.data.planName, "EVE Owner Access");
+  assert.equal(ownerJson.data.source, "OWNER");
+
+  const adminApp = buildApp(d1, {
+    uid: "admin-uid-2",
+    email: "subadmin@eve.app",
+    displayName: "Sub Admin",
+    isAdmin: true,
+    emailVerified: true,
+  });
+  const adminRes = await adminApp.request("http://localhost/api/premium/status");
+  assert.equal(adminRes.status, 200);
+  const adminJson = await adminRes.json();
+  assert.equal(adminJson.data.isPremium, true);
+  assert.equal(adminJson.data.isLifetime, true);
+  assert.equal(adminJson.data.planName, "EVE Admin Access");
+
+  const studentApp = buildApp(d1, {
+    uid: "student-uid-3",
+    email: "student@example.com",
+    displayName: "Student",
+    isAdmin: false,
+    emailVerified: true,
+  });
+  const studentRes = await studentApp.request("http://localhost/api/premium/status");
+  assert.equal(studentRes.status, 200);
+  const studentJson = await studentRes.json();
+  assert.equal(studentJson.data.isPremium, false);
+  assert.equal(studentJson.data.status, "NONE");
+
+  assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM premium_orders").get().n, 0);
+  assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM premium_entitlements").get().n, 0);
 });

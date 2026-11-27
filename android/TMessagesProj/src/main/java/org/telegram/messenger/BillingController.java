@@ -172,7 +172,11 @@ public class BillingController implements PurchasesUpdatedListener, BillingClien
     }
 
     public boolean isReady() {
-        return billingClient.isReady();
+        try {
+            return billingClient != null && billingClient.isReady();
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
     public interface ProductDetailsResponseListenerLegacy {

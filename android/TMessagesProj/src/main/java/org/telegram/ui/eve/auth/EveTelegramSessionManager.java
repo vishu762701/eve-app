@@ -61,10 +61,11 @@ public final class EveTelegramSessionManager {
     }
 
     /**
-     * Debug APKs default to Telegram Test DC; Release builds target Production DC.
+     * Production DC is the default across both Debug and Release builds because Telegram disabled
+     * +99966XYYYY Test DC accounts.
      */
     public static boolean shouldUseTestDc() {
-        return BuildVars.DEBUG_VERSION;
+        return false;
     }
 
     /**
@@ -171,6 +172,24 @@ public final class EveTelegramSessionManager {
         return !TextUtils.isEmpty(username) ? username.trim() : null;
     }
 
+    /**
+     * Automatically recovers any device previously switched to Test DC when no real MTProto session
+     * is active, without requiring app reinstall or clearing app data.
+     */
+    public void recoverStuckTestDcIfNeeded(int account) {
+        try {
+            if (shouldUseTestDc() || isRealMtprotoSession(account)) {
+                return;
+            }
+            ConnectionsManager cm = ConnectionsManager.getInstance(account);
+            if (cm != null && cm.isTestBackend()) {
+                cm.switchBackend(false);
+            }
+        } catch (Throwable t) {
+            FileLog.e("EveTelegramSessionManager: recoverStuckTestDcIfNeeded failed", t);
+        }
+    }
+
     public void launchTelegramLogin(@Nullable BaseFragment host) {
         if (host == null || host.getParentActivity() == null) {
             return;
@@ -179,6 +198,8 @@ public final class EveTelegramSessionManager {
         try {
             ConnectionsManager cm = ConnectionsManager.getInstance(account);
             if (shouldUseTestDc() && !cm.isTestBackend()) {
+                cm.switchBackend(false);
+            } else if (!shouldUseTestDc() && cm.isTestBackend()) {
                 cm.switchBackend(false);
             }
             if (!isRealMtprotoSession(account)) {

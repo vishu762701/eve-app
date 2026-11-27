@@ -1710,16 +1710,23 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                     Bundle args = new Bundle();
                     args.putBoolean("afterSignup", afterSignup);
                     MainTabsActivity existingMainTabs = null;
+                    int mainTabsIdx = -1;
                     if (parentLayout != null && parentLayout.getFragmentStack() != null) {
                         for (int i = parentLayout.getFragmentStack().size() - 1; i >= 0; i--) {
                             BaseFragment f = parentLayout.getFragmentStack().get(i);
                             if (f instanceof MainTabsActivity) {
                                 existingMainTabs = (MainTabsActivity) f;
+                                mainTabsIdx = i;
                                 break;
                             }
                         }
                     }
                     if (existingMainTabs != null) {
+                        if (parentLayout != null && parentLayout.getFragmentStack() != null) {
+                            for (int i = parentLayout.getFragmentStack().size() - 2; i > mainTabsIdx; i--) {
+                                parentLayout.removeFragmentFromStack(parentLayout.getFragmentStack().get(i));
+                            }
+                        }
                         existingMainTabs.onTelegramSessionStateChanged(true);
                         finishFragment();
                     } else {

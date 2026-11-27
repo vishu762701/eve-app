@@ -498,7 +498,7 @@ emojiRoutes.get("/packs/:id/manifest", async (c) => {
 
   const accessTier = (pack.access_tier || "free").toLowerCase();
   if (accessTier === "premium" && !user?.isAdmin) {
-    const hasPremium = user?.uid ? await isUserPremium(db, user.uid).catch(() => false) : false;
+    const hasPremium = Boolean(user?.isAdmin) || (user?.uid ? await isUserPremium(db, user.uid).catch(() => false) : false);
     if (!hasPremium) {
       return c.json({ success: false, code: "EVE_PREMIUM_REQUIRED", error: "Unlock EVE Premium to install this pack." }, 403);
     }
@@ -598,7 +598,7 @@ emojiRoutes.get("/assets/:id", async (c) => {
   }
 
   if ((row.access_tier || "free").toLowerCase() === "premium" && !user?.isAdmin) {
-    const hasPremium = user?.uid ? await isUserPremium(db, user.uid).catch(() => false) : false;
+    const hasPremium = Boolean(user?.isAdmin) || (user?.uid ? await isUserPremium(db, user.uid).catch(() => false) : false);
     if (!hasPremium) {
       return c.json({ success: false, code: "EVE_PREMIUM_REQUIRED", error: "EVE Premium required for this pack." }, 403);
     }

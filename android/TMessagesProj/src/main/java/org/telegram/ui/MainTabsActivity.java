@@ -1001,6 +1001,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
 
     @Override
     public boolean onFragmentCreate() {
+        org.telegram.ui.eve.auth.EveTelegramSessionManager.getInstance().recoverStuckTestDcIfNeeded(currentAccount);
         lastKnownMtprotoConnected = org.telegram.ui.eve.auth.EveTelegramSessionManager.getInstance().isRealMtprotoSession(currentAccount);
         observersGroup = NotificationCenter.getInstance(currentAccount)
             .createObserversGroup(this)

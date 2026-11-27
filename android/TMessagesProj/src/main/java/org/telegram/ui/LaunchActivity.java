@@ -506,6 +506,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         Theme.loadWallpaper(true);
 
         checkCurrentAccount();
+        org.telegram.ui.eve.auth.EveTelegramSessionManager.getInstance().recoverStuckTestDcIfNeeded(currentAccount);
         updateCurrentConnectionState(currentAccount);
         NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.closeOtherAppActivities, this);
 

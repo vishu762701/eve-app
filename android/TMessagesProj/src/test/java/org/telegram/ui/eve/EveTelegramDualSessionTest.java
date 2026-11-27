@@ -19,15 +19,16 @@ import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 import org.telegram.messenger.ApplicationLoader;
-import org.telegram.messenger.BuildVars;
 import org.telegram.messenger.R;
 import org.telegram.ui.MainTabsActivity;
+import org.telegram.ui.eve.admin.EveAdminConfig;
 import org.telegram.ui.eve.admin.EveAdminModels;
 import org.telegram.ui.eve.auth.EveAuthCoordinator;
 import org.telegram.ui.eve.auth.EveBackendClient;
 import org.telegram.ui.eve.auth.EveTelegramChatOnboardingFragment;
 import org.telegram.ui.eve.auth.EveTelegramSessionManager;
 import org.telegram.ui.eve.auth.EveUserProfile;
+import org.telegram.ui.eve.premium.EvePremiumRepository;
 
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -46,7 +47,8 @@ public class EveTelegramDualSessionTest {
 
     @Test
     public void testDcAndRealMtprotoSessionGuards_behaveDeterministically() {
-        assertEquals(BuildVars.DEBUG_VERSION, EveTelegramSessionManager.shouldUseTestDc());
+        // Production DC must be default across Debug and Release builds.
+        assertFalse(EveTelegramSessionManager.shouldUseTestDc());
 
         long eveSyntheticId = 123456789L;
         assertFalse(EveTelegramSessionManager.isRealMtprotoUserId(false, 9996628429L, eveSyntheticId));
@@ -54,6 +56,33 @@ public class EveTelegramDualSessionTest {
         assertFalse(EveTelegramSessionManager.isRealMtprotoUserId(true, eveSyntheticId, eveSyntheticId));
         assertTrue(EveTelegramSessionManager.isRealMtprotoUserId(true, 9996628429L, eveSyntheticId));
         assertTrue(EveTelegramSessionManager.isRealMtprotoUserId(true, 555001L, 0L));
+    }
+
+    @Test
+    public void ownerAndAdminEvePremiumAutoUnlock_worksWithoutSpoofingTelegramPremium() {
+        EveUserProfile owner = new EveUserProfile(
+                "own-1", "EV-OWN01", "Owner", "pronlike9@gmail.com", "", "google.com",
+                true, EveUserProfile.STATUS_ACTIVE, true, "owner", "General", "", 1L, 1L, 1L, true);
+        EveUserProfile student = new EveUserProfile(
+                "stu-1", "EV-STU01", "Student", "student@example.com", "", "google.com",
+                true, EveUserProfile.STATUS_ACTIVE, false, "stu", "General", "", 1L, 1L, 1L, true);
+
+        assertTrue(EveAdminConfig.isOwner(owner));
+        assertFalse(EveAdminConfig.isOwner(student));
+
+        EvePremiumRepository.EntitlementStatus unlocked = EvePremiumRepository.resolveEffectiveEntitlement(
+                new EvePremiumRepository.EntitlementStatus(false, "NONE", "", 0L, null, false, ""),
+                true);
+        assertTrue(unlocked.isPremium);
+        assertTrue(unlocked.isLifetime);
+        assertEquals("ACTIVE", unlocked.status);
+        assertEquals("EVE Owner Access", unlocked.planName);
+
+        EvePremiumRepository.EntitlementStatus locked = EvePremiumRepository.resolveEffectiveEntitlement(
+                new EvePremiumRepository.EntitlementStatus(false, "NONE", "", 0L, null, false, ""),
+                false);
+        assertFalse(locked.isPremium);
+        assertEquals("NONE", locked.status);
     }
 
     @Test

@@ -19,6 +19,7 @@ import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.telegram.messenger.FileLog;
+import org.telegram.ui.eve.admin.EveAdminConfig;
 import org.telegram.ui.eve.auth.EveAuthManager;
 import org.telegram.ui.eve.auth.EveBackendClient;
 
@@ -184,41 +185,73 @@ public final class EvePremiumRepository {
         return local;
     }
 
+    public boolean isOwnerOrAdminUnlocked() {
+        return EveAdminConfig.hasEvePremiumAccess();
+    }
+
+    public static EntitlementStatus resolveEffectiveEntitlement(EntitlementStatus serverStatus, boolean isAdminOrOwner) {
+        if (isAdminOrOwner) {
+            if (serverStatus != null && serverStatus.isPremium) {
+                return serverStatus;
+            }
+            return new EntitlementStatus(true, "ACTIVE", "EVE Owner Access", 0L, null, true, "OWNER");
+        }
+        return serverStatus != null
+                ? serverStatus
+                : new EntitlementStatus(false, "NONE", "", 0L, null, false, "");
+    }
+
     public void loadSnapshot(Callback<PremiumSnapshot> callback) {
+        final boolean ownerUnlocked = isOwnerOrAdminUnlocked();
         FirebaseUser user = EveAuthManager.getInstance().getCurrentUser();
         if (user == null) {
-            loadPublicPlanOnly(callback);
+            loadPublicPlanOnly(callback, ownerUnlocked);
             return;
         }
         user.getIdToken(false).addOnSuccessListener(result -> {
             String token = result != null ? result.getToken() : null;
             if (token == null || token.trim().isEmpty()) {
-                loadPublicPlanOnly(callback);
+                loadPublicPlanOnly(callback, ownerUnlocked);
                 return;
             }
             executor.execute(() -> {
                 try {
                     PlanDetails plan = parsePlan(client.getJsonRoot("/api/premium/plan", token).optJSONObject("data"));
-                    EntitlementStatus status = parseStatus(client.getJsonRoot("/api/premium/status", token).optJSONObject("data"));
-                    post(callback, new PremiumSnapshot(plan, status), null);
+                    EntitlementStatus serverStatus = parseStatus(client.getJsonRoot("/api/premium/status", token).optJSONObject("data"));
+                    EntitlementStatus effective = resolveEffectiveEntitlement(serverStatus, isOwnerOrAdminUnlocked());
+                    post(callback, new PremiumSnapshot(plan, effective), null);
                 } catch (Throwable t) {
                     FileLog.e("EvePremiumRepository: loadSnapshot failed", t);
+                    if (isOwnerOrAdminUnlocked()) {
+                        post(callback, new PremiumSnapshot(
+                                new PlanDetails(false, "default", "EVE Owner Access", 0, "INR", 0, true,
+                                        "All EVE Premium exam and analytics features are unlocked for this Owner/Admin account.",
+                                        Collections.singletonList("Unlimited eligible mock test reattempts & full Owner access"),
+                                        false, false, 10),
+                                resolveEffectiveEntitlement(null, true)
+                        ), null);
+                        return;
+                    }
                     post(callback, null, t.getMessage() != null ? t.getMessage() : "Unable to load EVE Premium details.");
                 }
             });
-        }).addOnFailureListener(e -> loadPublicPlanOnly(callback));
+        }).addOnFailureListener(e -> loadPublicPlanOnly(callback, ownerUnlocked));
     }
 
-    private void loadPublicPlanOnly(Callback<PremiumSnapshot> callback) {
+    private void loadPublicPlanOnly(Callback<PremiumSnapshot> callback, boolean ownerUnlocked) {
         executor.execute(() -> {
             try {
                 // Plan info requires Firebase auth token on Worker; return clean unauthenticated prompt if signed out.
                 post(callback, new PremiumSnapshot(
-                        new PlanDetails(false, "default", "EVE Premium", 99, "INR", 30, false,
-                                "Sign in with EVE Cloud Account to view your plan & entitlement.",
+                        new PlanDetails(false, "default", ownerUnlocked ? "EVE Owner Access" : "EVE Premium", 99, "INR", 30, ownerUnlocked,
+                                ownerUnlocked
+                                        ? "All EVE Premium features are unlocked for your Owner/Admin account."
+                                        : "Sign in with EVE Cloud Account to view your plan & entitlement.",
                                 Collections.singletonList("Unlimited eligible mock test reattempts"),
-                                true, true, 10),
-                        new EntitlementStatus(false, "SIGNED_OUT", "", 0L, null, false, "")
+                                !ownerUnlocked, !ownerUnlocked, 10),
+                        resolveEffectiveEntitlement(
+                                new EntitlementStatus(false, "SIGNED_OUT", "", 0L, null, false, ""),
+                                ownerUnlocked)
                 ), null);
             } catch (Throwable t) {
                 post(callback, null, t.getMessage());

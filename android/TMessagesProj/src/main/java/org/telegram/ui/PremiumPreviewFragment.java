@@ -1142,11 +1142,19 @@ public class PremiumPreviewFragment extends BaseFragment implements Notification
     }
 
     public static void buyPremium(BaseFragment fragment, SubscriptionTier tier, String source, boolean forcePremium, BillingFlowParams.SubscriptionUpdateParams updateParams) {
-        if (BuildVars.IS_BILLING_UNAVAILABLE) {
+        if (BuildVars.IS_BILLING_UNAVAILABLE
+                || (!BuildVars.useInvoiceBilling() && (!BillingController.getInstance().isReady() || BillingController.PREMIUM_PRODUCT_DETAILS == null))) {
             if (fragment == null) {
-                new PremiumNotAvailableBottomSheet(fragment).show();
-            } else {
-                fragment.showDialog(new PremiumNotAvailableBottomSheet(fragment));
+                try {
+                    new PremiumNotAvailableBottomSheet(fragment).show();
+                } catch (Throwable ignored) {
+                }
+            } else if (fragment.getParentActivity() != null) {
+                try {
+                    fragment.showDialog(new PremiumNotAvailableBottomSheet(fragment));
+                } catch (Throwable ignored) {
+                    BulletinFactory.of(fragment).createSimpleBulletin(R.raw.info, getString(R.string.SubscribeToPremiumNotAvailable)).show();
+                }
             }
             return;
         }
@@ -1640,9 +1648,15 @@ public class PremiumPreviewFragment extends BaseFragment implements Notification
                 } else if (position == statusRow && type == FEATURES_BUSINESS) {
                     privacyCell.setText(getString(R.string.PremiumPreviewMoreBusinessFeaturesInfo));
                 } else if (position == statusRow && isEvePremiumTransformEnabled()) {
-                    if (evePremiumSnapshot != null && evePremiumSnapshot.status.isPremium) {
-                        String exp = evePremiumSnapshot.status.isLifetime ? "Lifetime" : "Active";
-                        privacyCell.setText(getString(R.string.EvePremiumActive) + " • " + evePremiumSnapshot.status.planName + " (" + exp + ")");
+                    if (org.telegram.ui.eve.admin.EveAdminConfig.hasEvePremiumAccess()
+                            || (evePremiumSnapshot != null && evePremiumSnapshot.status.isPremium)) {
+                        String planLabel = (evePremiumSnapshot != null && !evePremiumSnapshot.status.planName.isEmpty())
+                                ? evePremiumSnapshot.status.planName
+                                : "EVE Owner Access";
+                        boolean isLife = org.telegram.ui.eve.admin.EveAdminConfig.hasEvePremiumAccess()
+                                || (evePremiumSnapshot != null && evePremiumSnapshot.status.isLifetime);
+                        String exp = isLife ? "Lifetime" : "Active";
+                        privacyCell.setText(getString(R.string.EvePremiumActive) + " • " + planLabel + " (" + exp + ")");
                     } else if (evePremiumSnapshot != null && evePremiumSnapshot.plan.isEnabled) {
                         privacyCell.setText("₹" + evePremiumSnapshot.plan.priceInr + " • " + (evePremiumSnapshot.plan.isLifetime ? "Lifetime" : evePremiumSnapshot.plan.durationDays + " days") + " • Managed by EVE Admin Control Center");
                     } else {
@@ -2245,10 +2259,13 @@ public class PremiumPreviewFragment extends BaseFragment implements Notification
             return;
         }
         if (isEvePremiumTransformEnabled() && type == FEATURES_PREMIUM) {
-            if (evePremiumSnapshot != null && evePremiumSnapshot.status.isPremium) {
+            if (org.telegram.ui.eve.admin.EveAdminConfig.hasEvePremiumAccess()
+                    || (evePremiumSnapshot != null && evePremiumSnapshot.status.isPremium)) {
                 premiumButtonView.setButton(getString(R.string.EvePremiumActive), null, animated);
                 premiumButtonView.setFlickerDisabled(true);
-                buttonContainerInternal.setOnClickListener(v -> loadEvePremiumData());
+                buttonContainerInternal.setOnClickListener(v -> BulletinFactory.of(this)
+                        .createSimpleBulletin(R.raw.contact_check, getString(R.string.EvePremiumActive))
+                        .show());
             } else if (evePremiumSnapshot != null && evePremiumSnapshot.plan.isEnabled) {
                 premiumButtonView.setButton(getString(R.string.EvePremiumPayUpi) + " • ₹" + evePremiumSnapshot.plan.priceInr, null, animated);
                 premiumButtonView.setFlickerDisabled(false);
@@ -2278,8 +2295,8 @@ public class PremiumPreviewFragment extends BaseFragment implements Notification
             return;
         }
         if (!BuildVars.useInvoiceBilling() && (!BillingController.getInstance().isReady() || subscriptionTiers.isEmpty() || selectedTierIndex >= subscriptionTiers.size() || subscriptionTiers.get(selectedTierIndex).googlePlayProductDetails == null)) {
-            premiumButtonView.setButton(getString(R.string.Loading), null, animated);
-            buttonContainerInternal.setOnClickListener(v -> {});
+            premiumButtonView.setButton(getString(R.string.SubscribeToPremiumNotAvailable), null, animated);
+            buttonContainerInternal.setOnClickListener(v -> buyPremium(this));
             premiumButtonView.setFlickerDisabled(true);
             return;
         }

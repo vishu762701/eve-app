@@ -195,6 +195,11 @@ public final class EveAuthManager {
         return user != null && !user.isAnonymous();
     }
 
+    public boolean hasEvePremiumOwnerAccess() {
+        return org.telegram.ui.eve.admin.EveAdminConfig.isAdminAvailable()
+                || org.telegram.ui.eve.admin.EveAdminConfig.isOwner(getCachedProfile());
+    }
+
     public void refreshSessionSilentlyIfSignedIn() {
         ensureInitialized();
         FirebaseUser user = getCurrentUser();
