@@ -303,6 +303,21 @@ public final class EvePremiumRepository {
     }
 
     /**
+     * Pure-Java ZXing encoder using {@link ErrorCorrectionLevel#H} so UPI QR payloads
+     * survive the compact center emblem safely across GPay, PhonePe, Paytm, and BHIM.
+     */
+    public static BitMatrix encodeUpiQrMatrix(String content) throws Exception {
+        if (content == null || content.trim().isEmpty()) {
+            return null;
+        }
+        Map<EncodeHintType, Object> hints = new EnumMap<>(EncodeHintType.class);
+        hints.put(EncodeHintType.ERROR_CORRECTION, ErrorCorrectionLevel.H);
+        hints.put(EncodeHintType.MARGIN, 0);
+        hints.put(EncodeHintType.CHARACTER_SET, "UTF-8");
+        return new QRCodeWriter().encode(content, BarcodeFormat.QR_CODE, 0, 0, hints);
+    }
+
+    /**
      * Telegram-styled UPI QR generator using ZXing {@link ErrorCorrectionLevel#H},
      * rounded data dots, smooth rounded finder corners, and a compact center ₹ emblem
      * safely within Error Correction Level H (~30%) recovery tolerance for GPay/PhonePe/Paytm/BHIM.
@@ -312,18 +327,19 @@ public final class EvePremiumRepository {
             return null;
         }
         try {
-            Map<EncodeHintType, Object> hints = new EnumMap<>(EncodeHintType.class);
-            hints.put(EncodeHintType.ERROR_CORRECTION, ErrorCorrectionLevel.H);
-            hints.put(EncodeHintType.MARGIN, 0);
-            hints.put(EncodeHintType.CHARACTER_SET, "UTF-8");
-
-            BitMatrix matrix = new QRCodeWriter().encode(content, BarcodeFormat.QR_CODE, 0, 0, hints);
+            BitMatrix matrix = encodeUpiQrMatrix(content);
+            if (matrix == null) {
+                return null;
+            }
             int modules = Math.max(matrix.getWidth(), matrix.getHeight());
             if (modules <= 0) {
                 return null;
             }
 
             Bitmap bmp = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888);
+            if (bmp == null) {
+                return null;
+            }
             Canvas canvas = new Canvas(bmp);
             canvas.drawColor(Color.TRANSPARENT);
 
@@ -387,7 +403,10 @@ public final class EvePremiumRepository {
 
             return bmp;
         } catch (Throwable t) {
-            FileLog.e("EvePremiumRepository: QR generation failed", t);
+            try {
+                FileLog.e("EvePremiumRepository: QR generation failed", t);
+            } catch (Throwable ignored) {
+            }
             return null;
         }
     }

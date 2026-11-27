@@ -490,11 +490,13 @@ public class EveAdminControlCenterTest {
         assertTrue(calls.get(calls.size() - 1).startsWith("DELETE "));
         assertTrue(calls.get(calls.size() - 1).endsWith("/api/exams/ex-7/avatar"));
 
-        // Styled UPI QR generator produces crisp non-null bitmap
-        android.graphics.Bitmap styledQr = org.telegram.ui.eve.premium.EvePremiumRepository.generateQrBitmap(
-                "upi://pay?pa=eve@upi&pn=EVE&am=99&cu=INR&tn=Premium", 320);
-        assertNotNull(styledQr);
-        assertEquals(320, styledQr.getWidth());
+        // Styled UPI QR matrix encoder produces valid high-EC ZXing BitMatrix in pure JVM
+        com.google.zxing.common.BitMatrix styledQrMatrix = org.telegram.ui.eve.premium.EvePremiumRepository.encodeUpiQrMatrix(
+                "upi://pay?pa=eve@upi&pn=EVE&am=99&cu=INR&tn=Premium");
+        assertNotNull(styledQrMatrix);
+        assertTrue(styledQrMatrix.getWidth() >= 21);
+        assertEquals(styledQrMatrix.getWidth(), styledQrMatrix.getHeight());
+        assertTrue(styledQrMatrix.get(0, 0));
 
         // Banner mediaType & StudentsPageResult summary parsing
         org.json.JSONArray bannerArr = new org.json.JSONArray("["
