@@ -482,7 +482,7 @@ public class EveAdminExamAnalyticsFragment extends BaseFragment {
             static { setup(new Factory()); }
 
             @Override
-            public RangeChipsView createView(Context context, UniversalRecyclerView listView, int currentAccount, int classGuid, Theme.ResourcesProvider rp) {
+            public RangeChipsView createView(Context context, RecyclerListView listView, int currentAccount, int classGuid, Theme.ResourcesProvider rp) {
                 return new RangeChipsView(context, rp);
             }
 

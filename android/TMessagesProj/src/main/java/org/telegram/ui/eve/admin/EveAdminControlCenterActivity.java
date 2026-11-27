@@ -62,6 +62,7 @@ public class EveAdminControlCenterActivity extends BaseFragment {
     private int activeRequestSeq;
     private EveAdminRepository.ResultCallback<EveAdminModels.DashboardSnapshot> activeCallback;
     private EveAdminModels.DashboardSnapshot snapshot;
+    private EveAdminModels.AppConfigModel appConfig;
     private final EveAdminUiChrome.AutoSyncController autoSync = new EveAdminUiChrome.AutoSyncController(this::refreshDashboard);
 
     @Override
@@ -104,6 +105,7 @@ public class EveAdminControlCenterActivity extends BaseFragment {
         setHasOwnBackground(true);
 
         snapshot = repo.getCachedSnapshot();
+        appConfig = repo.getCachedAppConfig();
         String initialSubtitle = (snapshot != null && snapshot.adminProfile != null)
                 ? snapshot.adminProfile.customTitle + " • " + snapshot.adminProfile.email
                 : "Admin Dashboard";
@@ -134,19 +136,42 @@ public class EveAdminControlCenterActivity extends BaseFragment {
 
         fragmentView = chrome.rootView;
         refreshDashboard();
+        loadLiveAppConfig();
         return chrome.rootView;
     }
 
     @Override
     public void onResume() {
         super.onResume();
+        appConfig = repo.getCachedAppConfig();
         EveAdminModels.DashboardSnapshot latestCached = repo.getCachedSnapshot();
         if (latestCached != null && latestCached != snapshot && snapshot == null) {
             snapshot = latestCached;
             updateHeaderSubtitle();
             updateList();
         }
+        loadLiveAppConfig();
         autoSync.onResume();
+    }
+
+    private void loadLiveAppConfig() {
+        if (destroyed) return;
+        EveAdminRepository.ResultCallback<EveAdminModels.AppConfigModel> cb =
+                new EveAdminRepository.ResultCallback<EveAdminModels.AppConfigModel>() {
+                    @Override
+                    public void onSuccess(EveAdminModels.AppConfigModel cfg) {
+                        if (destroyed || cfg == null) return;
+                        appConfig = cfg;
+                        if (listView != null && listView.adapter != null) {
+                            listView.adapter.update(true);
+                        }
+                    }
+
+                    @Override
+                    public void onError(String message, int httpStatus) {
+                    }
+                };
+        repo.runWithAdminToken(cb, token -> repo.postSuccess(cb, repo.fetchAppConfig(token)));
     }
 
     @Override
@@ -346,7 +371,7 @@ public class EveAdminControlCenterActivity extends BaseFragment {
         // Card 3: System & Insights
         items.add(UItem.asHeader("System & Insights"));
         boolean canConfig = !hasSnapshot || EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_CONFIG);
-        boolean maintenanceActive = snapshot != null && snapshot.appConfig != null && snapshot.appConfig.maintenanceMode;
+        boolean maintenanceActive = appConfig != null && appConfig.maintenanceMode;
         if (canConfig) {
             items.add(UItem.asCheck(ID_MAINTENANCE_SWITCH, "Maintenance Mode").setChecked(maintenanceActive));
         }
@@ -441,7 +466,11 @@ public class EveAdminControlCenterActivity extends BaseFragment {
                 presentFragment(new EveAdminCrashReportsFragment(profile));
                 break;
             case ID_MOD_APP_CONFIG:
-                presentFragment(new EveAdminMaintenanceConfigFragment(snapshot != null ? snapshot.appConfig : null, this::refreshDashboard));
+                presentFragment(new EveAdminMaintenanceConfigFragment(appConfig, () -> {
+                    appConfig = repo.getCachedAppConfig();
+                    loadLiveAppConfig();
+                    refreshDashboard();
+                }));
                 break;
             case ID_MOD_INSIGHTS_SYSTEM:
                 presentFragment(new EveAdminInsightsAndSystemFragment(profile));
@@ -458,7 +487,7 @@ public class EveAdminControlCenterActivity extends BaseFragment {
     private void confirmAndToggleMaintenance(View view) {
         Activity activity = getParentActivity();
         if (activity == null) return;
-        EveAdminModels.AppConfigModel currentCfg = snapshot != null ? snapshot.appConfig : null;
+        EveAdminModels.AppConfigModel currentCfg = appConfig != null ? appConfig : repo.getCachedAppConfig();
         boolean currentState = currentCfg != null && currentCfg.maintenanceMode;
         boolean nextState = !currentState;
 
@@ -475,8 +504,14 @@ public class EveAdminControlCenterActivity extends BaseFragment {
                 @Override
                 public void onSuccess(EveAdminModels.AppConfigModel updated) {
                     if (destroyed) return;
+                    if (updated != null) {
+                        appConfig = updated;
+                    }
                     BulletinFactory.of(EveAdminControlCenterActivity.this)
-                            .createSuccessBulletin(updated.maintenanceMode ? "Maintenance Mode enabled" : "Maintenance Mode disabled").show();
+                            .createSuccessBulletin(updated != null && updated.maintenanceMode ? "Maintenance Mode enabled" : "Maintenance Mode disabled").show();
+                    if (listView != null && listView.adapter != null) {
+                        listView.adapter.update(true);
+                    }
                     refreshDashboard();
                 }
 
@@ -492,7 +527,7 @@ public class EveAdminControlCenterActivity extends BaseFragment {
             };
             repo.runWithAdminToken(cb, token -> {
                 EveAdminModels.AppConfigModel latest = currentCfg != null ? currentCfg : repo.fetchAppConfig(token);
-                int minVer = latest != null ? Math.max(1, latest.minimumSupportedVersionCode) : 1;
+                int minVer = latest != null ? Math.max(1, latest.minSupportedVersionCode) : 1;
                 String msg = latest != null && !TextUtils.isEmpty(latest.maintenanceMessage)
                         ? latest.maintenanceMessage
                         : "EVE is under scheduled maintenance. Please check back shortly.";

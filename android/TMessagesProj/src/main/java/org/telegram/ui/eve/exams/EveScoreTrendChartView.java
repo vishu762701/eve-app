@@ -19,6 +19,7 @@ import android.view.View;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.ui.ActionBar.Theme;
+import org.telegram.ui.Components.RecyclerListView;
 import org.telegram.ui.Components.UItem;
 import org.telegram.ui.Components.UniversalAdapter;
 import org.telegram.ui.Components.UniversalRecyclerView;
@@ -240,7 +241,7 @@ public class EveScoreTrendChartView extends View implements Theme.Colorable {
         }
 
         @Override
-        public EveScoreTrendChartView createView(Context context, UniversalRecyclerView listView, int currentAccount, int classGuid, Theme.ResourcesProvider resourcesProvider) {
+        public EveScoreTrendChartView createView(Context context, RecyclerListView listView, int currentAccount, int classGuid, Theme.ResourcesProvider resourcesProvider) {
             return new EveScoreTrendChartView(context, resourcesProvider);
         }
 

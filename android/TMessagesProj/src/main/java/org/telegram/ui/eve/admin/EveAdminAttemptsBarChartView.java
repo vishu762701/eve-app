@@ -18,6 +18,7 @@ import android.view.View;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.ui.ActionBar.Theme;
+import org.telegram.ui.Components.RecyclerListView;
 import org.telegram.ui.Components.UItem;
 import org.telegram.ui.Components.UniversalAdapter;
 import org.telegram.ui.Components.UniversalRecyclerView;
@@ -188,7 +189,7 @@ public class EveAdminAttemptsBarChartView extends View implements Theme.Colorabl
         }
 
         @Override
-        public EveAdminAttemptsBarChartView createView(Context context, UniversalRecyclerView listView, int currentAccount, int classGuid, Theme.ResourcesProvider resourcesProvider) {
+        public EveAdminAttemptsBarChartView createView(Context context, RecyclerListView listView, int currentAccount, int classGuid, Theme.ResourcesProvider resourcesProvider) {
             return new EveAdminAttemptsBarChartView(context, resourcesProvider);
         }
 

@@ -17,6 +17,7 @@ import android.view.View;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.ui.ActionBar.Theme;
+import org.telegram.ui.Components.RecyclerListView;
 import org.telegram.ui.Components.UItem;
 import org.telegram.ui.Components.UniversalAdapter;
 import org.telegram.ui.Components.UniversalRecyclerView;
@@ -188,7 +189,7 @@ public class EveQuestionTimeChartView extends View implements Theme.Colorable {
         }
 
         @Override
-        public EveQuestionTimeChartView createView(Context context, UniversalRecyclerView listView, int currentAccount, int classGuid, Theme.ResourcesProvider resourcesProvider) {
+        public EveQuestionTimeChartView createView(Context context, RecyclerListView listView, int currentAccount, int classGuid, Theme.ResourcesProvider resourcesProvider) {
             return new EveQuestionTimeChartView(context, resourcesProvider);
         }
 
