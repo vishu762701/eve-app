@@ -639,14 +639,159 @@ test("Mini App routes use D1 read session + single db.batch([...]) round-trip an
   assert.equal(body.data.config.aiProvider, "groq");
   assert.deepEqual(sessionModes, ["first-unconstrained"]);
   assert.equal(batchCalls, 1);
-  assert.equal(lastBatchCount, 10);
+  assert.equal(lastBatchCount, 12);
 
-  // Verify HTML UI contains localStorage SWR cache & diff check
+  // Verify HTML UI contains Cache-Control max-age=300, BackButton, HapticFeedback, 3-Card Hub & localStorage SWR v2
   const pageRes = await app.request("/admin-miniapp");
   assert.equal(pageRes.status, 200);
+  assert.equal(pageRes.headers.get("Cache-Control"), "public, max-age=300");
   const html = await pageRes.text();
-  assert.ok(html.includes("eve_miniapp_swr_v1:"));
+  assert.ok(html.includes("eve_miniapp_swr_v2:"));
   assert.ok(html.includes("localStorage.getItem"));
   assert.ok(html.includes("swrInvalidate"));
   assert.ok(html.includes("Cached · Syncing"));
+  assert.ok(html.includes("BackButton"));
+  assert.ok(html.includes("HapticFeedback"));
+  assert.ok(html.includes("Exams &amp; Content"));
+  assert.ok(html.includes("Students &amp; Revenue"));
+  assert.ok(html.includes("System &amp; Access"));
+});
+
+import { MINIAPP_SCRIPT } from "../src/miniapp/script.ts";
+
+test("Mini App modular JS compiles cleanly with zero syntax errors and all parity API routes work end-to-end", async () => {
+  // Verify browser JS string has zero syntax or template-escaping bugs
+  assert.doesNotThrow(() => new Function(MINIAPP_SCRIPT));
+
+  await isolatedD1(async (db) => {
+    const botToken = "77777:FULL_PARITY_MINIAPP_TOKEN";
+    const nowSec = Math.floor(Date.now() / 1000);
+    const ownerInitData = await signTelegramInitData(
+      { auth_date: String(nowSec), user: { id: 7777, username: "vishu" } },
+      botToken
+    );
+
+    const r2Objects = new Map();
+    const mockR2 = {
+      async put(k, b, o) { r2Objects.set(k, { b, o }); },
+      async get(k) { return r2Objects.get(k) || null; },
+      async delete(keys) { (Array.isArray(keys) ? keys : [keys]).forEach((k) => r2Objects.delete(k)); },
+    };
+
+    const app = new Hono();
+    app.use("*", async (c, next) => {
+      c.env = { DB: db, EMOJI_BUCKET: mockR2, TELEGRAM_BOT_TOKEN: botToken, TELEGRAM_OWNER_ID: "7777" };
+      await next();
+    });
+    app.route("/api/telegram/miniapp", telegramMiniAppApi);
+
+    const h = { "Content-Type": "application/json", "X-Telegram-Init-Data": ownerInitData };
+
+    // 1. Create Exam & Sub-Exam + Bulk JSON Question Import
+    const createEx = await app.request("/api/telegram/miniapp/exams", {
+      method: "POST",
+      headers: h,
+      body: JSON.stringify({ examName: "UPSC CSE", category: "UPSC", questionCount: 10, negativeMarkingText: "1/3" }),
+    });
+    assert.equal(createEx.status, 201);
+    const parentId = (await createEx.json()).data.id;
+
+    const createSub = await app.request("/api/telegram/miniapp/exams", {
+      method: "POST",
+      headers: h,
+      body: JSON.stringify({ examName: "UPSC Polity", category: "UPSC", parentExamId: parentId }),
+    });
+    assert.equal(createSub.status, 201);
+
+    const bulkRes = await app.request(`/api/telegram/miniapp/exams/${parentId}/questions/import`, {
+      method: "POST",
+      headers: h,
+      body: JSON.stringify({
+        questions: [
+          { questionText: "Art 14?", optionA: "Equality", optionB: "Speech", optionC: "Life", optionD: "Property", correctAnswer: "A", explanation: "Right to Equality" },
+          { questionText: "Art 21?", optionA: "Equality", optionB: "Speech", optionC: "Life & Liberty", optionD: "Taxes", correctAnswer: "C", explanation: "Personal Liberty" },
+        ],
+      }),
+    });
+    assert.equal(bulkRes.status, 201);
+    assert.equal((await bulkRes.json()).count, 2);
+
+    const qListRes = await app.request(`/api/telegram/miniapp/exams/${parentId}/questions`, { headers: h });
+    const qList = (await qListRes.json()).data;
+    assert.equal(qList.length, 2);
+
+    // 2. Content Hub: Poll + Banner + Broadcast + Flagged Question Fixer
+    const pollRes = await app.request("/api/telegram/miniapp/polls", {
+      method: "POST",
+      headers: h,
+      body: JSON.stringify({ question: "Next test?", options: ["GS-1", "CSAT"] }),
+    });
+    assert.equal(pollRes.status, 201);
+
+    const bannerRes = await app.request("/api/telegram/miniapp/banners", {
+      method: "POST",
+      headers: h,
+      body: JSON.stringify({
+        base64: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 16, 74, 70, 73, 70, 0, 1]).toString("base64"),
+        mimeType: "image/jpeg",
+        linkUrl: "https://eve-app.example.com",
+      }),
+    });
+    assert.equal(bannerRes.status, 201);
+
+    await db
+      .prepare("INSERT INTO question_reports (id, question_id, exam_id, exam_name, question_text, reason, student_id, student_email, timestamp, status, report_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'content')")
+      .bind("rep-1", qList[0].id, parentId, "UPSC CSE", "Art 14?", "Typo", "stu-1", "s@test.com", Date.now())
+      .run();
+
+    const detailRes = await app.request("/api/telegram/miniapp/reports/rep-1/detail", { headers: h });
+    assert.equal(detailRes.status, 200);
+    assert.equal((await detailRes.json()).data.question.optionA, "Equality");
+
+    const fixRes = await app.request("/api/telegram/miniapp/reports/rep-1/fix-question", {
+      method: "PUT",
+      headers: h,
+      body: JSON.stringify({
+        questionText: "Article 14 deals with?",
+        optionA: "Equality before Law",
+        optionB: "Freedom of Speech",
+        optionC: "Right to Life",
+        optionD: "Right to Property",
+        correctAnswer: "A",
+        explanation: "Article 14 guarantees equality.",
+      }),
+    });
+    assert.equal(fixRes.status, 200);
+    const fixedRow = await db.prepare("SELECT status FROM question_reports WHERE id = 'rep-1'").first();
+    assert.equal(fixedRow.status, "dismissed");
+
+    // 3. Students Profile, Premium Config, Admin Roles & Audit Log
+    await db.prepare("INSERT INTO users (id, email, display_name, eve_id, disabled) VALUES (?, ?, ?, ?, 0)").bind("stu-p", "pro@eve.app", "Priya", "EVE777").run();
+    const stuDetail = await app.request("/api/telegram/miniapp/students/stu-p", { headers: h });
+    assert.equal(stuDetail.status, 200);
+    assert.equal((await stuDetail.json()).data.student.eveId, "EVE777");
+
+    const roleAdd = await app.request("/api/telegram/miniapp/roles", {
+      method: "POST",
+      headers: h,
+      body: JSON.stringify({ email: "mod@eve.app", customTitle: "Moderator" }),
+    });
+    assert.equal(roleAdd.status, 201);
+
+    const roleEdit = await app.request("/api/telegram/miniapp/roles/mod%40eve.app/rights", {
+      method: "PUT",
+      headers: h,
+      body: JSON.stringify({ rights: ["moderate_feedback"], customTitle: "Senior Mod" }),
+    });
+    assert.equal(roleEdit.status, 200);
+
+    const auditRes = await app.request("/api/telegram/miniapp/audit-log?category=exams", { headers: h });
+    assert.equal(auditRes.status, 200);
+    assert.ok((await auditRes.json()).data.length >= 3);
+
+    const ahRes = await app.request("/api/telegram/miniapp/analytics-health", { headers: h });
+    assert.equal(ahRes.status, 200);
+    const ah = (await ahRes.json()).data;
+    assert.ok(ah.infraHealth.backend.status === "verified");
+  });
 });
