@@ -14,6 +14,7 @@ import { AuthUser, Env, ExamRow, GeneratedTestRow } from "../types";
 import { prepareAdminAuditLog } from "../util/auditLog";
 import { AssetStorage } from "../storage";
 import {
+  buildAvatarProxyUrl,
   detectAvatarImage,
   extractStorageAvatarKey,
   getTableColumns,
@@ -194,9 +195,12 @@ generatedTestRoutes.post("/:id/avatar", requirePermission("manage_generated_test
     }
     const storagePath = `test-avatars/${id}/${crypto.randomUUID()}.${detected.ext}`;
     const storedLocation = await storage.uploadFile(storagePath, imageBytes, detected.mime);
-    const avatarUrl = storedLocation.startsWith("r2://")
-      ? `/api/generated-tests/${encodeURIComponent(id)}/avatar?k=${encodeURIComponent(storagePath)}&v=${Date.now()}`
-      : storedLocation;
+    const cleanupRef = storedLocation.startsWith("tg:") ? storedLocation : storagePath;
+    const avatarUrl = buildAvatarProxyUrl(
+      `/api/generated-tests/${encodeURIComponent(id)}/avatar`,
+      storagePath,
+      storedLocation
+    );
 
     const sets: string[] = ["avatar_url = ?"];
     const binds: Array<string | number | null> = [avatarUrl];
@@ -216,10 +220,10 @@ generatedTestRoutes.post("/:id/avatar", requirePermission("manage_generated_test
       const results = await db.batch([updateStmt, auditStmt]);
       if ((results[0]?.meta?.changes ?? 0) !== 1) throw new Error("Test update not confirmed");
     } catch {
-      try { await storage.deleteFiles([storagePath]); } catch {}
+      try { await storage.deleteFiles([cleanupRef]); } catch {}
       return c.json({ success: false, error: "Could not save test avatar; please retry" }, 409);
     }
-    if (oldKey && oldKey !== storagePath) {
+    if (oldKey && oldKey !== cleanupRef) {
       try { await storage.deleteFiles([oldKey]); } catch {}
     }
     return c.json({ success: true, data: { avatarUrl, avatarEmoji: "", avatarColor: null } });

@@ -3,8 +3,8 @@
 // ============================================================================
 
 import { Context } from "hono";
-import { AssetStorage } from "../storage";
 import { Env } from "../types";
+import { serveCachedStorageMedia } from "./mediaCache";
 
 export const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
 const ALLOWED_AVATAR_MIMES = new Set([
@@ -89,22 +89,31 @@ export function detectAvatarImage(
 export function extractStorageAvatarKey(rawUrl: string, prefix: string): string {
   const value = (rawUrl || "").trim();
   if (!value) return "";
+  if (value.startsWith("tg:")) {
+    return value;
+  }
   if (value.startsWith("r2://")) {
     return value.slice("r2://".length).replace(/^\/+/, "");
-  }
-  if (value.includes("/eve-media/")) {
-    return value.split("/eve-media/")[1]?.split("?")[0]?.replace(/^\/+/, "") || "";
   }
   if (value.includes("/avatar")) {
     try {
       const parsed = new URL(value, "https://eve.local");
       const keyParam = parsed.searchParams.get("k");
-      if (keyParam && keyParam.startsWith(prefix)) {
+      if (keyParam && (keyParam.startsWith("tg:") || keyParam.startsWith(prefix))) {
         return keyParam;
       }
     } catch {}
   }
   return "";
+}
+
+export function buildAvatarProxyUrl(
+  routePath: string,
+  storagePath: string,
+  storedLocation: string
+): string {
+  const ref = storedLocation.startsWith("tg:") ? storedLocation : storagePath;
+  return `${routePath}?k=${encodeURIComponent(ref)}&v=${Date.now()}`;
 }
 
 export async function parseAvatarUploadPayload(
@@ -201,20 +210,8 @@ export async function serveStoredAvatarResponse(
   if (!key) {
     return c.json({ success: false, error: "Avatar image not set" }, 404);
   }
-  const storage = new AssetStorage(c.env);
-  const asset = await storage.getObjectBytes(key);
-  if (!asset) {
-    return c.json({ success: false, error: "Avatar media not found" }, 404);
-  }
-  return c.body(
-    asset.body.buffer.slice(
-      asset.body.byteOffset,
-      asset.body.byteOffset + asset.body.byteLength
-    ) as ArrayBuffer,
-    200,
-    {
-      "Content-Type": asset.contentType || "image/jpeg",
-      "Cache-Control": "public, max-age=86400",
-    }
-  );
+  return serveCachedStorageMedia(c, key, {
+    notFoundMessage: "Avatar media not found",
+    fallbackContentType: "image/jpeg",
+  });
 }

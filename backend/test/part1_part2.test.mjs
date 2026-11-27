@@ -285,7 +285,7 @@ test("rate limiter buckets and retry-after calculation", () => {
 test("diagnostic key authorization accepts ONLY dedicated DIAGNOSTIC_KEY", () => {
   const env = {
     DIAGNOSTIC_KEY: "secret-diag-123",
-    SUPABASE_SERVICE_ROLE_KEY: "supabase-service-456",
+    TELEGRAM_BOT_TOKEN: "bot-token-456",
   };
 
   function isDiagnosticAuthorized(diagKey, env) {
@@ -298,8 +298,8 @@ test("diagnostic key authorization accepts ONLY dedicated DIAGNOSTIC_KEY", () =>
   // Correct dedicated key -> authorized
   assert.equal(isDiagnosticAuthorized("secret-diag-123", env), true);
 
-  // Supabase service role key -> REJECTED
-  assert.equal(isDiagnosticAuthorized("supabase-service-456", env), false);
+  // Bot token -> REJECTED
+  assert.equal(isDiagnosticAuthorized("bot-token-456", env), false);
 
   // Random key -> REJECTED
   assert.equal(isDiagnosticAuthorized("invalid-key", env), false);

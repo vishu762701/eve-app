@@ -40,7 +40,7 @@ How We Use Your Information:
 • To send optional notifications if you enable them.
 
 Data Storage & Sharing:
-All data is stored securely using Cloudflare Workers, Cloudflare D1, and Supabase Storage. We do not run third-party advertising trackers or sell your personal data.
+All data is stored securely using Cloudflare Workers, Cloudflare D1, and Telegram Media Vault. We do not run third-party advertising trackers or sell your personal data.
 
 Children's Privacy:
 The App is intended for students preparing for competitive exams and is not directed at children under 13.

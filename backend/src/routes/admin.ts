@@ -15,6 +15,7 @@ import { validateReformatInput, reformatExplanationWithAi } from "../ai/explanat
 import { normalizeAppConfigObject, readAppConfig, sanitizeTelegramAtUsername } from "../util/appConfig";
 import { AssetStorage } from "../storage";
 import {
+  buildAvatarProxyUrl,
   detectAvatarImage,
   extractStorageAvatarKey,
   parseAvatarUploadPayload,
@@ -1301,9 +1302,11 @@ adminRoutes.post("/announcement-channel/avatar", async (c) => {
   const storage = new AssetStorage(c.env);
   const storagePath = `channel-avatars/${crypto.randomUUID()}.${detected.ext}`;
   const storedLocation = await storage.uploadFile(storagePath, parsed.imageBytes, detected.mime);
-  const avatarUrl = storedLocation.startsWith("r2://")
-    ? `/api/announcement-channel/avatar?k=${encodeURIComponent(storagePath)}&v=${Date.now()}`
-    : storedLocation;
+  const avatarUrl = buildAvatarProxyUrl(
+    "/api/announcement-channel/avatar",
+    storagePath,
+    storedLocation
+  );
 
   const updated = normalizeAppConfigObject({ ...prev, announcement_channel_avatar_url: avatarUrl });
   const patch = {

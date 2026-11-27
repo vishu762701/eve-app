@@ -7,16 +7,17 @@ import { deletionInfo, deleteUnused } from '../services/deletion';
 import { Hono } from "hono";
 import { requireAdmin, requirePermission } from "../middleware/authMiddleware";
 import { AssetStorage } from "../storage";
-import { SupabaseStorage } from "../supabase";
 import { AuthUser, EmojiPlacementPublic, Env, ExamRow } from "../types";
 import { prepareAdminAuditLog, recordAdminAction, runBatch } from "../util/auditLog";
 import {
+  buildAvatarProxyUrl,
   detectAvatarImage,
   extractStorageAvatarKey,
   getTableColumns,
   parseAvatarUploadPayload,
   serveStoredAvatarResponse,
 } from "../util/avatarMedia";
+import { serveCachedStorageMedia } from "../util/mediaCache";
 import { getActiveEmojiPlacements } from "./emoji";
 
 const VALID_AI_LANGUAGES = new Set(["english", "hindi", "bilingual"]);
@@ -637,7 +638,7 @@ examRoutes.delete("/:id", requirePermission("manage_exams"), async (c) => {
     try { await new AssetStorage(c.env).deleteFiles([avatarKey]); } catch {}
   }
 
-  const path = exam?.syllabus_url?.split('/eve-media/')[1];
+  const path = extractSyllabusStorageRef(String(exam?.syllabus_url || ""));
   if (path && !await cleanupMedia(c.env, path, c.res.headers.get('X-Request-ID'))) {
     return c.json({ success: true, message: 'Exam deleted. Media cleanup was not completed; check System Monitor.' });
   }
@@ -705,6 +706,48 @@ examRoutes.post("/:id/syllabus/reassign", requirePermission("manage_syllabus"), 
   } });
 });
 
+function extractSyllabusStorageRef(rawUrl: string): string {
+  const value = String(rawUrl || "").trim();
+  if (!value) return "";
+  if (value.startsWith("tg:")) return value;
+  if (value.startsWith("r2://")) return value.slice("r2://".length).replace(/^\/+/, "");
+  if (value.includes("/syllabus")) {
+    try {
+      const parsed = new URL(value, "https://eve.local");
+      const keyParam = parsed.searchParams.get("k");
+      if (keyParam && (keyParam.startsWith("tg:") || keyParam.startsWith("syllabi/"))) {
+        return keyParam;
+      }
+    } catch {}
+  }
+  return "";
+}
+
+// GET /api/exams/:id/syllabus - Public cached proxy for exam syllabus PDF
+examRoutes.get("/:id/syllabus", async (c) => {
+  const id = c.req.param("id") || "";
+  const db = c.env.DB;
+  const row = await db
+    .prepare("SELECT syllabus_url, syllabus_file_name FROM exams WHERE id = ?")
+    .bind(id)
+    .first<{ syllabus_url?: string; syllabus_file_name?: string }>();
+  if (!row) {
+    return c.json({ success: false, error: "Exam not found" }, 404);
+  }
+  const storageRef =
+    extractSyllabusStorageRef(String(row.syllabus_url || "")) ||
+    extractSyllabusStorageRef(c.req.url);
+  if (!storageRef) {
+    return c.json({ success: false, error: "Syllabus PDF not found" }, 404);
+  }
+  const safeName = safeSyllabusFilename(row.syllabus_file_name || "syllabus.pdf").replace(/"/g, "");
+  return serveCachedStorageMedia(c, storageRef, {
+    notFoundMessage: "Syllabus media unavailable",
+    fallbackContentType: "application/pdf",
+    contentDisposition: `inline; filename="${safeName}"`,
+  });
+});
+
 // POST /api/exams/:id/syllabus - Upload syllabus PDF (Admin)
 examRoutes.post("/:id/syllabus", requirePermission("manage_syllabus"), async (c) => {
   const id = c.req.param("id") || "";
@@ -753,10 +796,12 @@ examRoutes.post("/:id/syllabus", requirePermission("manage_syllabus"), async (c)
   }
   fileName = safeSyllabusFilename(fileName);
 
-  const storage = new SupabaseStorage(c.env);
+  const storage = new AssetStorage(c.env);
   // Non-user-controlled keys avoid path injection and timestamp collisions.
   const path = `syllabi/${crypto.randomUUID()}.pdf`;
-  const downloadUrl = await storage.uploadFile(path, pdfBytes, "application/pdf");
+  const storedLocation = await storage.uploadFile(path, pdfBytes, "application/pdf");
+  const refForUrl = storedLocation.startsWith("tg:") ? storedLocation : path;
+  const downloadUrl = `/api/exams/${encodeURIComponent(id)}/syllabus?k=${encodeURIComponent(refForUrl)}&v=${Date.now()}`;
 
   const updateStmt = db
     .prepare("UPDATE exams SET syllabus_url = ?, syllabus_file_name = ? WHERE id = ?")
@@ -779,7 +824,7 @@ examRoutes.post("/:id/syllabus", requirePermission("manage_syllabus"), async (c)
   } catch {
     // Remote upload can succeed before D1 rejects the mutation.
     // Existing cleanup monitor records any failed compensation.
-    await cleanupMedia(c.env, path, c.res.headers.get("X-Request-ID"));
+    await cleanupMedia(c.env, refForUrl, c.res.headers.get("X-Request-ID"));
     return c.json({ success: false, error: "Syllabus not linked; verify exam state before retrying" }, 409);
   }
 
@@ -805,7 +850,7 @@ examRoutes.delete("/:id/syllabus", requirePermission("manage_syllabus"), async (
 
   await db.batch([updateStmt, auditStmt]);
 
-  const path = exam.syllabus_url?.split('/eve-media/')[1];
+  const path = extractSyllabusStorageRef(String(exam.syllabus_url || ""));
   if (path && !await cleanupMedia(c.env, path, c.res.headers.get('X-Request-ID'))) {
     return c.json({ success: true, message: 'Syllabus removed from the exam. Media cleanup was not completed; check System Monitor.' });
   }
@@ -865,9 +910,12 @@ examRoutes.post("/:id/avatar", requirePermission("manage_exams"), async (c) => {
 
     const storagePath = `exam-avatars/${id}/${crypto.randomUUID()}.${detected.ext}`;
     const storedLocation = await storage.uploadFile(storagePath, imageBytes, detected.mime);
-    const avatarUrl = storedLocation.startsWith("r2://")
-      ? `/api/exams/${encodeURIComponent(id)}/avatar?k=${encodeURIComponent(storagePath)}&v=${Date.now()}`
-      : storedLocation;
+    const cleanupRef = storedLocation.startsWith("tg:") ? storedLocation : storagePath;
+    const avatarUrl = buildAvatarProxyUrl(
+      `/api/exams/${encodeURIComponent(id)}/avatar`,
+      storagePath,
+      storedLocation
+    );
 
     const sets: string[] = ["image_url = ?"];
     const binds: Array<string | number | null> = [avatarUrl];
@@ -898,11 +946,11 @@ examRoutes.post("/:id/avatar", requirePermission("manage_exams"), async (c) => {
         throw new Error("Exam update not confirmed");
       }
     } catch {
-      try { await storage.deleteFiles([storagePath]); } catch {}
+      try { await storage.deleteFiles([cleanupRef]); } catch {}
       return c.json({ success: false, error: "Could not save exam avatar; please retry" }, 409);
     }
 
-    if (oldKey && oldKey !== storagePath) {
+    if (oldKey && oldKey !== cleanupRef) {
       try { await storage.deleteFiles([oldKey]); } catch {}
     }
 

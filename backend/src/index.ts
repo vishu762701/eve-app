@@ -32,7 +32,8 @@ import { typographyRoutes } from "./routes/typographyPublished";
 import { emojiRoutes, emojiAdminRoutes } from "./routes/emoji";
 import { questionRoutes } from "./routes/questions";
 import { crashIngestRoutes } from "./routes/crashes";
-import { SupabaseStorage } from "./supabase";
+import { AssetStorage } from "./storage";
+import { TelegramMediaVault, TelegramMediaVaultError } from "./telegramMediaVault";
 import { AuthUser, Env } from "./types";
 import { getAdminPermissions, verifyFirebaseIdToken } from "./auth";
 
@@ -197,7 +198,7 @@ async function handleD1Diagnostic(c: AppContext) {
   }
 }
 
-// Diagnostic Handler for Supabase Storage
+// Diagnostic Handler for Telegram Media Vault / AssetStorage
 async function handleStorageDiagnostic(c: AppContext) {
   if (!await isDiagnosticAuthorized(c)) {
     return c.json(
@@ -209,41 +210,43 @@ async function handleStorageDiagnostic(c: AppContext) {
     );
   }
 
-  if (!c.env.SUPABASE_SERVICE_ROLE_KEY) {
+  const vault = new TelegramMediaVault(c.env);
+  if (!c.env.EMOJI_BUCKET && !vault.isConfigured()) {
     return c.json(
       {
         success: false,
-        error: "SUPABASE_SERVICE_ROLE_KEY is not configured on the Worker",
+        error: "TELEGRAM_BOT_TOKEN and TELEGRAM_MEDIA_CHANNEL_ID are not configured on the Worker",
       },
       500
     );
   }
 
   try {
-    const storage = new SupabaseStorage(c.env);
+    const storage = new AssetStorage(c.env);
     const testId = `verify-${Date.now()}`;
 
     // 1. Banner upload & delete verification
     const bannerPath = `banners/test-${testId}.jpg`;
     const dummyBanner = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]);
-    const bannerUrl = await storage.uploadFile(bannerPath, dummyBanner, "image/jpeg");
-    await storage.deleteFile(bannerPath);
+    const bannerRef = await storage.uploadFile(bannerPath, dummyBanner, "image/jpeg");
+    await storage.deleteFiles([bannerRef.startsWith("tg:") ? bannerRef : bannerPath]);
 
     // 2. Syllabus upload & delete verification
     const syllabusPath = `syllabi/test-${testId}.pdf`;
     const dummyPdf = new TextEncoder().encode("%PDF-1.4\n%Test Eve Syllabus\n%%EOF");
-    const syllabusUrl = await storage.uploadFile(syllabusPath, dummyPdf, "application/pdf");
-    await storage.deleteFile(syllabusPath);
+    const syllabusRef = await storage.uploadFile(syllabusPath, dummyPdf, "application/pdf");
+    await storage.deleteFiles([syllabusRef.startsWith("tg:") ? syllabusRef : syllabusPath]);
 
     return c.json({
       success: true,
       connection: "PASS",
+      backend: storage.getStorageBackendLabel(),
       bannerUpload: "PASS",
       bannerDelete: "PASS",
       syllabusUpload: "PASS",
       syllabusDelete: "PASS",
-      sampleBannerUrl: bannerUrl,
-      sampleSyllabusUrl: syllabusUrl,
+      sampleBannerRef: bannerRef,
+      sampleSyllabusRef: syllabusRef,
     });
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500);
@@ -300,6 +303,9 @@ app.notFound((c) => {
 app.onError((err, c) => {
   if (err instanceof HTTPException) {
     return c.json({ success: false, error: err.status < 500 ? err.message : "Request protection is temporarily unavailable. Please retry." }, err.status);
+  }
+  if (err instanceof TelegramMediaVaultError && err.status === 400) {
+    return c.json({ success: false, error: err.message }, 400);
   }
   console.error("Unhandled Worker failure", { name: err.name });
   return c.json({ success: false, error: "The server could not complete this operation. Please retry.", requestId: c.res.headers.get("X-Request-ID") }, 500);

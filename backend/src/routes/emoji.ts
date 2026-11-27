@@ -1,7 +1,7 @@
 import { cleanupEmojiMedia } from "../services/mediaCleanup";
 // ============================================================================
 // Animated Emoji & Sticker Pack Library Routes
-// Supports Cloudflare R2 (preferred) + Supabase Storage fallback,
+// Supports Cloudflare R2 (preferred) + Telegram Media Vault fallback,
 // D1 pack catalogue metadata, Worker asset delivery, and rights-gated import.
 // ============================================================================
 
@@ -11,6 +11,7 @@ import { AssetStorage } from "../storage";
 import { isUserPremium } from "./premium";
 import { AuthUser, EmojiItemRow, EmojiPackRow, EmojiPlacementPublic, Env } from "../types";
 import { prepareAdminAuditLog, recordAdminAction } from "../util/auditLog";
+import { serveCachedStorageMedia } from "../util/mediaCache";
 
 export const emojiRoutes = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
 export const emojiAdminRoutes = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
@@ -566,14 +567,8 @@ emojiRoutes.get("/assets/:id", async (c) => {
     ) {
       return c.json({ success: false, error: "Pack thumbnail not found" }, 404);
     }
-    const obj = await storage.getObjectBytes(pack.thumbnail_key);
-    if (!obj) return c.json({ success: false, error: "Thumbnail asset missing" }, 404);
-    return new Response(obj.body as unknown as BodyInit, {
-      status: 200,
-      headers: {
-        "Content-Type": obj.contentType,
-        "Cache-Control": "public, max-age=86400",
-      },
+    return serveCachedStorageMedia(c, pack.thumbnail_key, {
+      notFoundMessage: "Thumbnail asset missing",
     });
   }
 
@@ -608,20 +603,13 @@ emojiRoutes.get("/assets/:id", async (c) => {
     return c.json({ success: true, data: { resourceRef: row.storage_key } });
   }
 
-  const obj = await storage.getObjectBytes(row.storage_key);
-  if (!obj) {
-    return c.json({ success: false, error: "Asset missing in storage" }, 404);
-  }
-
-  const headers: Record<string, string> = {
-    "Content-Type": row.mime_type || obj.contentType || "application/octet-stream",
-    "Cache-Control": "public, max-age=86400",
-  };
-  if (row.sha256) {
-    headers["X-Asset-Sha256"] = row.sha256;
-    headers["ETag"] = `"${row.sha256}"`;
-  }
-  return new Response(obj.body as unknown as BodyInit, { status: 200, headers });
+  return serveCachedStorageMedia(c, row.storage_key, {
+    notFoundMessage: "Asset missing in storage",
+    fallbackContentType: row.mime_type || "application/octet-stream",
+    extraHeaders: row.sha256
+      ? { "X-Asset-Sha256": row.sha256, ETag: `"${row.sha256}"` }
+      : undefined,
+  });
 });
 
 // ============================================================================
@@ -672,7 +660,7 @@ emojiAdminRoutes.get("/packs", async (c) => {
     createdAt: r.created_at,
     updatedAt: r.updated_at || r.created_at,
     createdBy: r.created_by || "",
-    storageBackend: storage.hasR2() ? "r2" : "supabase",
+    storageBackend: storage.getStorageBackendLabel(),
   }));
 
   return c.json({
@@ -1259,10 +1247,11 @@ emojiAdminRoutes.post("/upload", async (c) => {
   }
 
   const hash = await sha256Hex(rawBytes);
-  const storageKey = `emoji/uploads/${crypto.randomUUID()}/${hash}.${fileFormat === "lottie" ? "json" : fileFormat}`;
+  const rawStorageKey = `emoji/uploads/${crypto.randomUUID()}/${hash}.${fileFormat === "lottie" ? "json" : fileFormat}`;
 
   const storage = new AssetStorage(c.env);
-  await storage.putObject(storageKey, rawBytes, mime);
+  const storedRef = await storage.putObject(rawStorageKey, rawBytes, mime);
+  const storageKey = storedRef.startsWith("tg:") ? storedRef : rawStorageKey;
 
   const id = `emoji_${crypto.randomUUID()}`;
   const now = Date.now();
@@ -1523,8 +1512,9 @@ emojiAdminRoutes.post("/import/telegram", async (c) => {
             const thumbExt = thumbPath.endsWith(".tgs") ? "tgs" : thumbPath.endsWith(".webm") ? "webm" : "webp";
             const thumbMime = thumbExt === "webp" ? "image/webp" : thumbExt === "webm" ? "video/webm" : "application/x-tgsticker";
             const thumbHash = await sha256Hex(thumbBytes);
-            packThumbnailKey = `emoji/telegram/${packSlug}/thumb_${thumbHash.slice(0, 12)}.${thumbExt}`;
-            await storage.putObject(packThumbnailKey, thumbBytes, thumbMime);
+            const rawThumbKey = `emoji/telegram/${packSlug}/thumb_${thumbHash.slice(0, 12)}.${thumbExt}`;
+            const storedThumbRef = await storage.putObject(rawThumbKey, thumbBytes, thumbMime);
+            packThumbnailKey = storedThumbRef.startsWith("tg:") ? storedThumbRef : rawThumbKey;
           }
         }
       }
@@ -1590,9 +1580,10 @@ emojiAdminRoutes.post("/import/telegram", async (c) => {
 
       const hash = await sha256Hex(finalBytes);
       const ext = fileFormat === "lottie" ? "json" : fileFormat;
-      const storageKey = `emoji/telegram/${packSlug}/${crypto.randomUUID()}/${hash}.${ext}`;
+      const rawStorageKey = `emoji/telegram/${packSlug}/${crypto.randomUUID()}/${hash}.${ext}`;
 
-      await storage.putObject(storageKey, finalBytes, mime);
+      const storedItemRef = await storage.putObject(rawStorageKey, finalBytes, mime);
+      const storageKey = storedItemRef.startsWith("tg:") ? storedItemRef : rawStorageKey;
 
       const itemId = `emoji_tg_${hash.slice(0, 16)}`;
       const altEmoji = sticker.emoji || "✨";
@@ -1770,9 +1761,10 @@ emojiAdminRoutes.post("/import/noto", async (c) => {
       }
 
       const hash = await sha256Hex(rawBytes);
-      const storageKey = `emoji/noto/${crypto.randomUUID()}/${hash}.json`;
+      const rawStorageKey = `emoji/noto/${crypto.randomUUID()}/${hash}.json`;
 
-      await storage.putObject(storageKey, rawBytes, "application/json");
+      const storedNotoRef = await storage.putObject(rawStorageKey, rawBytes, "application/json");
+      const storageKey = storedNotoRef.startsWith("tg:") ? storedNotoRef : rawStorageKey;
 
       const itemId = `emoji_noto_${codepoint}`;
       const itemStatement = db

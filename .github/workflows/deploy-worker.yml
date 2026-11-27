@@ -94,7 +94,8 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: a50b9cf54c5e84de0183a5d3a4b38844
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_MEDIA_CHANNEL_ID: ${{ secrets.TELEGRAM_MEDIA_CHANNEL_ID }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_API_KEY_1: ${{ secrets.GEMINI_API_KEY_1 }}
           GEMINI_API_KEY_2: ${{ secrets.GEMINI_API_KEY_2 }}
@@ -104,8 +105,11 @@ jobs:
           PREMIUM_WEBHOOK_SECRET: ${{ secrets.PREMIUM_WEBHOOK_SECRET }}
           DIAGNOSTIC_KEY: ${{ secrets.DIAGNOSTIC_KEY }}
         run: |
-          if [ -n "$SUPABASE_SERVICE_ROLE_KEY" ]; then
-            echo "$SUPABASE_SERVICE_ROLE_KEY" | npx --no-install wrangler secret put SUPABASE_SERVICE_ROLE_KEY
+          if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
+            printf %s "$TELEGRAM_BOT_TOKEN" | npx --no-install wrangler secret put TELEGRAM_BOT_TOKEN
+          fi
+          if [ -n "$TELEGRAM_MEDIA_CHANNEL_ID" ]; then
+            printf %s "$TELEGRAM_MEDIA_CHANNEL_ID" | npx --no-install wrangler secret put TELEGRAM_MEDIA_CHANNEL_ID
           fi
           if [ -n "$DIAGNOSTIC_KEY" ]; then
             echo "$DIAGNOSTIC_KEY" | npx --no-install wrangler secret put DIAGNOSTIC_KEY
@@ -148,7 +152,6 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: a50b9cf54c5e84de0183a5d3a4b38844
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           DIAGNOSTIC_KEY: ${{ secrets.DIAGNOSTIC_KEY }}
         run: |
           chmod +x scripts/smoke-test.sh

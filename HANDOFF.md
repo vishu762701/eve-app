@@ -4,10 +4,8 @@
 **Branch & Git rule:** Commit and push directly to `main` (no PRs/branches/force-push). Keep this file <= 30 lines.
 
 ## Done
-- **DialogCell Circular Avatars Fix (`Chats` & `Exams`):** Fixed missing `avatarImage.setImageCoords(originalAvatarRect)` in `DialogCell.buildLayout()` (56dp/52dp) and `onDraw()` normal branch (regression from stripped `StoriesUtilities.drawAvatarWithStory`), reset stale dialog flags in `setDialog(CustomDialog)`, ensured `CENTER_CROP` + 26/28dp round radius, and added regression assertions in `EveTelegramDualSessionTest`.
-- **Production DC Default & Onboarding Copy:** Verified `EveTelegramSessionManager.shouldUseTestDc() == false` + `recoverStuckTestDcIfNeeded(account)` (`ConnectionsManager.switchBackend(false)`) and updated `EveTelegramChatOnboardingFragment.LOGIN_CAPTION`.
-- **Owner/Admin EVE Premium & Dual-Session Chats:** `MainTabsActivity`, `DialogsActivity`, `0036_user_telegram_link.sql`, `auth.ts`, `admin.ts`, `appConfig.ts`, and `premium.ts`/`emoji.ts` Owner auto-unlock live on `main` (`backend/` 401/401 pass).
+- **Supabase Removal & Telegram Media Vault:** Replaced Supabase Storage completely with `backend/src/telegramMediaVault.ts` (`sendDocument` -> `tg:<messageId>:<fileId>`, `getFile`, `deleteMessage`, 20 MB cap), Cloudflare Edge Cache (`caches.default` + `Cache-Control: public, max-age=86400`) in `backend/src/util/mediaCache.ts`, and public `GET /api/exams/:id/syllabus` proxy. Deleted `backend/src/supabase.ts` and `.github/workflows/supabase-keepalive.yml`; cleaned `wrangler.toml`, `types.ts`, `storage.ts`, `mediaCleanup.ts`, `monitoring.ts`, `index.ts`, `deploy-worker.yml` (`TELEGRAM_BOT_TOKEN` & `TELEGRAM_MEDIA_CHANNEL_ID` secrets), `smoke-test.sh`, and `EvePackModels.java`; added `telegram_media_vault.test.mjs`.
+- **DialogCell Avatars, Production DC & Owner EVE Premium:** `DialogCell` `syncAvatarImageCoords`, `EveTelegramSessionManager.shouldUseTestDc() == false`, and `premium.ts`/`emoji.ts` Owner auto-unlock live on `main` (`Build Eve APK` `45980791916` `success`).
 
 ## Next
-- Confirm `Build Eve APK` CI green on `main` (`:TMessagesProj:testDebugUnitTest` + `:TMessagesProj_App:assembleAfatDebug`).
-- Test circular avatars across `Chats` (Archived Chats, Saved Messages, Telegram, groups/channels) & `Exams` (photos, emojis, initials) + Production DC login on phone.
+- Owner runs `Deploy Eve Worker & Apply D1 Migrations` (`confirm_production: true`, `preflight_only: false`) with `TELEGRAM_BOT_TOKEN` & `TELEGRAM_MEDIA_CHANNEL_ID` secrets set to activate Telegram Media Vault live.

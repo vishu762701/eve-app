@@ -6,10 +6,6 @@ export interface Env {
   DB: D1Database;
   EMOJI_BUCKET?: R2Bucket;
   FIREBASE_PROJECT_ID: string;
-  SUPABASE_PROJECT_URL: string;
-  SUPABASE_BUCKET_NAME: string;
-  SUPABASE_PUBLISHABLE_KEY: string;
-  SUPABASE_SERVICE_ROLE_KEY?: string; // Cloudflare secret
   GEMINI_API_KEY?: string;           // Cloudflare secret
   GEMINI_API_KEY_1?: string;         // Cloudflare secret slot 1
   GEMINI_API_KEY_2?: string;         // Cloudflare secret slot 2
@@ -21,7 +17,8 @@ export interface Env {
   DIAGNOSTIC_KEY?: string;           // Cloudflare secret or environment variable
   PREMIUM_WEBHOOK_SECRET?: string;   // Cloudflare Worker secret; required to accept payments
   PREMIUM_SANDBOX_ENABLED?: string; // Explicit "true" only on isolated admin test environments
-  TELEGRAM_BOT_TOKEN?: string;      // Cloudflare Worker secret for Telegram emoji import
+  TELEGRAM_BOT_TOKEN?: string;      // Cloudflare Worker secret for Telegram Media Vault & emoji import
+  TELEGRAM_MEDIA_CHANNEL_ID?: string; // Cloudflare Worker secret: private Telegram storage channel ID
 }
 
 export interface AuthUser {

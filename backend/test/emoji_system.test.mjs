@@ -69,9 +69,8 @@ function createTestApp(d1, user, extraEnv = {}) {
     c.env = {
       DB: d1,
       FIREBASE_PROJECT_ID: "test-project",
-      SUPABASE_PROJECT_URL: "https://test.supabase.co",
-      SUPABASE_BUCKET_NAME: "eve-media",
-      SUPABASE_SERVICE_ROLE_KEY: "test-service-key",
+      TELEGRAM_BOT_TOKEN: "test-bot-token",
+      TELEGRAM_MEDIA_CHANNEL_ID: "-1001234567890",
       ...extraEnv,
     };
     c.set("user", user);
@@ -368,7 +367,7 @@ test("Placements & Public read path: exam card, category header, and broadcast w
 
 const owner = { uid: "owner", email: "own.keni@gmail.com", isAdmin: true };
 const jsonRequest = (body) => ({ method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-function seedMedia(sqlite, id = 'asset', pack = 'pack_noto', key = 'emoji/test.json') {
+function seedMedia(sqlite, id = 'asset', pack = 'pack_noto', key = 'tg:1:file_test') {
   sqlite.prepare("INSERT INTO emoji_items(id,pack_id,alt_emoji,kind,storage_key,byte_size,sha256,source,created_at) VALUES(?,?,'✨','lottie',?,10,'test','upload',123)").run(id, pack, key);
 }
 
@@ -418,31 +417,30 @@ test("Pack deletion: DB rollback never deletes live storage or audit rows",async
 });
 
 test("Item deletion: shared paths survive, storage failure is explicit after committed deletion",async(t)=>{
-  const {sqlite,d1}=isolatedD1(); seedMedia(sqlite,'first','pack_noto','/emoji/shared.json');seedMedia(sqlite,'second','pack_tg_ui','emoji/shared.json');
+  const {sqlite,d1}=isolatedD1(); seedMedia(sqlite,'first','pack_noto','tg:100:shared');seedMedia(sqlite,'second','pack_tg_ui','tg:100:shared');
   const calls=[];t.mock.method(globalThis,'fetch',async(url,init)=>{calls.push({url,init});return new Response('{}',{status:503});});
   const app=createTestApp(d1,owner);
   const first=await app.request('/api/admin/emoji/items/first',{method:'DELETE'});
   assert.equal(first.status,200);assert.equal((await first.json()).data.mediaCleanupComplete,true);assert.equal(calls.length,0);
   const second=await app.request('/api/admin/emoji/items/second',{method:'DELETE'});
   const body=await second.json();assert.equal(second.status,200);assert.equal(body.data.mediaCleanupComplete,false);assert.ok(body.warning);
-  assert.equal(JSON.stringify(body).includes('shared.json'),false);
+  assert.equal(JSON.stringify(body).includes('tg:100:shared'),false);
   assert.equal(sqlite.prepare("SELECT count(*) AS n FROM emoji_items WHERE id='second'").get().n,0);
   assert.equal(sqlite.prepare("SELECT count(*) AS n FROM operation_events WHERE operation='emoji_media_cleanup'").get().n,1);
   assert.equal(calls.length,1);
 });
 
-test("Pack deletion batches 250 storage objects in one API request",async(t)=>{
-  const {sqlite,d1}=isolatedD1();for(let i=0;i<250;i++)seedMedia(sqlite,`item${i}`,'pack_noto',`emoji/${i}.json`);
-  const calls=[];t.mock.method(globalThis,'fetch',async(url,init)=>{calls.push({url,init});return new Response('{}');});
+test("Pack deletion deletes each Telegram vault message and deduplicates shared refs",async(t)=>{
+  const {sqlite,d1}=isolatedD1();for(let i=0;i<50;i++)seedMedia(sqlite,`item${i}`,'pack_noto',`tg:${100 + (i % 25)}:file_${i % 25}`);
+  const calls=[];t.mock.method(globalThis,'fetch',async(url,init)=>{calls.push({url,init});return Response.json({ok:true,result:true});});
   const response=await createTestApp(d1,owner).request('/api/admin/emoji/packs/pack_noto',{method:'DELETE'});
-  assert.equal(response.status,200);assert.equal(calls.length,1);assert.equal(calls[0].init.method,'DELETE');
-  assert.equal(JSON.parse(calls[0].init.body).prefixes.length,250);
+  assert.equal(response.status,200);assert.equal(calls.length,25);assert.ok(String(calls[0].url).endsWith('/deleteMessage'));
 });
 
 test("Changed pack snapshot returns conflict, preserving new rows, audit and media",async(t)=>{
   const {sqlite,d1}=isolatedD1();seedMedia(sqlite);
   const original=d1.batch.bind(d1);d1.batch=async statements=>{seedMedia(sqlite,'concurrent');return original(statements);};
-  let calls=0;t.mock.method(globalThis,'fetch',async()=>{calls++;return new Response('{}');});
+  let calls=0;t.mock.method(globalThis,'fetch',async()=>{calls++;return Response.json({ok:true,result:true});});
   const response=await createTestApp(d1,owner).request('/api/admin/emoji/packs/pack_noto',{method:'DELETE'});
   assert.equal(response.status,409);assert.equal((await response.json()).code,'EMOJI_CHANGED');assert.equal(calls,0);
   assert.equal(sqlite.prepare("SELECT count(*) AS n FROM emoji_items WHERE pack_id='pack_noto'").get().n,2);
@@ -450,7 +448,7 @@ test("Changed pack snapshot returns conflict, preserving new rows, audit and med
 });
 
 test("Uploads: bad parent, external JSON, oversized content and disguised images cause no writes",async(t)=>{
-  const {sqlite,d1}=isolatedD1();let writes=0;t.mock.method(globalThis,'fetch',async()=>{writes++;return new Response('{}');});
+  const {sqlite,d1}=isolatedD1();let writes=0;t.mock.method(globalThis,'fetch',async()=>{writes++;return Response.json({ok:true,result:{message_id:1,document:{file_id:'f1'}}});});
   const app=createTestApp(d1,owner);
   for(const [body,status] of [[{packId:'missing',animationData:{v:'5',layers:[]}},404],[{v:'5',assets:[{u:'//evil.test/image'}]},400],[{v:'5',layers:[],large:'x'.repeat(310000)},413]]) {
     assert.equal((await app.request('/api/admin/emoji/upload',jsonRequest(body))).status,status);
@@ -459,23 +457,32 @@ test("Uploads: bad parent, external JSON, oversized content and disguised images
   assert.equal(writes,0);assert.equal(sqlite.prepare("SELECT count(*) AS n FROM emoji_items WHERE source='upload'").get().n,0);
 });
 
-test("Uploads: PNG keeps its MIME/extension; successful JSON is readable; DB failure compensates storage",async(t)=>{
-  const {sqlite,d1}=isolatedD1();const calls=[];t.mock.method(globalThis,'fetch',async(url,init)=>{calls.push({url,init});return new Response('{}');});
+test("Uploads: PNG uploads to Telegram Media Vault; successful JSON is readable; DB failure compensates storage",async(t)=>{
+  const {sqlite,d1}=isolatedD1();const calls=[];
+  let seq=1;
+  t.mock.method(globalThis,'fetch',async(url,init)=>{
+    calls.push({url:String(url),init});
+    if(String(url).endsWith('/sendDocument')){
+      const msgId=70+seq++;
+      return Response.json({ok:true,result:{message_id:msgId,document:{file_id:`BQAC_${msgId}`}}});
+    }
+    return Response.json({ok:true,result:true});
+  });
   const app=createTestApp(d1,owner);
   const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jHZkAAAAASUVORK5CYII=','base64');
   const staticRes=await app.request('/api/admin/emoji/upload',{method:'POST',headers:{'Content-Type':'image/png'},body:png});
-  assert.equal(staticRes.status,201);const item=(await staticRes.json()).data;assert.equal(item.kind,'static');assert.match(item.storageKey,/\.png$/);assert.equal(calls[0].init.headers['Content-Type'],'image/png');
+  assert.equal(staticRes.status,201);const item=(await staticRes.json()).data;assert.equal(item.kind,'static');assert.match(item.storageKey,/^tg:71:BQAC_71$/);assert.ok(calls[0].url.endsWith('/sendDocument'));assert.ok(calls[0].init.body instanceof FormData);
   const animation={v:'5',layers:[]};const good=await app.request('/api/admin/emoji/upload',jsonRequest(animation));assert.equal(good.status,201);
   const list=await (await app.request('/api/admin/emoji/items')).json();assert.ok(list.data.some(x=>x.id===item.id));
   sqlite.exec("CREATE TRIGGER reject_upload BEFORE INSERT ON emoji_items WHEN NEW.source='upload' BEGIN SELECT RAISE(ABORT,'simulated write failure'); END");
   const fail=await app.request('/api/admin/emoji/upload',jsonRequest(animation));assert.equal(fail.status,500);
-  assert.equal(calls.at(-1).init.method,'DELETE');
+  assert.ok(calls.at(-1).url.endsWith('/deleteMessage'));
   assert.equal(sqlite.prepare("SELECT count(*) AS n FROM admin_audit_log WHERE action_type='UPLOAD_EMOJI'").get().n,2);
 });
 
 test("Concurrent takedown yields one committed mutation and one conflict, never two success logs",async(t)=>{
   const {sqlite,d1}=isolatedD1();seedMedia(sqlite);
-  let calls=0;t.mock.method(globalThis,'fetch',async()=>{calls++;return new Response('{}');});
+  let calls=0;t.mock.method(globalThis,'fetch',async()=>{calls++;return Response.json({ok:true,result:true});});
   const app=createTestApp(d1,owner);
   const results=await Promise.all([1,2].map(()=>app.request('/api/admin/emoji/packs/pack_noto',{method:'DELETE'})));
   assert.equal(results.filter(r=>r.status===200).length,1);
@@ -489,6 +496,7 @@ test("Telegram custom emoji pages preserve total/nextOffset; imported items have
   t.mock.method(globalThis,'fetch',async(url,init)=>{
     if(url.includes('/getCustomEmojiStickers')) return Response.json({ok:true,result:[{file_id:'one',is_animated:true,emoji:'✨'}]});
     if(url.includes('/getFile?'))return Response.json({ok:true,result:{file_path:'one.json'}});
+    if(url.includes('/sendDocument'))return Response.json({ok:true,result:{message_id:501,document:{file_id:'BQAC_tg_1'}}});
     // is_animated uses TGS. Return a real gzip stream.
     if(url.includes('/file/bot')) return new Response(new Blob([animation]).stream().pipeThrough(new CompressionStream('gzip')));
     return new Response('{}');

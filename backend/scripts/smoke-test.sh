@@ -19,9 +19,6 @@ GUARD_RESULT="SKIPPED (diagnostic key unavailable)"
 if [ -n "$CLOUDFLARE_API_TOKEN" ]; then
   echo "::add-mask::$CLOUDFLARE_API_TOKEN"
 fi
-if [ -n "$SUPABASE_SERVICE_ROLE_KEY" ]; then
-  echo "::add-mask::$SUPABASE_SERVICE_ROLE_KEY"
-fi
 if [ -n "$DIAGNOSTIC_KEY" ]; then
   echo "::add-mask::$DIAGNOSTIC_KEY"
 fi
@@ -112,19 +109,19 @@ else
   echo "::notice title=D1 Database Check::Skipped authenticated write test because DIAGNOSTIC_KEY is not available in local environment."
 fi
 
-echo "=== 7. STORAGE: Authenticated Supabase Storage Operations (/api/diag/storage) ==="
+echo "=== 7. STORAGE: Authenticated Telegram Media Vault Operations (/api/diag/storage) ==="
 if [ -n "$DIAGNOSTIC_KEY" ]; then
   STORAGE_RESULT="UNAVAILABLE (storage probe failed)"
   STORAGE_RESP=$(curl --connect-timeout 5 --max-time 20 -s -w "\nHTTP_STATUS:%{http_code}" -H "X-Diagnostic-Key: $DIAGNOSTIC_KEY" "$WORKER_URL/api/diag/storage" || true)
   if echo "$STORAGE_RESP" | grep -q 'HTTP_STATUS:200' && echo "$STORAGE_RESP" | grep -q '"bannerUpload":"PASS"'; then
     STORAGE_RESULT="PASS"
-    echo "Supabase storage verified: upload and delete operations on 'eve-media' bucket succeeded."
-    echo "::notice title=Supabase Storage Live Verification::PASS (Authenticated banner & syllabus upload/delete passed)"
+    echo "Telegram Media Vault verified: upload and delete operations succeeded."
+    echo "::notice title=Telegram Media Vault Live Verification::PASS (Authenticated banner & syllabus upload/delete passed)"
   else
-    echo "::notice title=Supabase Storage Note::$STORAGE_RESP"
+    echo "::notice title=Telegram Media Vault Note::$STORAGE_RESP"
   fi
 else
-  echo "::notice title=Supabase Storage Check::Skipped authenticated storage test because DIAGNOSTIC_KEY is not available in local environment."
+  echo "::notice title=Telegram Media Vault Check::Skipped authenticated storage test because DIAGNOSTIC_KEY is not available in local environment."
 fi
 
 echo "=== 8. REPRESENTATIVE PRODUCTION ENDPOINTS: Public App Content & Banners ==="
@@ -164,7 +161,7 @@ if [ -n "$GITHUB_STEP_SUMMARY" ]; then
   echo "- **JWT Verification Guard (Forged Token)**: $JWT_RESULT" >> "$GITHUB_STEP_SUMMARY"
   echo "- **Anonymous Diagnostic Protection**: $DIAG_RESULT" >> "$GITHUB_STEP_SUMMARY"
   echo "- **Authenticated D1 Operations**: $D1_RESULT" >> "$GITHUB_STEP_SUMMARY"
-  echo "- **Supabase Storage Operations**: $STORAGE_RESULT" >> "$GITHUB_STEP_SUMMARY"
+  echo "- **Telegram Media Vault Operations**: $STORAGE_RESULT" >> "$GITHUB_STEP_SUMMARY"
   echo "- **Representative Endpoints (/api/banners, /api/app-content/*)**: $PUBLIC_RESULT" >> "$GITHUB_STEP_SUMMARY"
   echo "- **AI Test Generation (generate-now)**: NOT RUN (requires authenticated admin generation)" >> "$GITHUB_STEP_SUMMARY"
 fi

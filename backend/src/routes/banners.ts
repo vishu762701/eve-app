@@ -1,6 +1,6 @@
 import { cleanupMedia } from '../services/mediaCleanup';
 // ============================================================================
-// Home Promotional Banners (Image, GIF, WebP, MP4, WebM via R2 / Supabase)
+// Home Promotional Banners (Image, GIF, WebP, MP4, WebM via R2 / Telegram Media Vault)
 // ============================================================================
 
 import { Hono } from "hono";
@@ -8,6 +8,7 @@ import { requirePermission } from "../middleware/authMiddleware";
 import { AssetStorage } from "../storage";
 import { AuthUser, Env, HomeBannerRow } from "../types";
 import { prepareAdminAuditLog } from "../util/auditLog";
+import { serveCachedStorageMedia } from "../util/mediaCache";
 
 export const bannerRoutes = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
 
@@ -136,7 +137,7 @@ bannerRoutes.get("/manage", requirePermission("manage_content"), async (c) => {
   return c.json({ success: true, data: (results || []).map(mapBannerRow) });
 });
 
-// GET /api/banners/:id/media - Public asset reader for R2/Worker-hosted banners
+// GET /api/banners/:id/media - Public asset reader with Cloudflare Edge Cache
 bannerRoutes.get("/:id/media", async (c) => {
   const id = c.req.param("id") || "";
   const db = c.env.DB;
@@ -148,19 +149,9 @@ bannerRoutes.get("/:id/media", async (c) => {
   if (!key) {
     return c.json({ success: false, error: "Banner media not found" }, 404);
   }
-  const storage = new AssetStorage(c.env);
-  const asset = await storage.getObjectBytes(key);
-  if (!asset) {
-    return c.json({ success: false, error: "Banner media unavailable" }, 404);
-  }
-  return c.body(
-    asset.body.buffer.slice(asset.body.byteOffset, asset.body.byteOffset + asset.body.byteLength) as ArrayBuffer,
-    200,
-    {
-      "Content-Type": asset.contentType || "application/octet-stream",
-      "Cache-Control": "public, max-age=86400",
-    }
-  );
+  return serveCachedStorageMedia(c, key, {
+    notFoundMessage: "Banner media unavailable",
+  });
 });
 
 // POST /api/banners - Upload banner image or video & record metadata (Admin)
@@ -246,9 +237,8 @@ bannerRoutes.post("/", requirePermission("manage_content"), async (c) => {
   const storage = new AssetStorage(c.env);
   const storagePath = `banners/${id}.${detected.ext}`;
   const storedLocation = await storage.uploadFile(storagePath, mediaBytes, detected.mime);
-  const imageUrl = storedLocation.startsWith("r2://")
-    ? `/api/banners/${encodeURIComponent(id)}/media?v=${Date.now()}`
-    : storedLocation;
+  const persistedStoragePath = storedLocation.startsWith("tg:") ? storedLocation : storagePath;
+  const imageUrl = `/api/banners/${encodeURIComponent(id)}/media?v=${Date.now()}`;
 
   const maxOrderRow = await db
     .prepare("SELECT MAX(order_index) as max_order FROM home_banners")
@@ -266,14 +256,14 @@ bannerRoutes.post("/", requirePermission("manage_content"), async (c) => {
              id, image_url, storage_path, order_index, uploaded_at, uploaded_by, active, link_url, link_label, media_type
            ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`
         )
-        .bind(id, imageUrl, storagePath, nextOrder, now, user.email, link.url, link.label, detected.mediaType)
+        .bind(id, imageUrl, persistedStoragePath, nextOrder, now, user.email, link.url, link.label, detected.mediaType)
     : db
         .prepare(
           `INSERT INTO home_banners (
              id, image_url, storage_path, order_index, uploaded_at, uploaded_by, active, link_url, link_label
            ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)`
         )
-        .bind(id, imageUrl, storagePath, nextOrder, now, user.email, link.url, link.label);
+        .bind(id, imageUrl, persistedStoragePath, nextOrder, now, user.email, link.url, link.label);
 
   const { stmt: auditStmt } = prepareAdminAuditLog(db, user, {
     actionType: "BANNER_ADDED",
@@ -286,7 +276,7 @@ bannerRoutes.post("/", requirePermission("manage_content"), async (c) => {
   try {
     await db.batch([insertStmt, auditStmt]);
   } catch (err) {
-    try { await storage.deleteFiles([storagePath]); } catch {}
+    try { await storage.deleteFiles([persistedStoragePath]); } catch {}
     throw err;
   }
 
@@ -296,7 +286,7 @@ bannerRoutes.post("/", requirePermission("manage_content"), async (c) => {
       data: {
         id,
         imageUrl,
-        storagePath,
+        storagePath: persistedStoragePath,
         mediaType: detected.mediaType,
         order: nextOrder,
         uploadedAt: now,
@@ -388,13 +378,8 @@ bannerRoutes.delete("/:id", requirePermission("manage_content"), async (c) => {
   await db.batch([deleteStmt, auditStmt]);
 
   const storagePath = String(banner.storage_path || "").trim();
-  if (storagePath) {
-    const storage = new AssetStorage(c.env);
-    if (storage.hasR2()) {
-      try { await storage.deleteFiles([storagePath]); } catch {}
-    } else if (!await cleanupMedia(c.env, storagePath, c.res.headers.get('X-Request-ID'))) {
-      return c.json({ success: true, message: 'Banner removed. Media cleanup was not completed; check System Monitor.' });
-    }
+  if (storagePath && !await cleanupMedia(c.env, storagePath, c.res.headers.get('X-Request-ID'))) {
+    return c.json({ success: true, message: 'Banner removed. Media cleanup was not completed; check System Monitor.' });
   }
   return c.json({ success: true });
 });

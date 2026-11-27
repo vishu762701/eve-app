@@ -560,7 +560,7 @@ public final class EvePackModels {
             this.source = source != null ? source : "";
             this.enabled = enabled;
             this.itemCount = itemCount;
-            this.storageBackend = storageBackend != null ? storageBackend : "supabase";
+            this.storageBackend = storageBackend != null ? storageBackend : "telegram";
             this.createdAt = createdAt;
             this.updatedAt = updatedAt;
             this.createdBy = createdBy != null ? createdBy : "";
@@ -590,7 +590,7 @@ public final class EvePackModels {
                     clean(obj, "source", ""),
                     obj.optBoolean("enabled", true),
                     obj.optInt("itemCount", 0),
-                    clean(obj, "storageBackend", "supabase"),
+                    clean(obj, "storageBackend", "telegram"),
                     obj.optLong("createdAt", 0L),
                     obj.optLong("updatedAt", 0L),
                     clean(obj, "createdBy", "")

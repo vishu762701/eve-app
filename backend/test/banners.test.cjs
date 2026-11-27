@@ -90,9 +90,8 @@ function makeApp(db, isAdmin = false) {
     app,
     env: {
       DB: db,
-      SUPABASE_PROJECT_URL: "https://storage.example",
-      SUPABASE_BUCKET_NAME: "eve-media",
-      SUPABASE_SERVICE_ROLE_KEY: "test-key",
+      TELEGRAM_BOT_TOKEN: "test-bot-token",
+      TELEGRAM_MEDIA_CHANNEL_ID: "-1001234567890",
     },
   };
 }
@@ -135,7 +134,8 @@ test("admin upload stores a banner and its optional link metadata", async (t) =>
   const { app, env } = makeApp(db, true);
   const originalFetch = globalThis.fetch;
   t.after(() => { globalThis.fetch = originalFetch; });
-  globalThis.fetch = async () => new Response("{}", { status: 200 });
+  globalThis.fetch = async () =>
+    Response.json({ ok: true, result: { message_id: 101, document: { file_id: "BQAC_banner_1" } } });
 
   const form = new FormData();
   form.append("file", new Blob(["image-bytes"], { type: "image/jpeg" }), "banner.jpg");
@@ -156,7 +156,8 @@ test("banner links reject invalid URLs when provided and allow empty optional li
   const { app, env } = makeApp(db, true);
   const originalFetch = globalThis.fetch;
   t.after(() => { globalThis.fetch = originalFetch; });
-  globalThis.fetch = async () => new Response("{}", { status: 200 });
+  globalThis.fetch = async () =>
+    Response.json({ ok: true, result: { message_id: 101, document: { file_id: "BQAC_banner_1" } } });
 
   const invalidLinks = [
     ["javascript:alert(1)", "Open"],
@@ -216,13 +217,13 @@ test("admin can update or clear a banner link without replacing its image", asyn
 
 test("existing banner reorder and delete routes remain functional", async (t) => {
   const db = new MockD1([
-    { id: "one", image_url: "one", storage_path: "one.jpg", order_index: 0, uploaded_at: 1, uploaded_by: "a", active: 1 },
-    { id: "two", image_url: "two", storage_path: "two.jpg", order_index: 1, uploaded_at: 2, uploaded_by: "a", active: 1 },
+    { id: "one", image_url: "/api/banners/one/media", storage_path: "tg:1:BQAC_one", order_index: 0, uploaded_at: 1, uploaded_by: "a", active: 1 },
+    { id: "two", image_url: "/api/banners/two/media", storage_path: "tg:2:BQAC_two", order_index: 1, uploaded_at: 2, uploaded_by: "a", active: 1 },
   ]);
   const { app, env } = makeApp(db, true);
   const originalFetch = globalThis.fetch;
   t.after(() => { globalThis.fetch = originalFetch; });
-  globalThis.fetch = async () => new Response(null, { status: 204 });
+  globalThis.fetch = async () => Response.json({ ok: true, result: true });
 
   const reordered = await request(app, env, "/api/banners/two/reorder", "PUT", { moveUp: true });
   assert.equal(reordered.status, 200);

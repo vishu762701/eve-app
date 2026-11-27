@@ -1,31 +1,36 @@
 // ============================================================================
-// Unified Asset Storage Helper (Cloudflare R2 preferred, Supabase fallback)
+// Unified Asset Storage Helper (Cloudflare R2 preferred, Telegram Media Vault)
 // ============================================================================
 
-import { SupabaseStorage } from "./supabase";
+import { TelegramMediaVault } from "./telegramMediaVault";
 import { Env } from "./types";
 
 export class AssetStorage {
   private env: Env;
-  private supabase: SupabaseStorage;
+  private telegramVault: TelegramMediaVault;
 
   constructor(env: Env) {
     this.env = env;
-    this.supabase = new SupabaseStorage(env);
+    this.telegramVault = new TelegramMediaVault(env);
   }
 
   hasR2(): boolean {
     return Boolean(this.env.EMOJI_BUCKET);
   }
 
+  hasTelegramVault(): boolean {
+    return this.telegramVault.isConfigured();
+  }
+
+  getStorageBackendLabel(): "r2" | "telegram" {
+    return this.hasR2() ? "r2" : "telegram";
+  }
+
   getPublicOrWorkerUrl(itemId: string, storageKey: string): string {
     if (storageKey.startsWith("res:raw/")) {
       return storageKey;
     }
-    if (this.hasR2()) {
-      return `/api/emoji/assets/${encodeURIComponent(itemId)}`;
-    }
-    return this.supabase.getPublicUrl(storageKey);
+    return `/api/emoji/assets/${encodeURIComponent(itemId)}`;
   }
 
   async uploadFile(path: string, data: ArrayBuffer | Uint8Array, contentType: string): Promise<string> {
@@ -40,11 +45,18 @@ export class AssetStorage {
       });
       return `r2://${cleanPath}`;
     }
-    return this.supabase.uploadFile(cleanPath, data, contentType);
+    return this.telegramVault.uploadFile(cleanPath, data, contentType);
   }
 
-  async getObjectBytes(path: string): Promise<{ body: Uint8Array; contentType: string } | null> {
-    const cleanPath = path.replace(/^\/+/, "");
+  async getObjectBytes(storageRef: string): Promise<{ body: Uint8Array; contentType: string } | null> {
+    const trimmed = String(storageRef || "").trim();
+    if (!trimmed) {
+      return null;
+    }
+    if (trimmed.startsWith("tg:")) {
+      return this.telegramVault.getObjectBytes(trimmed);
+    }
+    const cleanPath = trimmed.replace(/^r2:\/\//, "").replace(/^\/+/, "");
     if (this.env.EMOJI_BUCKET) {
       const obj = await this.env.EMOJI_BUCKET.get(cleanPath);
       if (!obj) {
@@ -54,22 +66,30 @@ export class AssetStorage {
       const contentType = obj.httpMetadata?.contentType || "application/octet-stream";
       return { body: bytes, contentType };
     }
-    const url = this.supabase.getPublicUrl(cleanPath);
-    const res = await fetch(url);
-    if (!res.ok) {
-      return null;
-    }
-    const bytes = new Uint8Array(await res.arrayBuffer());
-    return { body: bytes, contentType: res.headers.get("content-type") || "application/octet-stream" };
+    return this.telegramVault.getObjectBytes(trimmed);
   }
 
-  async deleteFiles(paths: string[]): Promise<void> {
-    const clean = [...new Set(paths.map((p) => p.replace(/^\/+/, "")).filter((p) => p && !p.startsWith("res:raw/")))];
-    if (!clean.length) return;
-    if (this.env.EMOJI_BUCKET) {
-      await this.env.EMOJI_BUCKET.delete(clean);
-      return;
+  async deleteFiles(refs: string[]): Promise<void> {
+    const normalized = [
+      ...new Set(
+        refs
+          .map((r) => String(r || "").trim())
+          .filter((r) => r && !r.startsWith("res:raw/"))
+      ),
+    ];
+    if (!normalized.length) return;
+
+    const tgRefs = normalized.filter((r) => r.startsWith("tg:"));
+    const r2Keys = normalized
+      .filter((r) => !r.startsWith("tg:"))
+      .map((r) => r.replace(/^r2:\/\//, "").replace(/^\/+/, ""))
+      .filter(Boolean);
+
+    if (tgRefs.length) {
+      await this.telegramVault.deleteFiles(tgRefs);
     }
-    await this.supabase.deleteFiles(clean);
+    if (r2Keys.length && this.env.EMOJI_BUCKET) {
+      await this.env.EMOJI_BUCKET.delete(r2Keys);
+    }
   }
 }

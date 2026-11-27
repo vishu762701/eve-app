@@ -91,10 +91,8 @@ function createApp(d1, user, r2Bucket = null) {
       DB: d1,
       ...(r2Bucket ? { EMOJI_BUCKET: r2Bucket } : {}),
       FIREBASE_PROJECT_ID: "eve-fb0e3",
-      SUPABASE_PROJECT_URL: "https://test.supabase.co",
-      SUPABASE_BUCKET_NAME: "eve-media",
-      SUPABASE_SERVICE_ROLE_KEY: "test-key",
       TELEGRAM_BOT_TOKEN: "test-bot-secret",
+      TELEGRAM_MEDIA_CHANNEL_ID: "-1001234567890",
     };
     c.set("user", user);
     await next();

@@ -22,7 +22,7 @@ esac
 `);
     chmodSync(curl, 0o755);
     const summary = join(directory, 'summary.md');
-    const result = spawnSync('bash', ['scripts/smoke-test.sh'], { cwd: new URL('../', import.meta.url), encoding: 'utf8', env: { ...process.env, PATH: `${directory}:${process.env.PATH}`, CLOUDFLARE_API_TOKEN: '', SUPABASE_SERVICE_ROLE_KEY: '', DIAGNOSTIC_KEY: '', GITHUB_STEP_SUMMARY: summary, EVE_FAIL_GUARD: fail ? '1' : '0' } });
+    const result = spawnSync('bash', ['scripts/smoke-test.sh'], { cwd: new URL('../', import.meta.url), encoding: 'utf8', env: { ...process.env, PATH: `${directory}:${process.env.PATH}`, CLOUDFLARE_API_TOKEN: '', TELEGRAM_BOT_TOKEN: '', DIAGNOSTIC_KEY: '', GITHUB_STEP_SUMMARY: summary, EVE_FAIL_GUARD: fail ? '1' : '0' } });
     return { result, summary: readFileSync(summary, 'utf8') };
   } finally { rmSync(directory, { recursive: true, force: true }); }
 }
@@ -31,7 +31,7 @@ test('deployment summary never claims unexecuted AI or diagnostic checks passed'
   assert.equal(result.status, 0, result.stderr);
   assert.match(summary, /AI Test Generation.*NOT RUN/);
   assert.match(summary, /Authenticated D1 Operations.*SKIPPED/);
-  assert.match(summary, /Supabase Storage Operations.*SKIPPED/);
+  assert.match(summary, /Telegram Media Vault Operations.*SKIPPED/);
   assert.match(summary, /Authentication Guard.*PASS/);
 });
 test('deployment summary records a failed auth guard and exits unsuccessfully', () => {

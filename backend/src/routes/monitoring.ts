@@ -21,18 +21,29 @@ monitoringRoutes.get('/overview', async (c) => {
 });
 
 monitoringRoutes.get('/health', async (c) => {
+  const hasR2 = Boolean(c.env.EMOJI_BUCKET);
+  const hasTelegramVault = Boolean(
+    c.env.TELEGRAM_BOT_TOKEN?.trim() && c.env.TELEGRAM_MEDIA_CHANNEL_ID?.trim()
+  );
   const checks: Record<string, { status: string; detail: string }> = {
     backend: { status: 'verified', detail: 'Authenticated API request reached the Worker' },
     database: { status: 'unconfigured', detail: 'D1 binding is missing' },
     firebase: { status: 'unconfigured', detail: 'Firebase project is missing' },
     firestore: { status: 'unavailable', detail: 'No authorized Firestore probe is configured in the Worker' },
     messaging: { status: 'unavailable', detail: 'FCM delivery is not tested by this read-only check' },
-    media: { status: c.env.SUPABASE_PROJECT_URL && c.env.SUPABASE_BUCKET_NAME && c.env.SUPABASE_SERVICE_ROLE_KEY ? 'configured' : 'unconfigured', detail: 'Media binding configuration only; storage access is not tested' },
+    media: {
+      status: hasTelegramVault || hasR2 ? 'configured' : 'unavailable',
+      detail: hasTelegramVault
+        ? 'Telegram Media Vault (TELEGRAM_BOT_TOKEN and TELEGRAM_MEDIA_CHANNEL_ID) is configured; storage access is not tested'
+        : hasR2
+        ? 'Cloudflare R2 EMOJI_BUCKET is configured; Telegram Media Vault is unconfigured'
+        : 'Telegram Media Vault is unavailable: set TELEGRAM_BOT_TOKEN and TELEGRAM_MEDIA_CHANNEL_ID on the Worker',
+    },
     r2: {
-      status: c.env.EMOJI_BUCKET ? 'configured' : 'unconfigured',
-      detail: c.env.EMOJI_BUCKET
+      status: hasR2 ? 'configured' : 'unconfigured',
+      detail: hasR2
         ? 'Cloudflare R2 EMOJI_BUCKET binding configured for emoji/sticker assets'
-        : 'R2 EMOJI_BUCKET not bound in wrangler.toml; Supabase Storage fallback active',
+        : 'R2 EMOJI_BUCKET not bound in wrangler.toml; Telegram Media Vault active',
     },
     ai: { status: getGeminiApiKeys(c.env).length ? 'configured' : 'unconfigured', detail: 'Configuration check only; use the existing AI connection test to verify provider access' },
   };

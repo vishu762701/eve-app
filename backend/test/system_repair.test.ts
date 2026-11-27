@@ -523,10 +523,10 @@ test('media deletion never removes storage before a failed database write', asyn
  try {
   for (const kind of ['syllabus','banner']) {
    const db = new LocalD1(); let storageDeletes = 0;
-   globalThis.fetch = async () => { storageDeletes++; return new Response('{}', { status: 200 }); };
-   const admin = harness(db, true, { SUPABASE_PROJECT_URL: 'https://isolated.invalid', SUPABASE_BUCKET_NAME: 'eve-media', SUPABASE_SERVICE_ROLE_KEY: 'test-only-key' });
-   db.sqlite.exec("UPDATE exams SET syllabus_url = 'https://isolated.invalid/storage/v1/object/public/eve-media/syllabus.pdf' WHERE id = 'exam'");
-   db.sqlite.exec("INSERT INTO home_banners (id,image_url,storage_path,uploaded_at) VALUES ('banner','https://isolated.invalid/banner.jpg','banners/banner.jpg',1)");
+   globalThis.fetch = async () => { storageDeletes++; return Response.json({ ok: true, result: true }); };
+   const admin = harness(db, true, { TELEGRAM_BOT_TOKEN: 'test-bot-token', TELEGRAM_MEDIA_CHANNEL_ID: '-1001234567890' });
+   db.sqlite.exec("UPDATE exams SET syllabus_url = '/api/exams/exam/syllabus?k=tg%3A101%3ABQAC_syl' WHERE id = 'exam'");
+   db.sqlite.exec("INSERT INTO home_banners (id,image_url,storage_path,uploaded_at) VALUES ('banner','/api/banners/banner/media','tg:102:BQAC_ban',1)");
    db.failPattern = kind === 'syllabus' ? 'UPDATE exams' : 'DELETE FROM home_banners';
    const path = kind === 'syllabus' ? '/api/exams/exam/syllabus' : '/api/banners/banner';
    assert.equal((await admin(path, undefined, 'DELETE')).status, 500);
@@ -538,16 +538,16 @@ test('media deletion never removes storage before a failed database write', asyn
 
 test('incomplete media cleanup is reported and recorded without sensitive paths', async () => {
  const db = new LocalD1();
- db.sqlite.exec("INSERT INTO home_banners (id,image_url,storage_path,uploaded_at) VALUES ('banner','https://isolated.invalid/banner.jpg','banners/banner.jpg',1)");
+ db.sqlite.exec("INSERT INTO home_banners (id,image_url,storage_path,uploaded_at) VALUES ('banner','/api/banners/banner/media','tg:102:BQAC_ban',1)");
  const original = globalThis.fetch; globalThis.fetch = async () => new Response('{}', { status: 503 });
  try {
-  const response = await harness(db, true, { SUPABASE_PROJECT_URL: 'https://isolated.invalid', SUPABASE_BUCKET_NAME: 'eve-media', SUPABASE_SERVICE_ROLE_KEY: 'test-only-key' })('/api/banners/banner', undefined, 'DELETE');
+  const response = await harness(db, true, { TELEGRAM_BOT_TOKEN: 'test-bot-token', TELEGRAM_MEDIA_CHANNEL_ID: '-1001234567890' })('/api/banners/banner', undefined, 'DELETE');
   assert.equal(response.status, 200); const result = await response.json() as any;
   assert.equal(result.success, true); assert.match(result.message, /cleanup was not completed/);
   assert.equal(db.count('home_banners'), 0);
   const event = db.sqlite.prepare('SELECT * FROM operation_events').get()!;
   assert.equal(event.category, 'MEDIA_CLEANUP_INCOMPLETE'); assert.equal(event.retryable, 0);
-  assert.ok(!JSON.stringify(event).includes('banner.jpg')); assert.ok(!JSON.stringify(event).includes('test-only-key'));
+  assert.ok(!JSON.stringify(event).includes('BQAC_ban')); assert.ok(!JSON.stringify(event).includes('test-bot-token'));
  } finally { globalThis.fetch = original; }
 });
 
@@ -583,8 +583,8 @@ test('syllabus PDF validator rejects arbitrary bytes and enforces bounded real h
 test('syllabus upload route rejects invalid target and content before writing to storage', async () => {
   const db = new LocalD1(); const original = globalThis.fetch;
   let storageRequests = 0;
-  globalThis.fetch = async () => { storageRequests++; return new Response('{}', { status: 200 }); };
-  const request = harness(db, true, { SUPABASE_PROJECT_URL: 'https://isolated.invalid', SUPABASE_BUCKET_NAME: 'eve-media', SUPABASE_SERVICE_ROLE_KEY: 'test-only-key' });
+  globalThis.fetch = async () => { storageRequests++; return Response.json({ ok: true, result: { message_id: 201, document: { file_id: 'BQAC_pdf' } } }); };
+  const request = harness(db, true, { TELEGRAM_BOT_TOKEN: 'test-bot-token', TELEGRAM_MEDIA_CHANNEL_ID: '-1001234567890' });
   try {
     const fakePdf = Buffer.from('plain text not a PDF\n%%EOF').toString('base64');
     assert.equal((await request('/api/exams/no-such-exam/syllabus', { base64: fakePdf })).status, 404);
@@ -599,8 +599,11 @@ test('syllabus upload route rejects invalid target and content before writing to
 test('confirmed syllabus upload stores sanitized label and creates one audit action', async () => {
   const db = new LocalD1(); const original = globalThis.fetch;
   const urls: string[] = [];
-  globalThis.fetch = async (input) => { urls.push(String(input)); return new Response('{}', { status: 200 }); };
-  const request = harness(db, true, { SUPABASE_PROJECT_URL: 'https://isolated.invalid', SUPABASE_BUCKET_NAME: 'eve-media', SUPABASE_SERVICE_ROLE_KEY: 'test-only-key' });
+  globalThis.fetch = async (input) => {
+    urls.push(String(input));
+    return Response.json({ ok: true, result: { message_id: 201, document: { file_id: 'BQAC_pdf' } } });
+  };
+  const request = harness(db, true, { TELEGRAM_BOT_TOKEN: 'test-bot-token', TELEGRAM_MEDIA_CHANNEL_ID: '-1001234567890' });
   const encoded = Buffer.from('%PDF-1.7\ntrailer\n%%EOF').toString('base64');
   try {
     const response = await request('/api/exams/exam/syllabus', { base64: encoded, fileName: '../folder\\notes\n.pdf' });
@@ -608,9 +611,9 @@ test('confirmed syllabus upload stores sanitized label and creates one audit act
     const json = await response.json() as any;
     assert.equal(json.success, true);
     assert.equal(json.data.syllabusFileName, '.._folder_notes_.pdf');
-    assert.match(json.data.syllabusUrl, /\/storage\/v1\/object\/public\/eve-media\/syllabi\//);
+    assert.match(json.data.syllabusUrl, /^\/api\/exams\/exam\/syllabus\?k=tg%3A201%3ABQAC_pdf/);
     assert.equal(urls.length, 1);
-    assert.match(urls[0], /\/storage\/v1\/object\/eve-media\/syllabi\//);
+    assert.match(urls[0], /\/sendDocument$/);
     const stored = db.sqlite.prepare("SELECT syllabus_url, syllabus_file_name FROM exams WHERE id = 'exam'").get() as any;
     assert.equal(stored.syllabus_url, json.data.syllabusUrl);
     assert.equal(stored.syllabus_file_name, json.data.syllabusFileName);
@@ -620,18 +623,19 @@ test('confirmed syllabus upload stores sanitized label and creates one audit act
 
 test('database failure after storage upload does not acknowledge a syllabus and compensates', async () => {
   const db = new LocalD1(); const original = globalThis.fetch;
-  const operations: string[] = []; db.failPattern = 'UPDATE exams SET syllabus_url';
-  globalThis.fetch = async (_input, init) => {
-    operations.push(String(init?.method || 'GET'));
-    return new Response('{}', { status: 200 });
+  const endpoints: string[] = []; db.failPattern = 'UPDATE exams SET syllabus_url';
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+    endpoints.push(url.slice(url.lastIndexOf('/')));
+    return Response.json({ ok: true, result: { message_id: 201, document: { file_id: 'BQAC_pdf' } } });
   };
-  const request = harness(db, true, { SUPABASE_PROJECT_URL: 'https://isolated.invalid', SUPABASE_BUCKET_NAME: 'eve-media', SUPABASE_SERVICE_ROLE_KEY: 'test-only-key' });
+  const request = harness(db, true, { TELEGRAM_BOT_TOKEN: 'test-bot-token', TELEGRAM_MEDIA_CHANNEL_ID: '-1001234567890' });
   const encoded = Buffer.from('%PDF-1.7\ntrailer\n%%EOF').toString('base64');
   try {
     const response = await request('/api/exams/exam/syllabus', { base64: encoded });
     assert.equal(response.status, 409);
     assert.equal((await response.json() as any).success, false);
-    assert.deepEqual(operations, ['POST', 'DELETE']);
+    assert.deepEqual(endpoints, ['/sendDocument', '/deleteMessage']);
     assert.equal((db.sqlite.prepare("SELECT syllabus_url FROM exams WHERE id = 'exam'").get() as any).syllabus_url || '', '');
     assert.equal((db.sqlite.prepare("SELECT COUNT(*) as n FROM admin_audit_log WHERE action_type = 'SYLLABUS_UPDATED'").get() as any).n, 0);
   } finally { globalThis.fetch = original; }

@@ -90,7 +90,7 @@ export async function authMiddleware(c: Context<{ Bindings: Env; Variables: { us
     (path === "/api/banners" && method === "GET") ||
     (path.startsWith("/api/banners/") && path.endsWith("/media") && method === "GET") ||
     (path === "/api/typography/published" && method === "GET") ||
-    (path.startsWith("/api/exams/") && path.endsWith("/avatar") && method === "GET") ||
+    (path.startsWith("/api/exams/") && (path.endsWith("/avatar") || path.endsWith("/syllabus")) && method === "GET") ||
     (path.startsWith("/api/generated-tests/") && path.endsWith("/avatar") && method === "GET") ||
     (path === "/api/announcement-channel/avatar" && method === "GET")
   ) {
