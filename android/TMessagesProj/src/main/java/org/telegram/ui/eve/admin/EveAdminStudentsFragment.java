@@ -44,7 +44,6 @@ import java.util.Objects;
 public class EveAdminStudentsFragment extends BaseFragment {
 
     private static final int MENU_SEARCH = 1;
-    private static final int MENU_REFRESH = 2;
 
     private static final int ID_RETRY = 101;
     private static final int ID_LOAD_MORE = 102;
@@ -66,6 +65,7 @@ public class EveAdminStudentsFragment extends BaseFragment {
     private int searchSeq = 0;
 
     private final Runnable pendingSearchRunnable = () -> loadPage(1, false);
+    private final EveAdminUiChrome.AutoSyncController autoSync = new EveAdminUiChrome.AutoSyncController(this::reload);
 
     @Override
     public boolean onFragmentCreate() {
@@ -131,8 +131,6 @@ public class EveAdminStudentsFragment extends BaseFragment {
                     public void onItemClick(int id) {
                         if (id == -1) {
                             finishFragment();
-                        } else if (id == MENU_REFRESH) {
-                            reload();
                         }
                     }
                 },
@@ -162,7 +160,6 @@ public class EveAdminStudentsFragment extends BaseFragment {
                         }
                     });
             searchItem.setSearchFieldHint("Search name, @username, email, EVE ID");
-            menu.addItem(MENU_REFRESH, R.drawable.msg_retry, getResourceProvider());
         }
 
         fragmentView = chrome.rootView;
@@ -171,8 +168,21 @@ public class EveAdminStudentsFragment extends BaseFragment {
     }
 
     @Override
+    public void onResume() {
+        super.onResume();
+        autoSync.onResume();
+    }
+
+    @Override
+    public void onPause() {
+        autoSync.onPause();
+        super.onPause();
+    }
+
+    @Override
     public void onFragmentDestroy() {
         destroyed = true;
+        autoSync.destroy();
         searchSeq++;
         AndroidUtilities.cancelRunOnUIThread(pendingSearchRunnable);
         super.onFragmentDestroy();
@@ -200,11 +210,14 @@ public class EveAdminStudentsFragment extends BaseFragment {
         final String querySnapshot = currentQuery;
         if (append) {
             loadingMore = true;
+            updateList();
         } else {
-            loading = true;
+            loading = students.isEmpty();
             errorText = "";
+            if (loading) {
+                updateList();
+            }
         }
-        updateList();
 
         EveAdminRepository.ResultCallback<List<EveAdminModels.AdminStudentItem>> cb =
                 new EveAdminRepository.ResultCallback<List<EveAdminModels.AdminStudentItem>>() {
@@ -216,6 +229,7 @@ public class EveAdminStudentsFragment extends BaseFragment {
                         loading = false;
                         loadingMore = false;
                         errorText = "";
+                        autoSync.markSynced();
                         currentPage = page;
                         if (!append) {
                             students.clear();
@@ -234,6 +248,7 @@ public class EveAdminStudentsFragment extends BaseFragment {
                         }
                         loading = false;
                         loadingMore = false;
+                        autoSync.markSynced();
                         errorText = message != null ? message : "Unable to load students.";
                         updateHeaderSubtitle();
                         updateList();

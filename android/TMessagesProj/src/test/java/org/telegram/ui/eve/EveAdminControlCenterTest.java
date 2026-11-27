@@ -314,7 +314,14 @@ public class EveAdminControlCenterTest {
                 "org.telegram.ui.eve.admin.EveAdminPaymentsFragment",
                 "org.telegram.ui.eve.admin.EveAdminPremiumConfigFragment",
                 "org.telegram.ui.eve.admin.EveAdminRolesFragment",
+                "org.telegram.ui.eve.admin.EveAdminRoleEditFragment",
                 "org.telegram.ui.eve.admin.EveAdminAuditLogFragment",
+                "org.telegram.ui.eve.admin.EveAdminSystemHealthFragment",
+                "org.telegram.ui.eve.admin.EveAdminExamAnalyticsFragment",
+                "org.telegram.ui.eve.admin.EveAdminCrashReportsFragment",
+                "org.telegram.ui.eve.admin.EveAdminApiUsageFragment",
+                "org.telegram.ui.eve.admin.EveAdminMaintenanceConfigFragment",
+                "org.telegram.ui.eve.admin.EveAdminUiChrome$AutoSyncController",
                 "org.telegram.ui.eve.admin.EveAdminPollsFragment",
                 "org.telegram.ui.eve.admin.EveAdminPollCreateFragment",
                 "org.telegram.ui.eve.admin.EveAdminBroadcastsFragment",
@@ -365,5 +372,85 @@ public class EveAdminControlCenterTest {
         assertTrue(sent.has("active"));
         assertFalse(sent.has("isActive"));
         assertFalse(sent.getBoolean("active"));
+    }
+
+    @Test
+    public void adminAuditDeleteCrashResolveAndAnalyticsContracts_parseAndRouteCleanly() throws Exception {
+        assertEquals(
+                org.telegram.ui.eve.admin.EveAdminAuditLogFragment.CAT_EXAMS,
+                org.telegram.ui.eve.admin.EveAdminAuditLogFragment.classifyCategory("EXAM_UPDATED")
+        );
+        assertEquals(
+                org.telegram.ui.eve.admin.EveAdminAuditLogFragment.CAT_STUDENTS,
+                org.telegram.ui.eve.admin.EveAdminAuditLogFragment.classifyCategory("PREMIUM_GRANTED")
+        );
+        assertEquals(
+                org.telegram.ui.eve.admin.EveAdminAuditLogFragment.CAT_CONTENT,
+                org.telegram.ui.eve.admin.EveAdminAuditLogFragment.classifyCategory("POLL_CREATED")
+        );
+        assertEquals(
+                org.telegram.ui.eve.admin.EveAdminAuditLogFragment.CAT_SYSTEM,
+                org.telegram.ui.eve.admin.EveAdminAuditLogFragment.classifyCategory("CONFIG_UPDATED")
+        );
+
+        EveAdminModels.ExamAnalyticsItem analytics = new EveAdminModels.ExamAnalyticsItem(
+                "ex-9", "SSC CGL Mock", 42, 74.5, 96.0
+        );
+        assertEquals(96.0, analytics.highestScore, 0.01);
+
+        JSONObject crashJson = new JSONObject("{"
+                + "\"signature\":\"sig-abc\","
+                + "\"exceptionClass\":\"IllegalStateException\","
+                + "\"topFrame\":\"EveTestPlayerFragment.java:210\","
+                + "\"sanitizedMessage\":\"Fragment not attached\","
+                + "\"occurrenceCount\":5,"
+                + "\"status\":\"open\","
+                + "\"suggestedCause\":\"Lifecycle detach\","
+                + "\"firstSeen\":1700000000000,"
+                + "\"lastSeen\":1700000500000,"
+                + "\"plainEnglishSummary\":\"Screen closed before timer finished.\","
+                + "\"whereItHappened\":\"Exam player screen\""
+                + "}");
+        EveAdminModels.CrashSignatureItem crashItem = EveAdminModels.CrashSignatureItem.fromJson(crashJson);
+        assertNotNull(crashItem);
+        assertFalse(crashItem.isResolved());
+        assertEquals("Screen closed before timer finished.", crashItem.plainEnglishSummary);
+        assertEquals("Exam player screen", crashItem.whereItHappened);
+
+        java.util.List<String> calls = new java.util.ArrayList<>();
+        EveBackendClient client = new EveBackendClient("https://eve-backend.anyqueairdrop.workers.dev", (method, url, token, body) -> {
+            calls.add(method + " " + url);
+            if ("DELETE".equals(method) && url.contains("/api/admin/audit-log")) {
+                return new EveBackendClient.HttpResponse(200, "{\"success\":true,\"deletedCount\":7}");
+            }
+            if (url.contains("/api/admin/system/crashes") && "GET".equals(method)) {
+                return new EveBackendClient.HttpResponse(200, "{\"crashes\":[" + crashJson.toString() + "]}");
+            }
+            if (url.endsWith("/api/admin/system/security-events")) {
+                return new EveBackendClient.HttpResponse(200, "{\"events\":[]}");
+            }
+            if (url.contains("/api/admin/users/stu-1")) {
+                return new EveBackendClient.HttpResponse(200, "{\"user\":{\"id\":\"stu-1\",\"name\":\"Riya\",\"email\":\"riya@example.com\"}}");
+            }
+            return new EveBackendClient.HttpResponse(200, "{\"success\":true}");
+        });
+        EveAdminRepository repo = new EveAdminRepository(client);
+        assertEquals(7, repo.deleteAuditLogs("owner-jwt", "exams"));
+        assertTrue(calls.get(calls.size() - 1).contains("/api/admin/audit-log?category=exams"));
+
+        assertEquals(1, repo.fetchCrashSignatures("admin-jwt", "open").size());
+        repo.resolveCrashSignature("admin-jwt", "sig-abc");
+        assertTrue(calls.get(calls.size() - 1).startsWith("POST "));
+        assertTrue(calls.get(calls.size() - 1).contains("/api/admin/system/crashes/sig-abc/resolve"));
+
+        repo.deleteCrashSignature("owner-jwt", "sig-abc");
+        assertTrue(calls.get(calls.size() - 1).startsWith("DELETE "));
+        assertTrue(calls.get(calls.size() - 1).contains("/api/admin/system/crashes/sig-abc"));
+
+        assertNotNull(repo.fetchSecurityEvents("admin-jwt"));
+        assertTrue(calls.get(calls.size() - 1).endsWith("/api/admin/system/security-events"));
+
+        EveAdminModels.AdminStudentItem student = repo.fetchStudentById("admin-jwt", "stu-1", "Fallback");
+        assertEquals("Riya", student.name);
     }
 }

@@ -1203,13 +1203,19 @@ public final class EveAdminModels {
     public static final class ExamAnalyticsItem {
         public final String examId;
         public final String examName;
+        public final String category;
         public final int attemptCount;
         public final double averageScore;
         public final double highestScore;
 
         public ExamAnalyticsItem(String examId, String examName, int attemptCount, double averageScore, double highestScore) {
+            this(examId, examName, "General", attemptCount, averageScore, highestScore);
+        }
+
+        public ExamAnalyticsItem(String examId, String examName, String category, int attemptCount, double averageScore, double highestScore) {
             this.examId = examId != null ? examId : "";
             this.examName = examName != null ? examName : "";
+            this.category = category != null && !category.trim().isEmpty() ? category.trim() : "General";
             this.attemptCount = attemptCount;
             this.averageScore = averageScore;
             this.highestScore = highestScore;
@@ -1224,6 +1230,7 @@ public final class EveAdminModels {
                 out.add(new ExamAnalyticsItem(
                         clean(o, "examId", ""),
                         clean(o, "examName", ""),
+                        clean(o, "category", "General"),
                         o.optInt("attemptCount", 0),
                         o.optDouble("averageScore", 0.0),
                         o.optDouble("highestScore", 0.0)
@@ -1241,9 +1248,27 @@ public final class EveAdminModels {
         public final int occurrenceCount;
         public final String status;
         public final String suggestedCause;
+        public final long firstSeen;
         public final long lastSeen;
+        public final String plainEnglishSummary;
+        public final String whereItHappened;
 
         public CrashSignatureItem(String signature, String exceptionClass, String topFrame, String sanitizedMessage, int occurrenceCount, String status, String suggestedCause, long lastSeen) {
+            this(signature, exceptionClass, topFrame, sanitizedMessage, occurrenceCount, status, suggestedCause, 0L, lastSeen, "", "");
+        }
+
+        public CrashSignatureItem(
+                String signature,
+                String exceptionClass,
+                String topFrame,
+                String sanitizedMessage,
+                int occurrenceCount,
+                String status,
+                String suggestedCause,
+                long firstSeen,
+                long lastSeen,
+                String plainEnglishSummary,
+                String whereItHappened) {
             this.signature = signature != null ? signature : "";
             this.exceptionClass = exceptionClass != null ? exceptionClass : "";
             this.topFrame = topFrame != null ? topFrame : "";
@@ -1251,27 +1276,185 @@ public final class EveAdminModels {
             this.occurrenceCount = occurrenceCount;
             this.status = status != null ? status : "open";
             this.suggestedCause = suggestedCause != null ? suggestedCause : "";
+            this.firstSeen = firstSeen;
             this.lastSeen = lastSeen;
+            this.plainEnglishSummary = plainEnglishSummary != null ? plainEnglishSummary : "";
+            this.whereItHappened = whereItHappened != null ? whereItHappened : "";
+        }
+
+        public boolean isResolved() {
+            return "resolved".equalsIgnoreCase(status);
+        }
+
+        public static CrashSignatureItem fromJson(JSONObject o) {
+            if (o == null) return null;
+            return new CrashSignatureItem(
+                    clean(o, "signature", ""),
+                    clean(o, "exception_class", clean(o, "exceptionClass", "")),
+                    clean(o, "top_frame", clean(o, "topFrame", "")),
+                    clean(o, "sanitized_message", clean(o, "sanitizedMessage", "")),
+                    o.optInt("occurrence_count", o.optInt("occurrenceCount", 1)),
+                    clean(o, "status", "open"),
+                    clean(o, "suggested_cause", clean(o, "suggestedCause", "")),
+                    o.optLong("first_seen", o.optLong("firstSeen", 0L)),
+                    o.optLong("last_seen", o.optLong("lastSeen", 0L)),
+                    clean(o, "plainEnglishSummary", clean(o, "plain_english_summary", "")),
+                    clean(o, "whereItHappened", clean(o, "where_it_happened", ""))
+            );
         }
 
         public static List<CrashSignatureItem> parseList(JSONArray arr) {
             List<CrashSignatureItem> out = new ArrayList<>();
             if (arr == null) return out;
             for (int i = 0; i < arr.length(); i++) {
+                CrashSignatureItem parsed = fromJson(arr.optJSONObject(i));
+                if (parsed != null) {
+                    out.add(parsed);
+                }
+            }
+            return out;
+        }
+    }
+
+    public static final class CrashIncidentItem {
+        public final String id;
+        public final String appVersionName;
+        public final int appVersionCode;
+        public final int androidSdk;
+        public final String deviceModel;
+        public final String anrOrExitReason;
+        public final String sanitizedFramesJson;
+        public final long timestamp;
+        public final boolean isSynthetic;
+
+        public CrashIncidentItem(
+                String id,
+                String appVersionName,
+                int appVersionCode,
+                int androidSdk,
+                String deviceModel,
+                String anrOrExitReason,
+                String sanitizedFramesJson,
+                long timestamp,
+                boolean isSynthetic) {
+            this.id = id != null ? id : "";
+            this.appVersionName = appVersionName != null ? appVersionName : "";
+            this.appVersionCode = appVersionCode;
+            this.androidSdk = androidSdk;
+            this.deviceModel = deviceModel != null ? deviceModel : "";
+            this.anrOrExitReason = anrOrExitReason != null ? anrOrExitReason : "";
+            this.sanitizedFramesJson = sanitizedFramesJson != null ? sanitizedFramesJson : "";
+            this.timestamp = timestamp;
+            this.isSynthetic = isSynthetic;
+        }
+
+        public static List<CrashIncidentItem> parseList(JSONArray arr) {
+            List<CrashIncidentItem> out = new ArrayList<>();
+            if (arr == null) return out;
+            for (int i = 0; i < arr.length(); i++) {
                 JSONObject o = arr.optJSONObject(i);
                 if (o == null) continue;
-                out.add(new CrashSignatureItem(
-                        clean(o, "signature", ""),
-                        clean(o, "exception_class", clean(o, "exceptionClass", "")),
-                        clean(o, "top_frame", clean(o, "topFrame", "")),
-                        clean(o, "sanitized_message", clean(o, "sanitizedMessage", "")),
-                        o.optInt("occurrence_count", o.optInt("occurrenceCount", 1)),
-                        clean(o, "status", "open"),
-                        clean(o, "suggested_cause", clean(o, "suggestedCause", "")),
-                        o.optLong("last_seen", o.optLong("lastSeen", 0L))
+                out.add(new CrashIncidentItem(
+                        clean(o, "id", ""),
+                        clean(o, "app_version_name", clean(o, "appVersionName", "")),
+                        o.optInt("app_version_code", o.optInt("appVersionCode", 0)),
+                        o.optInt("android_sdk", o.optInt("androidSdk", 0)),
+                        clean(o, "device_model", clean(o, "deviceModel", "")),
+                        clean(o, "anr_or_exit_reason", clean(o, "anrOrExitReason", "")),
+                        clean(o, "sanitized_frames_json", clean(o, "sanitizedFramesJson", "")),
+                        o.optLong("timestamp", 0L),
+                        o.optInt("is_synthetic", 0) == 1 || o.optBoolean("isSynthetic", false)
                 ));
             }
             return out;
+        }
+    }
+
+    public static final class CrashDetailBundle {
+        public final CrashSignatureItem signature;
+        public final List<CrashIncidentItem> incidents;
+
+        public CrashDetailBundle(CrashSignatureItem signature, List<CrashIncidentItem> incidents) {
+            this.signature = signature;
+            this.incidents = incidents != null ? Collections.unmodifiableList(incidents) : Collections.emptyList();
+        }
+    }
+
+    public static final class SecurityEventItem {
+        public final String id;
+        public final String kind;
+        public final String severity;
+        public final String operation;
+        public final String category;
+        public final int status;
+        public final boolean retryable;
+        public final String correlationId;
+        public final String plainEnglishTitle;
+        public final String plainEnglishDetail;
+        public final long timestamp;
+
+        public SecurityEventItem(
+                String id,
+                String kind,
+                String severity,
+                String operation,
+                String category,
+                int status,
+                boolean retryable,
+                String correlationId,
+                String plainEnglishTitle,
+                String plainEnglishDetail,
+                long timestamp) {
+            this.id = id != null ? id : "";
+            this.kind = kind != null ? kind : "app_error";
+            this.severity = severity != null ? severity : "low";
+            this.operation = operation != null ? operation : "";
+            this.category = category != null ? category : "";
+            this.status = status;
+            this.retryable = retryable;
+            this.correlationId = correlationId != null ? correlationId : "";
+            this.plainEnglishTitle = plainEnglishTitle != null ? plainEnglishTitle : "";
+            this.plainEnglishDetail = plainEnglishDetail != null ? plainEnglishDetail : "";
+            this.timestamp = timestamp;
+        }
+
+        public boolean isSecurityAlert() {
+            return "security".equalsIgnoreCase(kind);
+        }
+
+        public static List<SecurityEventItem> parseList(JSONArray arr) {
+            List<SecurityEventItem> out = new ArrayList<>();
+            if (arr == null) return out;
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject o = arr.optJSONObject(i);
+                if (o == null) continue;
+                out.add(new SecurityEventItem(
+                        clean(o, "id", ""),
+                        clean(o, "kind", "app_error"),
+                        clean(o, "severity", "low"),
+                        clean(o, "operation", ""),
+                        clean(o, "category", ""),
+                        o.optInt("status", 500),
+                        o.optBoolean("retryable", false),
+                        clean(o, "correlationId", ""),
+                        clean(o, "plainEnglishTitle", ""),
+                        clean(o, "plainEnglishDetail", ""),
+                        o.optLong("timestamp", 0L)
+                ));
+            }
+            return out;
+        }
+    }
+
+    public static final class SecurityEventsBundle {
+        public final List<SecurityEventItem> events;
+        public final int securityCount;
+        public final int errorCount;
+
+        public SecurityEventsBundle(List<SecurityEventItem> events, int securityCount, int errorCount) {
+            this.events = events != null ? Collections.unmodifiableList(events) : Collections.emptyList();
+            this.securityCount = Math.max(0, securityCount);
+            this.errorCount = Math.max(0, errorCount);
         }
     }
 

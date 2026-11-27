@@ -3,9 +3,6 @@ package org.telegram.ui.eve.admin;
 import android.app.Activity;
 import android.content.Context;
 import android.view.View;
-import android.widget.CheckBox;
-import android.widget.EditText;
-import android.widget.LinearLayout;
 
 import androidx.annotation.Nullable;
 
@@ -16,8 +13,6 @@ import org.telegram.messenger.R;
 import org.telegram.ui.ActionBar.ActionBar;
 import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.BaseFragment;
-import org.telegram.ui.ActionBar.SimpleActionBarMenu;
-import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.BulletinFactory;
 import org.telegram.ui.Components.IconBackgroundColors;
 import org.telegram.ui.Components.RecyclerListView;
@@ -29,14 +24,11 @@ import org.telegram.ui.eve.exams.EveLeaderboardFragment;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 /**
- * Telegram-native Java Results, Analytics, App Configuration & System Health module.
+ * Telegram-native Java Results, Analytics, App Configuration & System Health hub.
  */
 public class EveAdminInsightsAndSystemFragment extends BaseFragment {
-
-    private static final int MENU_REFRESH = 1;
 
     private static final int ID_EXAM_ANALYTICS = 101;
     private static final int ID_LEADERBOARD = 102;
@@ -46,9 +38,9 @@ public class EveAdminInsightsAndSystemFragment extends BaseFragment {
 
     private static final int ID_APP_CONFIG = 201;
 
+    private static final int ID_SERVICE_HEALTH = 301;
     private static final int ID_AI_HEALTH = 302;
     private static final int ID_FAILED_JOBS = 303;
-    private static final int BASE_SERVICE_ID = 500;
 
     private final EveAdminRepository repo = EveAdminRepository.getInstance();
     private final EveAdminModels.AdminProfile profile;
@@ -57,6 +49,7 @@ public class EveAdminInsightsAndSystemFragment extends BaseFragment {
     private List<EveAdminModels.SystemServiceStatus> serviceStatuses = new ArrayList<>();
     private List<EveAdminModels.GenerationJobItem> generationJobs = new ArrayList<>();
     private EveAdminModels.AppConfigModel appConfig;
+    private final EveAdminUiChrome.AutoSyncController autoSync = new EveAdminUiChrome.AutoSyncController(this::loadLiveHealth);
 
     public EveAdminInsightsAndSystemFragment(EveAdminModels.AdminProfile profile) {
         this.profile = profile;
@@ -115,8 +108,6 @@ public class EveAdminInsightsAndSystemFragment extends BaseFragment {
                     public void onItemClick(int id) {
                         if (id == -1) {
                             finishFragment();
-                        } else if (id == MENU_REFRESH) {
-                            loadLiveHealth();
                         }
                     }
                 },
@@ -124,19 +115,27 @@ public class EveAdminInsightsAndSystemFragment extends BaseFragment {
         );
         listView = chrome.listView;
 
-        if (simpleActionBar != null) {
-            SimpleActionBarMenu menu = simpleActionBar.createMenu();
-            menu.addItem(MENU_REFRESH, R.drawable.msg_retry, getResourceProvider());
-        }
-
         fragmentView = chrome.rootView;
         loadLiveHealth();
         return chrome.rootView;
     }
 
     @Override
+    public void onResume() {
+        super.onResume();
+        autoSync.onResume();
+    }
+
+    @Override
+    public void onPause() {
+        autoSync.onPause();
+        super.onPause();
+    }
+
+    @Override
     public void onFragmentDestroy() {
         destroyed = true;
+        autoSync.destroy();
         super.onFragmentDestroy();
     }
 
@@ -146,6 +145,7 @@ public class EveAdminInsightsAndSystemFragment extends BaseFragment {
             @Override
             public void onSuccess(EveAdminRepository.InsightsBundle data) {
                 if (destroyed) return;
+                autoSync.markSynced();
                 if (data != null) {
                     appConfig = data.appConfig;
                     serviceStatuses = data.serviceStatuses;
@@ -159,6 +159,7 @@ public class EveAdminInsightsAndSystemFragment extends BaseFragment {
             @Override
             public void onError(String message, int httpStatus) {
                 if (destroyed) return;
+                autoSync.markSynced();
                 BulletinFactory.of(EveAdminInsightsAndSystemFragment.this).createErrorBulletin(message).show();
             }
         });
@@ -227,6 +228,13 @@ public class EveAdminInsightsAndSystemFragment extends BaseFragment {
         if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_VIEW_ANALYTICS_LOGS)) {
             items.add(UItem.asHeader("System Health"));
             items.add(SettingsActivity.SettingCell.Factory.of(
+                    ID_SERVICE_HEALTH,
+                    IconBackgroundColors.GREEN.top, IconBackgroundColors.GREEN.bottom,
+                    R.drawable.msg_select,
+                    "Service & Infrastructure Health",
+                    EveAdminSystemHealthFragment.buildSummarySubtitle(serviceStatuses),
+                    serviceStatuses.isEmpty() ? null : String.valueOf(serviceStatuses.size())));
+            items.add(SettingsActivity.SettingCell.Factory.of(
                     ID_AI_HEALTH,
                     IconBackgroundColors.PURPLE.top, IconBackgroundColors.PURPLE.bottom,
                     R.drawable.msg_stats,
@@ -240,32 +248,6 @@ public class EveAdminInsightsAndSystemFragment extends BaseFragment {
                     "Generation Jobs & Retry",
                     "Inspect failed or queued AI generation jobs",
                     generationJobs.size() + " jobs"));
-            for (int i = 0; i < serviceStatuses.size(); i++) {
-                EveAdminModels.SystemServiceStatus s = serviceStatuses.get(i);
-                String statusLower = s.status != null ? s.status.toLowerCase(Locale.US) : "";
-                IconBackgroundColors bg;
-                int iconRes;
-                if (statusLower.contains("ok") || statusLower.contains("healthy") || statusLower.contains("online") || statusLower.contains("up")) {
-                    bg = IconBackgroundColors.GREEN;
-                    iconRes = R.drawable.msg_select;
-                } else if (statusLower.contains("warn") || statusLower.contains("degrad")) {
-                    bg = IconBackgroundColors.ORANGE;
-                    iconRes = R.drawable.msg_warning;
-                } else if (statusLower.contains("down") || statusLower.contains("err") || statusLower.contains("fail")) {
-                    bg = IconBackgroundColors.RED;
-                    iconRes = R.drawable.msg_close;
-                } else {
-                    bg = IconBackgroundColors.GRAY;
-                    iconRes = R.drawable.msg_info;
-                }
-                items.add(SettingsActivity.SettingCell.Factory.of(
-                        BASE_SERVICE_ID + i,
-                        bg.top, bg.bottom,
-                        iconRes,
-                        s.name.toUpperCase(Locale.US),
-                        s.detail,
-                        s.status));
-            }
             items.add(UItem.asShadow(null));
         }
     }
@@ -273,103 +255,33 @@ public class EveAdminInsightsAndSystemFragment extends BaseFragment {
     private void onClick(UItem item, View view, int position, float x, float y) {
         switch (item.id) {
             case ID_EXAM_ANALYTICS:
-                openExamAnalytics();
+                presentFragment(new EveAdminExamAnalyticsFragment());
                 break;
             case ID_LEADERBOARD:
-                presentFragment(new EveLeaderboardFragment("", "Overall Leaderboard"));
+                presentFragment(new EveLeaderboardFragment("", "Overall Leaderboard", true));
                 break;
             case ID_CRASH_REPORTS:
-                openCrashReports();
+                presentFragment(new EveAdminCrashReportsFragment(profile));
                 break;
             case ID_API_USAGE:
-                openApiUsage();
+                presentFragment(new EveAdminApiUsageFragment());
                 break;
             case ID_EXPORT_EXAMS:
                 exportExams();
                 break;
             case ID_APP_CONFIG:
-                openAppConfigDialog();
+                presentFragment(new EveAdminMaintenanceConfigFragment(appConfig, this::loadLiveHealth));
+                break;
+            case ID_SERVICE_HEALTH:
+                presentFragment(new EveAdminSystemHealthFragment(serviceStatuses));
                 break;
             case ID_AI_HEALTH:
                 runAiProbe();
                 break;
             case ID_FAILED_JOBS:
-                openJobsDialog();
-                break;
-            default:
-                if (item.id >= BASE_SERVICE_ID) {
-                    int idx = item.id - BASE_SERVICE_ID;
-                    if (idx >= 0 && idx < serviceStatuses.size()) {
-                        EveAdminModels.SystemServiceStatus s = serviceStatuses.get(idx);
-                        showAlert(s.name.toUpperCase(Locale.US) + " (" + s.status + ")", s.detail);
-                    }
-                }
+                EveAdminDialogs.showGenerationJobsDialog(this, repo, generationJobs, this::loadLiveHealth);
                 break;
         }
-    }
-
-    private void openExamAnalytics() {
-        repo.runWithAdminToken(errCb(), token -> {
-            List<EveAdminModels.ExamAnalyticsItem> list = repo.fetchExamAnalytics(token);
-            repo.postSuccess(new EveAdminRepository.ResultCallback<List<EveAdminModels.ExamAnalyticsItem>>() {
-                @Override
-                public void onSuccess(List<EveAdminModels.ExamAnalyticsItem> data) {
-                    StringBuilder sb = new StringBuilder();
-                    for (EveAdminModels.ExamAnalyticsItem item : data) {
-                        sb.append("• ").append(item.examName)
-                                .append("\n  Attempts: ").append(item.attemptCount)
-                                .append(" | Avg: ").append(String.format(Locale.US, "%.1f", item.averageScore))
-                                .append(" | High: ").append(String.format(Locale.US, "%.1f", item.highestScore))
-                                .append("\n\n");
-                    }
-                    showAlert("Exam Analytics", sb.length() > 0 ? sb.toString() : "No attempts recorded yet.");
-                }
-                @Override public void onError(String message, int httpStatus) {}
-            }, list);
-        });
-    }
-
-    private void openCrashReports() {
-        repo.runWithAdminToken(errCb(), token -> {
-            List<EveAdminModels.CrashSignatureItem> list = repo.fetchCrashSignatures(token);
-            repo.postSuccess(new EveAdminRepository.ResultCallback<List<EveAdminModels.CrashSignatureItem>>() {
-                @Override
-                public void onSuccess(List<EveAdminModels.CrashSignatureItem> data) {
-                    StringBuilder sb = new StringBuilder();
-                    for (EveAdminModels.CrashSignatureItem c : data) {
-                        sb.append("• [").append(c.occurrenceCount).append("x] ").append(c.exceptionClass)
-                                .append("\n  ").append(c.topFrame)
-                                .append("\n  ").append(c.sanitizedMessage)
-                                .append("\n\n");
-                    }
-                    showAlert("Crash Signatures", sb.length() > 0 ? sb.toString() : "Zero production crash signatures recorded.");
-                }
-                @Override public void onError(String message, int httpStatus) {}
-            }, list);
-        });
-    }
-
-    private void openApiUsage() {
-        repo.runWithAdminToken(errCb(), token -> {
-            JSONObject data = repo.fetchApiUsage(token);
-            repo.postSuccess(new EveAdminRepository.ResultCallback<JSONObject>() {
-                @Override
-                public void onSuccess(JSONObject obj) {
-                    if (obj == null) {
-                        showAlert("API Usage", "No usage telemetry available.");
-                        return;
-                    }
-                    String text = "Month: " + obj.optString("monthDisplayName", obj.optString("yearMonth", "-"))
-                            + "\nAI Calls: " + obj.optLong("geminiCalls", 0)
-                            + "\nSuccessful: " + obj.optLong("geminiSuccessfulCalls", 0)
-                            + "\nFailed: " + obj.optLong("geminiFailedCalls", 0)
-                            + "\nDocuments Created: " + obj.optLong("documentsCreated", 0)
-                            + "\nTest Submissions: " + obj.optLong("testSubmissions", 0);
-                    showAlert("API Usage & AI Cost Monitor", text);
-                }
-                @Override public void onError(String message, int httpStatus) {}
-            }, data);
-        });
     }
 
     private void exportExams() {
@@ -390,68 +302,6 @@ public class EveAdminInsightsAndSystemFragment extends BaseFragment {
         });
     }
 
-    private void openAppConfigDialog() {
-        Activity act = getParentActivity();
-        if (act == null) return;
-        EveAdminModels.AppConfigModel cfg = appConfig != null ? appConfig : new EveAdminModels.AppConfigModel(1, false, "", "paused");
-        CheckBox maintCheck = new CheckBox(act);
-        maintCheck.setText("Enable Maintenance Mode");
-        maintCheck.setChecked(cfg.maintenanceMode);
-        maintCheck.setTextColor(Theme.getColor(Theme.key_dialogTextBlack, getResourceProvider()));
-
-        EditText minVer = new EditText(act);
-        minVer.setHint("Minimum supported versionCode");
-        minVer.setText(String.valueOf(cfg.minSupportedVersionCode));
-        minVer.setTextColor(Theme.getColor(Theme.key_dialogTextBlack, getResourceProvider()));
-        minVer.setHintTextColor(Theme.getColor(Theme.key_dialogTextHint, getResourceProvider()));
-
-        EditText maintMsg = new EditText(act);
-        maintMsg.setHint("Maintenance message");
-        maintMsg.setText(cfg.maintenanceMessage);
-        maintMsg.setTextColor(Theme.getColor(Theme.key_dialogTextBlack, getResourceProvider()));
-        maintMsg.setHintTextColor(Theme.getColor(Theme.key_dialogTextHint, getResourceProvider()));
-
-        EditText defPub = new EditText(act);
-        defPub.setHint("Default publish mode (live / paused)");
-        defPub.setText(cfg.defaultPublishMode);
-        defPub.setTextColor(Theme.getColor(Theme.key_dialogTextBlack, getResourceProvider()));
-        defPub.setHintTextColor(Theme.getColor(Theme.key_dialogTextHint, getResourceProvider()));
-
-        LinearLayout box = new LinearLayout(act);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(AndroidUtilities.dp(20), AndroidUtilities.dp(8), AndroidUtilities.dp(20), AndroidUtilities.dp(8));
-        box.addView(maintCheck);
-        box.addView(minVer);
-        box.addView(maintMsg);
-        box.addView(defPub);
-
-        showDialog(new AlertDialog.Builder(act, getResourceProvider())
-                .setTitle("App Config & Maintenance")
-                .setView(box)
-                .setPositiveButton(LocaleController.getString(R.string.Save), (d, w) -> {
-                    int minV = 1;
-                    try { minV = Math.max(1, Integer.parseInt(minVer.getText().toString().trim())); } catch (Throwable ignored) {}
-                    String msg = maintMsg.getText().toString().trim();
-                    String pub = "live".equalsIgnoreCase(defPub.getText().toString().trim()) ? "live" : "paused";
-                    boolean maint = maintCheck.isChecked();
-                    int finalMinV = minV;
-                    repo.runWithAdminToken(errCb(), token -> {
-                        EveAdminModels.AppConfigModel updated = repo.updateAppConfig(token, finalMinV, maint, msg, pub);
-                        repo.postSuccess(new EveAdminRepository.ResultCallback<EveAdminModels.AppConfigModel>() {
-                            @Override
-                            public void onSuccess(EveAdminModels.AppConfigModel data) {
-                                appConfig = data;
-                                BulletinFactory.of(EveAdminInsightsAndSystemFragment.this).createSimpleBulletin(R.raw.contact_check, "App config saved.").show();
-                                if (listView != null && listView.adapter != null) listView.adapter.update(true);
-                            }
-                            @Override public void onError(String message, int httpStatus) {}
-                        }, updated);
-                    });
-                })
-                .setNegativeButton(LocaleController.getString(R.string.Cancel), null)
-                .create());
-    }
-
     private void runAiProbe() {
         repo.runWithAdminToken(errCb(), token -> {
             JSONObject res = repo.checkAiHealth(token);
@@ -463,41 +313,6 @@ public class EveAdminInsightsAndSystemFragment extends BaseFragment {
                 @Override public void onError(String message, int httpStatus) {}
             }, res);
         });
-    }
-
-    private void openJobsDialog() {
-        Activity act = getParentActivity();
-        if (act == null) return;
-        if (generationJobs.isEmpty()) {
-            BulletinFactory.of(this).createSimpleBulletin(R.raw.info, "No recent generation jobs.").show();
-            return;
-        }
-        String[] labels = new String[generationJobs.size()];
-        for (int i = 0; i < generationJobs.size(); i++) {
-            EveAdminModels.GenerationJobItem j = generationJobs.get(i);
-            labels[i] = "[" + j.status + "] " + j.examId + (j.retryable ? " (Tap to Retry)" : "");
-        }
-        showDialog(new AlertDialog.Builder(act, getResourceProvider())
-                .setTitle("Generation Jobs")
-                .setItems(labels, (d, idx) -> {
-                    EveAdminModels.GenerationJobItem j = generationJobs.get(idx);
-                    if (!j.retryable) {
-                        showAlert("Job " + j.id, "Status: " + j.status + "\nCategory: " + j.errorCategory);
-                        return;
-                    }
-                    repo.runWithAdminToken(errCb(), token -> {
-                        repo.retryGenerationJob(token, j.id);
-                        repo.postSuccess(new EveAdminRepository.ResultCallback<Void>() {
-                            @Override public void onSuccess(Void data) {
-                                BulletinFactory.of(EveAdminInsightsAndSystemFragment.this).createSimpleBulletin(R.raw.contact_check, "Job retried.").show();
-                                loadLiveHealth();
-                            }
-                            @Override public void onError(String message, int httpStatus) {}
-                        }, null);
-                    });
-                })
-                .setNegativeButton(LocaleController.getString(R.string.Close), null)
-                .create());
     }
 
     private void showAlert(String title, String message) {

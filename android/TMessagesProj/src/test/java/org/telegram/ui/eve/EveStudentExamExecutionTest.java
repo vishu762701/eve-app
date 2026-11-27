@@ -193,5 +193,9 @@ public class EveStudentExamExecutionTest {
 
         assertNotNull(Class.forName("org.telegram.ui.eve.polls.EveTelegramPollCardView"));
         assertNotNull(Class.forName("org.telegram.ui.eve.exams.EveExamTestsFragment"));
+
+        org.telegram.ui.eve.exams.EveLeaderboardFragment studentLb =
+                new org.telegram.ui.eve.exams.EveLeaderboardFragment("", "Leaderboard", true);
+        assertFalse(studentLb.isAdminInspectionMode());
     }
 }

@@ -821,6 +821,57 @@ public final class EveAdminRepository {
         return EveAdminModels.AuditLogEntry.parseList(root.optJSONArray("data"));
     }
 
+    public int deleteAuditLogs(String token, String category) throws EveBackendClient.BackendException {
+        String path = "/api/admin/audit-log";
+        if (category != null && !category.trim().isEmpty() && !"all".equalsIgnoreCase(category.trim())) {
+            path += "?category=" + encode(category.trim().toLowerCase(Locale.US));
+        }
+        JSONObject root = client.deleteJsonRoot(path, token);
+        return root != null ? root.optInt("deletedCount", 0) : 0;
+    }
+
+    public EveAdminModels.AdminProfile fetchAdminMe(String token) throws EveBackendClient.BackendException {
+        JSONObject root = client.getJsonRoot("/api/admin/me", token);
+        return EveAdminModels.AdminProfile.fromJson(root.optJSONObject("data"));
+    }
+
+    public EveAdminModels.AdminStudentItem fetchStudentById(String token, String userId, String fallbackName) throws EveBackendClient.BackendException {
+        if (userId == null || userId.trim().isEmpty()) {
+            return null;
+        }
+        String trimmedId = userId.trim();
+        try {
+            JSONObject root = client.getJsonRoot("/api/admin/users/" + encode(trimmedId), token);
+            JSONObject data = root != null ? root.optJSONObject("data") : null;
+            if (data != null) {
+                JSONArray arr = new JSONArray();
+                arr.put(data);
+                List<EveAdminModels.AdminStudentItem> parsed = EveAdminModels.AdminStudentItem.parseList(arr);
+                if (!parsed.isEmpty()) {
+                    return parsed.get(0);
+                }
+            }
+        } catch (EveBackendClient.BackendException e) {
+            if (e.httpStatus != 404 && e.httpStatus != 405 && e.httpStatus != 501) {
+                throw e;
+            }
+        }
+        // Fallback for older Worker deployments without GET /api/admin/users/:id
+        if (fallbackName != null && !fallbackName.trim().isEmpty()) {
+            for (EveAdminModels.AdminStudentItem item : searchStudents(token, fallbackName.trim(), 1, 50)) {
+                if (trimmedId.equals(item.id)) {
+                    return item;
+                }
+            }
+        }
+        for (EveAdminModels.AdminStudentItem item : searchStudents(token, "", 1, 200)) {
+            if (trimmedId.equals(item.id)) {
+                return item;
+            }
+        }
+        return null;
+    }
+
     public JSONObject fetchExamDeletionInfo(String token, String examId) throws EveBackendClient.BackendException {
         return client.getJsonRoot("/api/exams/" + encode(examId) + "/deletion-info", token).optJSONObject("data");
     }
@@ -1046,8 +1097,46 @@ public final class EveAdminRepository {
     }
 
     public List<EveAdminModels.CrashSignatureItem> fetchCrashSignatures(String token) throws EveBackendClient.BackendException {
-        JSONObject root = client.getJsonRoot("/api/admin/system/crashes", token);
+        return fetchCrashSignatures(token, "open");
+    }
+
+    public List<EveAdminModels.CrashSignatureItem> fetchCrashSignatures(String token, String status) throws EveBackendClient.BackendException {
+        String st = status != null && !status.trim().isEmpty() ? status.trim().toLowerCase(Locale.US) : "open";
+        JSONObject root = client.getJsonRoot("/api/admin/system/crashes?status=" + encode(st), token);
         return EveAdminModels.CrashSignatureItem.parseList(root.optJSONArray("data"));
+    }
+
+    public EveAdminModels.CrashDetailBundle fetchCrashDetail(String token, String signature) throws EveBackendClient.BackendException {
+        JSONObject root = client.getJsonRoot("/api/admin/system/crashes/" + encode(signature), token);
+        JSONObject data = root != null ? root.optJSONObject("data") : null;
+        if (data == null) {
+            return new EveAdminModels.CrashDetailBundle(null, Collections.emptyList());
+        }
+        EveAdminModels.CrashSignatureItem sig = EveAdminModels.CrashSignatureItem.fromJson(data.optJSONObject("signature"));
+        List<EveAdminModels.CrashIncidentItem> incidents = EveAdminModels.CrashIncidentItem.parseList(data.optJSONArray("incidents"));
+        return new EveAdminModels.CrashDetailBundle(sig, incidents);
+    }
+
+    public void resolveCrashSignature(String token, String signature) throws EveBackendClient.BackendException {
+        client.postJsonRoot("/api/admin/system/crashes/" + encode(signature) + "/resolve", token, new JSONObject());
+    }
+
+    public void deleteCrashSignature(String token, String signature) throws EveBackendClient.BackendException {
+        client.deleteJsonRoot("/api/admin/system/crashes/" + encode(signature), token);
+    }
+
+    public EveAdminModels.SecurityEventsBundle fetchSecurityEvents(String token) throws EveBackendClient.BackendException {
+        JSONObject root = client.getJsonRoot("/api/admin/system/security-events", token);
+        JSONObject data = root != null ? root.optJSONObject("data") : null;
+        if (data == null) {
+            return new EveAdminModels.SecurityEventsBundle(Collections.emptyList(), 0, 0);
+        }
+        List<EveAdminModels.SecurityEventItem> events = EveAdminModels.SecurityEventItem.parseList(data.optJSONArray("events"));
+        return new EveAdminModels.SecurityEventsBundle(
+                events,
+                data.optInt("securityCount", 0),
+                data.optInt("errorCount", 0)
+        );
     }
 
     public JSONObject fetchApiUsage(String token) throws EveBackendClient.BackendException {

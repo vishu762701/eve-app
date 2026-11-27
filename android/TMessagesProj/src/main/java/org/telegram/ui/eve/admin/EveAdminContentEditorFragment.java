@@ -44,7 +44,6 @@ public class EveAdminContentEditorFragment extends BaseFragment {
     public static final String MODE_FLOATING_LINK = "floating_link";
 
     private static final int MENU_SAVE = 1;
-    private static final int MENU_REFRESH = 2;
 
     private static final int ID_RETRY = 101;
     private static final int ID_TITLE_INPUT = 201;
@@ -136,6 +135,7 @@ public class EveAdminContentEditorFragment extends BaseFragment {
                 screenLabel,
                 isFloatingLinkMode() ? "Home floating shortcut" : "Hosted page copy",
                 true,
+                true,
                 this::fillItems,
                 this::onClick,
                 new ActionBar.ActionBarMenuOnItemClick() {
@@ -145,8 +145,6 @@ public class EveAdminContentEditorFragment extends BaseFragment {
                             finishFragment();
                         } else if (id == MENU_SAVE) {
                             saveChanges();
-                        } else if (id == MENU_REFRESH) {
-                            reload();
                         }
                     }
                 },
@@ -157,7 +155,6 @@ public class EveAdminContentEditorFragment extends BaseFragment {
         if (simpleActionBar != null) {
             SimpleActionBarMenu menu = simpleActionBar.createMenu();
             menu.addItem(MENU_SAVE, R.drawable.ic_ab_done, rp);
-            menu.addItem(MENU_REFRESH, R.drawable.msg_retry, rp);
         }
 
         fragmentView = chrome.rootView;

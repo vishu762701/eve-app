@@ -22,10 +22,10 @@ import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.R;
 import org.telegram.ui.ActionBar.ActionBar;
 import org.telegram.ui.ActionBar.BaseFragment;
-import org.telegram.ui.ActionBar.SimpleActionBarMenu;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.AvatarDrawable;
 import org.telegram.ui.Components.BackupImageView;
+import org.telegram.ui.Components.BulletinFactory;
 import org.telegram.ui.Components.FlickerLoadingView;
 import org.telegram.ui.Components.IconBackgroundColors;
 import org.telegram.ui.Components.LayoutHelper;
@@ -34,6 +34,10 @@ import org.telegram.ui.Components.UItem;
 import org.telegram.ui.Components.UniversalAdapter;
 import org.telegram.ui.Components.UniversalRecyclerView;
 import org.telegram.ui.SettingsActivity;
+import org.telegram.ui.eve.admin.EveAdminConfig;
+import org.telegram.ui.eve.admin.EveAdminModels;
+import org.telegram.ui.eve.admin.EveAdminRepository;
+import org.telegram.ui.eve.admin.EveAdminStudentDetailFragment;
 import org.telegram.ui.eve.admin.EveAdminUiChrome;
 
 import java.util.ArrayList;
@@ -42,32 +46,39 @@ import java.util.Locale;
 import java.util.Objects;
 
 /**
- * Edge-to-Edge Telegram-native Leaderboard showing student rank summary card
- * and medal/avatar ranked entries with current user highlight.
+ * Edge-to-Edge Telegram-native Leaderboard with Top-3 Medal highlights, motivating score framing,
+ * silent foreground auto-sync, and Admin/Owner-only student profile inspection.
  */
 public class EveLeaderboardFragment extends BaseFragment {
 
-    private static final int MENU_REFRESH = 1;
     private static final int ID_RETRY = 100;
     private static final int ID_RANK_SUMMARY = 200;
     private static final int BASE_ENTRY_ID = 1000;
 
     private final String examIdOrOverall;
     private final String titleText;
+    private final boolean adminInspectionMode;
     private UniversalRecyclerView listView;
     private EveExamModels.LeaderboardBundle bundle;
     private boolean loading = true;
+    private boolean openingStudent = false;
     private boolean destroyed = false;
     private String errorMessage = "";
     private String currentUid = "";
+    private final EveAdminUiChrome.AutoSyncController autoSync = new EveAdminUiChrome.AutoSyncController(this::loadData);
 
     public EveLeaderboardFragment(String examIdOrOverall, String titleText) {
+        this(examIdOrOverall, titleText, false);
+    }
+
+    public EveLeaderboardFragment(String examIdOrOverall, String titleText, boolean adminInspectionMode) {
         this.examIdOrOverall = examIdOrOverall != null && !examIdOrOverall.trim().isEmpty()
                 ? examIdOrOverall.trim()
                 : "overall";
         this.titleText = titleText != null && !titleText.trim().isEmpty()
                 ? titleText.trim()
                 : LocaleController.getString(R.string.EveLeaderboard);
+        this.adminInspectionMode = adminInspectionMode && EveAdminConfig.isAdminAvailable();
         try {
             FirebaseUser u = FirebaseAuth.getInstance().getCurrentUser();
             if (u != null && u.getUid() != null) {
@@ -75,6 +86,10 @@ public class EveLeaderboardFragment extends BaseFragment {
             }
         } catch (Throwable ignored) {
         }
+    }
+
+    public boolean isAdminInspectionMode() {
+        return adminInspectionMode;
     }
 
     @Override
@@ -125,40 +140,52 @@ public class EveLeaderboardFragment extends BaseFragment {
                     public void onItemClick(int id) {
                         if (id == -1) {
                             finishFragment();
-                        } else if (id == MENU_REFRESH) {
-                            loadData();
                         }
                     }
                 },
                 null
         );
         listView = chrome.listView;
-
-        if (simpleActionBar != null) {
-            SimpleActionBarMenu menu = simpleActionBar.createMenu();
-            menu.addItem(MENU_REFRESH, R.drawable.msg_retry, getResourceProvider());
-        }
-
         fragmentView = chrome.rootView;
         loadData();
         return chrome.rootView;
     }
 
     @Override
+    public void onResume() {
+        super.onResume();
+        autoSync.onResume();
+    }
+
+    @Override
+    public void onPause() {
+        autoSync.onPause();
+        super.onPause();
+    }
+
+    @Override
     public void onFragmentDestroy() {
         destroyed = true;
+        autoSync.destroy();
         super.onFragmentDestroy();
     }
 
     private void loadData() {
-        loading = true;
+        loading = bundle == null;
         errorMessage = "";
-        updateList();
+        if (loading) {
+            updateList();
+        }
         EveExamRepository.getInstance().loadLeaderboard(examIdOrOverall, (loaded, err) -> {
             if (destroyed) return;
             loading = false;
-            bundle = loaded;
-            errorMessage = err != null ? err : "";
+            autoSync.markSynced();
+            if (loaded != null) {
+                bundle = loaded;
+                errorMessage = "";
+            } else {
+                errorMessage = err != null ? err : "Unable to load leaderboard.";
+            }
             updateList();
         });
     }
@@ -178,7 +205,7 @@ public class EveLeaderboardFragment extends BaseFragment {
             }
             return;
         }
-        if (!errorMessage.isEmpty()) {
+        if (!errorMessage.isEmpty() && bundle == null) {
             items.add(SettingsActivity.SettingCell.Factory.of(
                     ID_RETRY,
                     IconBackgroundColors.RED.top, IconBackgroundColors.RED.bottom,
@@ -189,7 +216,7 @@ public class EveLeaderboardFragment extends BaseFragment {
             return;
         }
         if (bundle != null && bundle.stats != null) {
-            items.add(RankSummaryCard.Factory.of(ID_RANK_SUMMARY, bundle.stats));
+            items.add(RankSummaryCard.Factory.of(ID_RANK_SUMMARY, bundle.stats, adminInspectionMode));
         }
 
         if (bundle == null || bundle.entries.isEmpty()) {
@@ -200,7 +227,7 @@ public class EveLeaderboardFragment extends BaseFragment {
 
         for (int i = 0; i < bundle.entries.size(); i++) {
             EveExamModels.LeaderboardEntry entry = bundle.entries.get(i);
-            boolean isSelf = !currentUid.isEmpty() && TextUtils.equals(currentUid, entry.userId);
+            boolean isSelf = !adminInspectionMode && !currentUid.isEmpty() && TextUtils.equals(currentUid, entry.userId);
             items.add(RankRowCell.Factory.of(BASE_ENTRY_ID + i, i + 1, entry, isSelf));
         }
     }
@@ -208,7 +235,50 @@ public class EveLeaderboardFragment extends BaseFragment {
     private void onClick(UItem item, View view, int position, float x, float y) {
         if (item.id == ID_RETRY) {
             loadData();
+            return;
         }
+        if (!adminInspectionMode || !EveAdminConfig.isAdminAvailable()) {
+            return;
+        }
+        int idx = item.id - BASE_ENTRY_ID;
+        if (bundle != null && idx >= 0 && idx < bundle.entries.size()) {
+            openAdminStudentProfile(bundle.entries.get(idx));
+        }
+    }
+
+    private void openAdminStudentProfile(EveExamModels.LeaderboardEntry entry) {
+        if (openingStudent || destroyed || entry == null || TextUtils.isEmpty(entry.userId)) {
+            return;
+        }
+        if (!EveAdminConfig.isAdminAvailable()) {
+            return;
+        }
+        openingStudent = true;
+        EveAdminRepository repo = EveAdminRepository.getInstance();
+        EveAdminRepository.ResultCallback<EveAdminModels.AdminStudentItem> cb =
+                new EveAdminRepository.ResultCallback<EveAdminModels.AdminStudentItem>() {
+                    @Override
+                    public void onSuccess(EveAdminModels.AdminStudentItem student) {
+                        openingStudent = false;
+                        if (destroyed) return;
+                        if (student == null) {
+                            BulletinFactory.of(EveLeaderboardFragment.this)
+                                    .createErrorBulletin("Student profile not found.").show();
+                            return;
+                        }
+                        presentFragment(new EveAdminStudentDetailFragment(student, EveLeaderboardFragment.this::loadData));
+                    }
+
+                    @Override
+                    public void onError(String message, int httpStatus) {
+                        openingStudent = false;
+                        if (!destroyed) {
+                            BulletinFactory.of(EveLeaderboardFragment.this)
+                                    .createErrorBulletin(message != null ? message : "Unable to load student profile.").show();
+                        }
+                    }
+                };
+        repo.runWithAdminToken(cb, token -> repo.postSuccess(cb, repo.fetchStudentById(token, entry.userId, entry.displayName)));
     }
 
     private static String formatScore(double score) {
@@ -228,6 +298,7 @@ public class EveLeaderboardFragment extends BaseFragment {
         RankSummaryCard(Context context, Theme.ResourcesProvider rp) {
             super(context);
             this.resourcesProvider = rp;
+            setTag(RecyclerListView.TAG_NOT_SECTION);
             setPadding(dp(16), dp(10), dp(16), dp(10));
 
             card = new LinearLayout(context);
@@ -239,7 +310,7 @@ public class EveLeaderboardFragment extends BaseFragment {
             LinearLayout col = new LinearLayout(context);
             col.setOrientation(LinearLayout.VERTICAL);
             rankTitle = new TextView(context);
-            rankTitle.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
+            rankTitle.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15.5f);
             rankTitle.setTypeface(AndroidUtilities.bold());
             col.addView(rankTitle, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
 
@@ -257,22 +328,37 @@ public class EveLeaderboardFragment extends BaseFragment {
             updateColors();
         }
 
-        void bind(EveExamModels.LeaderboardStats stats) {
-            String rankStr = stats.myRank != null
-                    ? ("#" + stats.myRank + " of " + stats.participants)
-                    : ("Unranked • " + stats.participants + " participants");
-            rankTitle.setText(LocaleController.getString(R.string.EveYourRank) + ": " + rankStr);
-            StringBuilder det = new StringBuilder();
-            det.append("Topper: ").append(formatScore(stats.topperScore));
-            if (stats.averageScore > 0) {
-                det.append(" • Avg: ").append(formatScore(stats.averageScore));
-            }
-            rankDetail.setText(det.toString());
-            if (stats.myPercentile != null) {
+        void bind(EveExamModels.LeaderboardStats stats, boolean adminMode) {
+            if (adminMode) {
+                rankTitle.setText("Leaderboard Overview");
+                StringBuilder det = new StringBuilder();
+                det.append(stats.participants).append(" ranked student").append(stats.participants == 1 ? "" : "s");
+                det.append(" • Topper: ").append(formatScore(stats.topperScore));
+                if (stats.averageScore > 0) {
+                    det.append(" • Avg: ").append(formatScore(stats.averageScore));
+                }
+                rankDetail.setText(det.toString());
                 rightMetric.setVisibility(VISIBLE);
-                rightMetric.setText(String.format(Locale.US, "%.1f%%ile", stats.myPercentile));
+                rightMetric.setText("Tap row to inspect");
             } else {
-                rightMetric.setVisibility(GONE);
+                String rankStr = stats.myRank != null
+                        ? ("#" + stats.myRank + " of " + stats.participants)
+                        : ("Keep practicing! • " + stats.participants + " participants");
+                rankTitle.setText(stats.myRank != null
+                        ? (LocaleController.getString(R.string.EveYourRank) + ": " + rankStr)
+                        : rankStr);
+                StringBuilder det = new StringBuilder();
+                det.append("Topper: ").append(formatScore(stats.topperScore));
+                if (stats.averageScore > 0) {
+                    det.append(" • Avg: ").append(formatScore(stats.averageScore));
+                }
+                rankDetail.setText(det.toString());
+                if (stats.myPercentile != null) {
+                    rightMetric.setVisibility(VISIBLE);
+                    rightMetric.setText(String.format(Locale.US, "%.1f%%ile", stats.myPercentile));
+                } else {
+                    rightMetric.setVisibility(GONE);
+                }
             }
             updateColors();
         }
@@ -281,7 +367,7 @@ public class EveLeaderboardFragment extends BaseFragment {
         public void updateColors() {
             int accent = Theme.getColor(Theme.key_featuredStickers_addButton, resourcesProvider);
             GradientDrawable bg = new GradientDrawable();
-            bg.setCornerRadius(dp(12));
+            bg.setCornerRadius(dp(14));
             bg.setColor(Theme.multAlpha(accent, 0.09f));
             bg.setStroke(dp(1), Theme.multAlpha(accent, 0.25f));
             card.setBackground(bg);
@@ -310,19 +396,20 @@ public class EveLeaderboardFragment extends BaseFragment {
             @Override
             public void bindView(View view, UItem item, boolean divider, UniversalAdapter adapter, UniversalRecyclerView listView) {
                 if (item.object instanceof EveExamModels.LeaderboardStats) {
-                    ((RankSummaryCard) view).bind((EveExamModels.LeaderboardStats) item.object);
+                    ((RankSummaryCard) view).bind((EveExamModels.LeaderboardStats) item.object, item.checked);
                 }
             }
 
             @Override
             public boolean equals(UItem a, UItem b) {
-                return a.id == b.id;
+                return a.id == b.id && a.checked == b.checked;
             }
 
-            static UItem of(int id, EveExamModels.LeaderboardStats stats) {
+            static UItem of(int id, EveExamModels.LeaderboardStats stats, boolean adminMode) {
                 UItem item = UItem.ofFactory(Factory.class);
                 item.id = id;
                 item.object = stats;
+                item.checked = adminMode;
                 return item;
             }
         }
@@ -345,12 +432,12 @@ public class EveLeaderboardFragment extends BaseFragment {
 
             rankBadge = new TextView(context);
             rankBadge.setGravity(Gravity.CENTER);
-            rankBadge.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12);
+            rankBadge.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12.5f);
             rankBadge.setTypeface(AndroidUtilities.bold());
 
             avatarDrawable = new AvatarDrawable();
             avatarView = new BackupImageView(context);
-            avatarView.setRoundRadius(dp(20));
+            avatarView.setRoundRadius(dp(21));
 
             LinearLayout col = new LinearLayout(context);
             col.setOrientation(LinearLayout.VERTICAL);
@@ -369,15 +456,15 @@ public class EveLeaderboardFragment extends BaseFragment {
             col.addView(subView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 2, 0, 0));
 
             scorePill = new TextView(context);
-            scorePill.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12.5f);
+            scorePill.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13f);
             scorePill.setTypeface(AndroidUtilities.bold());
-            scorePill.setPadding(dp(9), dp(4), dp(9), dp(4));
+            scorePill.setPadding(dp(10), dp(5), dp(10), dp(5));
 
             LinearLayout row = new LinearLayout(context);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.CENTER_VERTICAL);
-            row.addView(rankBadge, LayoutHelper.createLinear(32, 24, Gravity.CENTER_VERTICAL, 14, 0, 10, 0));
-            row.addView(avatarView, LayoutHelper.createLinear(40, 40, Gravity.CENTER_VERTICAL, 0, 0, 12, 0));
+            row.addView(rankBadge, LayoutHelper.createLinear(36, 28, Gravity.CENTER_VERTICAL, 14, 0, 10, 0));
+            row.addView(avatarView, LayoutHelper.createLinear(42, 42, Gravity.CENTER_VERTICAL, 0, 0, 12, 0));
             row.addView(col, LayoutHelper.createLinear(0, LayoutHelper.WRAP_CONTENT, 1f, Gravity.CENTER_VERTICAL, 0, 0, 8, 0));
             row.addView(scorePill, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_VERTICAL, 0, 0, 14, 0));
             addView(row, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_VERTICAL, 0, 10, 0, 10));
@@ -388,16 +475,24 @@ public class EveLeaderboardFragment extends BaseFragment {
         void bind(int rank, EveExamModels.LeaderboardEntry entry, boolean isSelf) {
             this.rank = rank;
             this.isSelf = isSelf;
-            rankBadge.setText("#" + rank);
+            if (rank == 1) {
+                rankBadge.setText("1st");
+            } else if (rank == 2) {
+                rankBadge.setText("2nd");
+            } else if (rank == 3) {
+                rankBadge.setText("3rd");
+            } else {
+                rankBadge.setText("#" + rank);
+            }
             String seed = !TextUtils.isEmpty(entry.userId) ? entry.userId : entry.displayName;
-            EveAdminUiChrome.bindAvatar(avatarView, avatarDrawable, seed, entry.displayName, "", 40);
+            EveAdminUiChrome.bindAvatar(avatarView, avatarDrawable, seed, entry.displayName, "", 42);
             nameView.setText(isSelf ? (entry.displayName + " (You)") : entry.displayName);
 
             StringBuilder sub = new StringBuilder();
             if (!TextUtils.isEmpty(entry.examName)) {
                 sub.append(entry.examName);
             }
-            if (entry.accuracy > 0) {
+            if (entry.accuracy >= 60) {
                 if (sub.length() > 0) sub.append(" • ");
                 sub.append(entry.accuracy).append("% accuracy");
             }
@@ -407,32 +502,40 @@ public class EveLeaderboardFragment extends BaseFragment {
             }
             subView.setText(sub.toString());
             subView.setVisibility(sub.length() == 0 ? GONE : VISIBLE);
-            scorePill.setText(formatScore(entry.score) + "/" + entry.total);
+            scorePill.setText(entry.total > 0 ? (formatScore(entry.score) + " / " + entry.total) : (formatScore(entry.score) + " pts"));
             updateColors();
         }
 
         @Override
         public void updateColors() {
             int accent = Theme.getColor(Theme.key_featuredStickers_addButton, resourcesProvider);
-            setBackgroundColor(isSelf ? Theme.multAlpha(accent, 0.08f) : 0);
-
-            int badgeColor;
+            int medalColor;
             if (rank == 1) {
-                badgeColor = 0xFFD99A00;
+                medalColor = 0xFFD99A00;
             } else if (rank == 2) {
-                badgeColor = 0xFF78909C;
+                medalColor = 0xFF78909C;
             } else if (rank == 3) {
-                badgeColor = 0xFFB86B2B;
+                medalColor = 0xFFB86B2B;
             } else {
-                badgeColor = Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, resourcesProvider);
+                medalColor = Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, resourcesProvider);
             }
-            rankBadge.setTextColor(rank <= 3 ? badgeColor : Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, resourcesProvider));
-            rankBadge.setBackground(Theme.createRoundRectDrawable(dp(8), Theme.multAlpha(badgeColor, rank <= 3 ? 0.16f : 0.08f)));
+
+            if (isSelf) {
+                setBackgroundColor(Theme.multAlpha(accent, 0.08f));
+            } else if (rank <= 3) {
+                setBackgroundColor(Theme.multAlpha(medalColor, 0.05f));
+            } else {
+                setBackgroundColor(0);
+            }
+
+            rankBadge.setTextColor(rank <= 3 ? medalColor : Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, resourcesProvider));
+            rankBadge.setBackground(Theme.createRoundRectDrawable(dp(9), Theme.multAlpha(medalColor, rank <= 3 ? 0.18f : 0.08f)));
 
             nameView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
             subView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, resourcesProvider));
-            scorePill.setTextColor(accent);
-            scorePill.setBackground(Theme.createRoundRectDrawable(dp(9), Theme.multAlpha(accent, 0.12f)));
+            int pillColor = rank == 1 ? 0xFFD99A00 : accent;
+            scorePill.setTextColor(pillColor);
+            scorePill.setBackground(Theme.createRoundRectDrawable(dp(10), Theme.multAlpha(pillColor, 0.12f)));
         }
 
         @Override
@@ -446,7 +549,7 @@ public class EveLeaderboardFragment extends BaseFragment {
         protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
             super.onMeasure(
                     MeasureSpec.makeMeasureSpec(MeasureSpec.getSize(widthMeasureSpec), MeasureSpec.EXACTLY),
-                    MeasureSpec.makeMeasureSpec(dp(62), MeasureSpec.EXACTLY));
+                    MeasureSpec.makeMeasureSpec(dp(64), MeasureSpec.EXACTLY));
         }
 
         static final class Payload {

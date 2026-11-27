@@ -1,31 +1,16 @@
 package org.telegram.ui.eve.admin;
 
-import static org.telegram.messenger.AndroidUtilities.dp;
-
-import android.app.Activity;
 import android.content.Context;
-import android.text.InputType;
-import android.text.TextUtils;
-import android.util.TypedValue;
 import android.view.View;
-import android.widget.CheckBox;
-import android.widget.EditText;
-import android.widget.LinearLayout;
-import android.widget.ScrollView;
-import android.widget.TextView;
 
 import androidx.annotation.Nullable;
 
 import org.telegram.messenger.R;
 import org.telegram.ui.ActionBar.ActionBar;
-import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.SimpleActionBarMenu;
-import org.telegram.ui.ActionBar.Theme;
-import org.telegram.ui.Components.BulletinFactory;
 import org.telegram.ui.Components.FlickerLoadingView;
 import org.telegram.ui.Components.IconBackgroundColors;
-import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.RecyclerListView;
 import org.telegram.ui.Components.UItem;
 import org.telegram.ui.Components.UniversalAdapter;
@@ -34,17 +19,15 @@ import org.telegram.ui.SettingsActivity;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
- * Edge-to-Edge Admin Roles & Permissions directory replacing AlertDialog admin managers.
+ * Telegram Settings-style Admin Roles & Permissions directory.
+ * Tapping '+' or any member opens {@link EveAdminRoleEditFragment}.
  */
 public class EveAdminRolesFragment extends BaseFragment {
 
     private static final int MENU_ADD = 1;
-    private static final int MENU_REFRESH = 2;
 
     private static final int ID_RETRY = 101;
     private static final int BASE_ADMIN_ID = 1000;
@@ -55,6 +38,7 @@ public class EveAdminRolesFragment extends BaseFragment {
     private boolean destroyed = false;
     private String errorText = "";
     private List<EveAdminModels.AdminMemberItem> admins = Collections.emptyList();
+    private final EveAdminUiChrome.AutoSyncController autoSync = new EveAdminUiChrome.AutoSyncController(this::reload);
 
     @Override
     public boolean onFragmentCreate() {
@@ -101,7 +85,8 @@ public class EveAdminRolesFragment extends BaseFragment {
                 getResourceProvider(),
                 "Admin Roles",
                 "Loading...",
-                false,
+                true,
+                true,
                 this::fillItems,
                 this::onClick,
                 new ActionBar.ActionBarMenuOnItemClick() {
@@ -110,9 +95,7 @@ public class EveAdminRolesFragment extends BaseFragment {
                         if (id == -1) {
                             finishFragment();
                         } else if (id == MENU_ADD) {
-                            showAddOrEditAdminDialog(null);
-                        } else if (id == MENU_REFRESH) {
-                            reload();
+                            presentFragment(new EveAdminRoleEditFragment(null, EveAdminRolesFragment.this::reload));
                         }
                     }
                 },
@@ -123,7 +106,6 @@ public class EveAdminRolesFragment extends BaseFragment {
         if (simpleActionBar != null) {
             SimpleActionBarMenu menu = simpleActionBar.createMenu();
             menu.addItem(MENU_ADD, R.drawable.msg_add, getResourceProvider());
-            menu.addItem(MENU_REFRESH, R.drawable.msg_retry, getResourceProvider());
         }
 
         fragmentView = chrome.rootView;
@@ -132,15 +114,30 @@ public class EveAdminRolesFragment extends BaseFragment {
     }
 
     @Override
+    public void onResume() {
+        super.onResume();
+        autoSync.onResume();
+    }
+
+    @Override
+    public void onPause() {
+        autoSync.onPause();
+        super.onPause();
+    }
+
+    @Override
     public void onFragmentDestroy() {
         destroyed = true;
+        autoSync.destroy();
         super.onFragmentDestroy();
     }
 
     private void reload() {
-        loading = true;
+        loading = admins.isEmpty();
         errorText = "";
-        updateList();
+        if (loading) {
+            updateList();
+        }
 
         EveAdminRepository.ResultCallback<List<EveAdminModels.AdminMemberItem>> cb =
                 new EveAdminRepository.ResultCallback<List<EveAdminModels.AdminMemberItem>>() {
@@ -149,6 +146,7 @@ public class EveAdminRolesFragment extends BaseFragment {
                         if (destroyed) return;
                         loading = false;
                         errorText = "";
+                        autoSync.markSynced();
                         admins = data != null ? data : Collections.emptyList();
                         updateSubtitle();
                         updateList();
@@ -158,6 +156,7 @@ public class EveAdminRolesFragment extends BaseFragment {
                     public void onError(String message, int httpStatus) {
                         if (destroyed) return;
                         loading = false;
+                        autoSync.markSynced();
                         errorText = message != null ? message : "Unable to load admin roles.";
                         updateSubtitle();
                         updateList();
@@ -192,6 +191,7 @@ public class EveAdminRolesFragment extends BaseFragment {
                     "Retry Loading Roles",
                     errorText,
                     "Retry"));
+            items.add(UItem.asShadow(null));
         }
 
         if (loading && admins.isEmpty()) {
@@ -207,20 +207,47 @@ public class EveAdminRolesFragment extends BaseFragment {
             return;
         }
 
+        List<Integer> ownerIndices = new ArrayList<>();
+        List<Integer> adminIndices = new ArrayList<>();
         for (int i = 0; i < admins.size(); i++) {
-            EveAdminModels.AdminMemberItem a = admins.get(i);
-            String permsText = a.isOwner ? "All Permissions" : (a.rights.size() + " permission(s)");
-            String sub = a.email + " • " + permsText;
-            EveAdminUiChrome.AvatarRowCell.Payload payload = new EveAdminUiChrome.AvatarRowCell.Payload(
-                    a.email,
-                    a.customTitle,
-                    sub,
-                    "",
-                    a.isOwner ? "Owner" : "Admin",
-                    a.isOwner ? EveAdminUiChrome.AvatarRowCell.BADGE_PURPLE : EveAdminUiChrome.AvatarRowCell.BADGE_BLUE
-            );
-            items.add(EveAdminUiChrome.AvatarRowCell.Factory.of(BASE_ADMIN_ID + i, a, payload));
+            if (admins.get(i).isOwner) {
+                ownerIndices.add(i);
+            } else {
+                adminIndices.add(i);
+            }
         }
+
+        if (!ownerIndices.isEmpty()) {
+            items.add(UItem.asHeader("Owner"));
+            for (int idx : ownerIndices) {
+                items.add(buildAdminRow(idx, admins.get(idx)));
+            }
+            items.add(UItem.asShadow(null));
+        }
+
+        items.add(UItem.asHeader("Administrators"));
+        if (adminIndices.isEmpty()) {
+            items.add(UItem.asShadow("No delegated admins added yet. Tap + above to add one."));
+            return;
+        }
+        for (int idx : adminIndices) {
+            items.add(buildAdminRow(idx, admins.get(idx)));
+        }
+        items.add(UItem.asShadow("Tap any administrator to edit their role title or permissions."));
+    }
+
+    private UItem buildAdminRow(int index, EveAdminModels.AdminMemberItem a) {
+        String permsText = a.isOwner ? "All " + EveAdminModels.ALL_RIGHTS.length + " permissions" : (a.rights.size() + " permission(s)");
+        String sub = a.email + " • " + permsText;
+        EveAdminUiChrome.AvatarRowCell.Payload payload = new EveAdminUiChrome.AvatarRowCell.Payload(
+                a.email,
+                a.customTitle,
+                sub,
+                "",
+                a.isOwner ? "Owner" : "Admin",
+                a.isOwner ? EveAdminUiChrome.AvatarRowCell.BADGE_PURPLE : EveAdminUiChrome.AvatarRowCell.BADGE_BLUE
+        );
+        return EveAdminUiChrome.AvatarRowCell.Factory.of(BASE_ADMIN_ID + index, a, payload);
     }
 
     private void onClick(UItem item, View view, int position, float x, float y) {
@@ -229,165 +256,8 @@ public class EveAdminRolesFragment extends BaseFragment {
             return;
         }
         if (item.id >= BASE_ADMIN_ID && item.object instanceof EveAdminModels.AdminMemberItem) {
-            showAdminActions((EveAdminModels.AdminMemberItem) item.object);
-        }
-    }
-
-    private void showAdminActions(EveAdminModels.AdminMemberItem member) {
-        Activity activity = getParentActivity();
-        if (activity == null) return;
-
-        if (member.isOwner) {
-            AlertDialog.Builder builder = new AlertDialog.Builder(activity, getResourceProvider());
-            builder.setTitle(member.customTitle);
-            builder.setMessage(member.email + "\n\nThe Owner holds permanent full permissions across EVE Admin Control Center.");
-            builder.setPositiveButton("Close", null);
-            showDialog(builder.create());
-            return;
-        }
-
-        String[] options = new String[] { "Edit Rights & Title", "Remove Admin" };
-        AlertDialog.Builder builder = new AlertDialog.Builder(activity, getResourceProvider());
-        builder.setTitle(member.customTitle + " (" + member.email + ")");
-        builder.setItems(options, (d, which) -> {
-            if (which == 0) {
-                showAddOrEditAdminDialog(member);
-            } else if (which == 1) {
-                confirmRemoveAdmin(member);
-            }
-        });
-        builder.setNegativeButton("Cancel", null);
-        showDialog(builder.create());
-    }
-
-    private void showAddOrEditAdminDialog(@Nullable EveAdminModels.AdminMemberItem existing) {
-        Activity activity = getParentActivity();
-        if (activity == null) return;
-        Theme.ResourcesProvider rp = getResourceProvider();
-
-        ScrollView scroll = new ScrollView(activity);
-        LinearLayout container = new LinearLayout(activity);
-        container.setOrientation(LinearLayout.VERTICAL);
-        container.setPadding(dp(22), dp(12), dp(22), dp(8));
-        scroll.addView(container);
-
-        EditText emailInput = new EditText(activity);
-        emailInput.setHint("Admin Google Email");
-        emailInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
-        emailInput.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, rp));
-        emailInput.setHintTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteHintText, rp));
-        if (existing != null) {
-            emailInput.setText(existing.email);
-            emailInput.setEnabled(false);
-        }
-        container.addView(emailInput, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 8));
-
-        EditText titleInput = new EditText(activity);
-        titleInput.setHint("Custom Role Title (e.g. Moderator)");
-        titleInput.setInputType(InputType.TYPE_CLASS_TEXT);
-        titleInput.setText(existing != null ? existing.customTitle : "Moderator");
-        titleInput.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, rp));
-        titleInput.setHintTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteHintText, rp));
-        container.addView(titleInput, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 12));
-
-        TextView label = new TextView(activity);
-        label.setText("Permissions");
-        label.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
-        label.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, rp));
-        container.addView(label, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 4));
-
-        Map<String, CheckBox> rightBoxes = new HashMap<>();
-        for (String right : EveAdminModels.ALL_RIGHTS) {
-            CheckBox cb = new CheckBox(activity);
-            cb.setText(EveAdminUiChrome.formatActionTitle(right));
-            cb.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, rp));
-            cb.setChecked(existing != null && existing.rights.contains(right));
-            container.addView(cb, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 2, 0, 2));
-            rightBoxes.put(right, cb);
-        }
-
-        AlertDialog.Builder builder = new AlertDialog.Builder(activity, rp);
-        builder.setTitle(existing == null ? "Add Admin" : "Edit Admin Rights");
-        builder.setView(scroll);
-        builder.setPositiveButton(existing == null ? "Add Admin" : "Save Rights", (d, w) -> {
-            String email = existing != null ? existing.email : emailInput.getText().toString().trim();
-            String customTitle = titleInput.getText().toString().trim();
-            if (TextUtils.isEmpty(email)) {
-                BulletinFactory.of(this).createErrorBulletin("Email is required.").show();
-                return;
-            }
-            List<String> selected = new ArrayList<>();
-            for (String right : EveAdminModels.ALL_RIGHTS) {
-                CheckBox box = rightBoxes.get(right);
-                if (box != null && box.isChecked()) {
-                    selected.add(right);
-                }
-            }
-            EveAdminRepository.ResultCallback<Void> cb = new EveAdminRepository.ResultCallback<Void>() {
-                @Override
-                public void onSuccess(Void data) {
-                    if (destroyed) return;
-                    repo.invalidateCache();
-                    BulletinFactory.of(EveAdminRolesFragment.this)
-                            .createSimpleBulletin(R.raw.info, existing == null ? "Admin added" : "Rights updated").show();
-                    reload();
-                }
-
-                @Override
-                public void onError(String message, int httpStatus) {
-                    if (destroyed) return;
-                    BulletinFactory.of(EveAdminRolesFragment.this)
-                            .createErrorBulletin(message != null ? message : "Admin update failed").show();
-                }
-            };
-            repo.runWithAdminToken(cb, token -> {
-                if (existing == null) {
-                    repo.addAdmin(token, email, selected, customTitle.isEmpty() ? "Moderator" : customTitle);
-                } else {
-                    repo.updateAdminRights(token, email, selected, customTitle.isEmpty() ? "Admin" : customTitle);
-                }
-                repo.postSuccess(cb, null);
-            });
-        });
-        builder.setNegativeButton("Cancel", null);
-        showDialog(builder.create());
-    }
-
-    private void confirmRemoveAdmin(EveAdminModels.AdminMemberItem member) {
-        Activity activity = getParentActivity();
-        if (activity == null) return;
-        AlertDialog.Builder builder = new AlertDialog.Builder(activity, getResourceProvider());
-        builder.setTitle("Remove Admin");
-        builder.setMessage("Remove admin privileges from " + member.email + "?");
-        builder.setPositiveButton("Remove", (d, w) -> {
-            EveAdminRepository.ResultCallback<Void> cb = new EveAdminRepository.ResultCallback<Void>() {
-                @Override
-                public void onSuccess(Void data) {
-                    if (destroyed) return;
-                    repo.invalidateCache();
-                    BulletinFactory.of(EveAdminRolesFragment.this)
-                            .createSimpleBulletin(R.raw.info, "Admin removed").show();
-                    reload();
-                }
-
-                @Override
-                public void onError(String message, int httpStatus) {
-                    if (destroyed) return;
-                    BulletinFactory.of(EveAdminRolesFragment.this)
-                            .createErrorBulletin(message != null ? message : "Remove failed").show();
-                }
-            };
-            repo.runWithAdminToken(cb, token -> {
-                repo.removeAdmin(token, member.email);
-                repo.postSuccess(cb, null);
-            });
-        });
-        builder.setNegativeButton("Cancel", null);
-        AlertDialog dialog = builder.create();
-        showDialog(dialog);
-        View positive = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
-        if (positive instanceof TextView) {
-            ((TextView) positive).setTextColor(Theme.getColor(Theme.key_text_RedBold, getResourceProvider()));
+            EveAdminModels.AdminMemberItem member = (EveAdminModels.AdminMemberItem) item.object;
+            presentFragment(new EveAdminRoleEditFragment(member, this::reload));
         }
     }
 }

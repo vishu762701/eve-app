@@ -288,3 +288,43 @@ test("oversized sanitized audit metadata is valid bounded JSON", () => {
   assert.ok(Object.keys(parsed).length > 0);
   assert.ok(Object.keys(parsed).length < 40);
 });
+
+test("DELETE /api/admin/audit-log enforces Owner-only access and supports category clear", async () => {
+  const { sqlite, d1 } = isolatedD1();
+  const ownerEmail = "pronlike9@gmail.com";
+  sqlite.prepare("INSERT OR IGNORE INTO admins (email, created_at) VALUES (?, ?)").run(ownerEmail, 1000);
+
+  const seedRow = (id, actionType, ts) => {
+    sqlite.prepare(
+      `INSERT INTO admin_audit_log (id, action_type, description, admin_email, timestamp, source)
+       VALUES (?, ?, ?, ?, ?, 'server')`
+    ).run(id, actionType, `Desc ${id}`, ownerEmail, ts);
+  };
+  seedRow("a1", "EXAM_CREATED", 1001);
+  seedRow("a2", "POLL_CREATED", 1002);
+  seedRow("a3", "USER_STATUS_TOGGLED", 1003);
+  seedRow("a4", "CONFIG_UPDATED", 1004);
+
+  // Non-owner admin with view_analytics_logs is rejected with 403
+  const nonOwnerApp = createTestApp(d1, { uid: "u_non_owner", email: "admin@eve.app", isAdmin: true });
+  const deniedRes = await nonOwnerApp.request("http://localhost/api/admin/audit-log", { method: "DELETE" });
+  assert.equal(deniedRes.status, 403);
+  assert.equal(sqlite.prepare("SELECT COUNT(*) AS c FROM admin_audit_log").get().c, 4);
+
+  // Owner can clear a single category
+  const ownerApp = createTestApp(d1, { uid: "u_owner", email: ownerEmail, isAdmin: true });
+  const catRes = await ownerApp.request("http://localhost/api/admin/audit-log?category=exams", { method: "DELETE" });
+  assert.equal(catRes.status, 200);
+  const catJson = await catRes.json();
+  assert.equal(catJson.success, true);
+  assert.equal(catJson.deletedCount, 1);
+  assert.equal(sqlite.prepare("SELECT COUNT(*) AS c FROM admin_audit_log").get().c, 3);
+
+  // Owner can clear all remaining entries
+  const allRes = await ownerApp.request("http://localhost/api/admin/audit-log", { method: "DELETE" });
+  assert.equal(allRes.status, 200);
+  const allJson = await allRes.json();
+  assert.equal(allJson.success, true);
+  assert.equal(allJson.deletedCount, 3);
+  assert.equal(sqlite.prepare("SELECT COUNT(*) AS c FROM admin_audit_log").get().c, 0);
+});

@@ -17,7 +17,6 @@ import org.telegram.messenger.R;
 import org.telegram.ui.ActionBar.ActionBar;
 import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.BaseFragment;
-import org.telegram.ui.ActionBar.SimpleActionBarMenu;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.BulletinFactory;
 import org.telegram.ui.Components.FlickerLoadingView;
@@ -38,7 +37,6 @@ import java.util.List;
  */
 public class EveAdminBannersFragment extends BaseFragment {
 
-    private static final int MENU_REFRESH = 1;
     private static final int ID_RETRY = 101;
     private static final int BASE_BANNER_ID = 1000;
 
@@ -48,6 +46,7 @@ public class EveAdminBannersFragment extends BaseFragment {
     private boolean loading = true;
     private boolean destroyed = false;
     private String errorText = "";
+    private final EveAdminUiChrome.AutoSyncController autoSync = new EveAdminUiChrome.AutoSyncController(this::reload);
 
     @Override
     public boolean onFragmentCreate() {
@@ -102,8 +101,6 @@ public class EveAdminBannersFragment extends BaseFragment {
                     public void onItemClick(int id) {
                         if (id == -1) {
                             finishFragment();
-                        } else if (id == MENU_REFRESH) {
-                            reload();
                         }
                     }
                 },
@@ -111,26 +108,36 @@ public class EveAdminBannersFragment extends BaseFragment {
         );
         listView = chrome.listView;
 
-        if (simpleActionBar != null) {
-            SimpleActionBarMenu menu = simpleActionBar.createMenu();
-            menu.addItem(MENU_REFRESH, R.drawable.msg_retry, getResourceProvider());
-        }
-
         fragmentView = chrome.rootView;
         reload();
         return chrome.rootView;
     }
 
     @Override
+    public void onResume() {
+        super.onResume();
+        autoSync.onResume();
+    }
+
+    @Override
+    public void onPause() {
+        autoSync.onPause();
+        super.onPause();
+    }
+
+    @Override
     public void onFragmentDestroy() {
         destroyed = true;
+        autoSync.destroy();
         super.onFragmentDestroy();
     }
 
     private void reload() {
-        loading = true;
+        loading = banners.isEmpty();
         errorText = "";
-        updateList();
+        if (loading) {
+            updateList();
+        }
 
         EveAdminRepository.ResultCallback<List<EveAdminModels.BannerItem>> cb =
                 new EveAdminRepository.ResultCallback<List<EveAdminModels.BannerItem>>() {
@@ -139,6 +146,7 @@ public class EveAdminBannersFragment extends BaseFragment {
                         if (destroyed) return;
                         loading = false;
                         errorText = "";
+                        autoSync.markSynced();
                         banners = data != null ? data : Collections.emptyList();
                         updateSubtitle();
                         updateList();
@@ -148,6 +156,7 @@ public class EveAdminBannersFragment extends BaseFragment {
                     public void onError(String message, int httpStatus) {
                         if (destroyed) return;
                         loading = false;
+                        autoSync.markSynced();
                         errorText = message != null ? message : "Unable to load banners.";
                         updateSubtitle();
                         updateList();

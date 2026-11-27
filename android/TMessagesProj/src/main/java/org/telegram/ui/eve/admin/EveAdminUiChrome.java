@@ -33,8 +33,17 @@ import org.telegram.ui.ActionBar.ActionBar;
 import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.SimpleActionBar;
 import org.telegram.ui.ActionBar.Theme;
+import org.telegram.ui.Cells.CheckBoxCell;
+import org.telegram.ui.Cells.DialogRadioCell;
 import org.telegram.ui.Cells.HeaderCell;
+import org.telegram.ui.Cells.NotificationsCheckCell;
+import org.telegram.ui.Cells.RadioButtonCell;
 import org.telegram.ui.Cells.ShadowSectionCell;
+import org.telegram.ui.Cells.TextCell;
+import org.telegram.ui.Cells.TextCheckCell;
+import org.telegram.ui.Cells.TextDetailCell;
+import org.telegram.ui.Cells.TextInfoPrivacyCell;
+import org.telegram.ui.Cells.TextSettingsCell;
 import org.telegram.ui.Components.AvatarDrawable;
 import org.telegram.ui.Components.BackupImageView;
 import org.telegram.ui.Components.FlickerLoadingView;
@@ -44,6 +53,7 @@ import org.telegram.ui.Components.SizeNotifierFrameLayout;
 import org.telegram.ui.Components.UItem;
 import org.telegram.ui.Components.UniversalAdapter;
 import org.telegram.ui.Components.UniversalRecyclerView;
+import org.telegram.ui.SettingsActivity;
 import org.telegram.utils.glass.BaseFragmentSimpleGlass;
 import org.telegram.utils.glass.GlassEngine;
 
@@ -99,6 +109,27 @@ public final class EveAdminUiChrome {
             @Nullable Utilities.Callback5<UItem, View, Integer, Float, Float> onClick,
             @Nullable ActionBar.ActionBarMenuOnItemClick menuClick,
             @Nullable Runnable onUpdateColors) {
+        return setup(
+                fragment, context, simpleActionBar, simpleGlass, glassEngine, resourcesProvider,
+                title, subtitle, useSectionCards, false,
+                fillItems, onClick, menuClick, onUpdateColors);
+    }
+
+    public static Chrome setup(
+            @NonNull BaseFragment fragment,
+            @NonNull Context context,
+            @Nullable SimpleActionBar simpleActionBar,
+            @Nullable BaseFragmentSimpleGlass simpleGlass,
+            @Nullable GlassEngine glassEngine,
+            @Nullable Theme.ResourcesProvider resourcesProvider,
+            @NonNull CharSequence title,
+            @Nullable CharSequence subtitle,
+            boolean useSectionCards,
+            boolean useCardInsetDividers,
+            @NonNull Utilities.Callback2<ArrayList<UItem>, UniversalAdapter> fillItems,
+            @Nullable Utilities.Callback5<UItem, View, Integer, Float, Float> onClick,
+            @Nullable ActionBar.ActionBarMenuOnItemClick menuClick,
+            @Nullable Runnable onUpdateColors) {
 
         final int bgColorKey = useSectionCards ? Theme.key_windowBackgroundGray : Theme.key_windowBackgroundWhite;
         final int horizontalPadTop = useSectionCards ? dp(12) : 0;
@@ -112,6 +143,9 @@ public final class EveAdminUiChrome {
             }
             listView.setSections();
             listView.setSectionsDrawBackground(true);
+            if (useCardInsetDividers) {
+                listView.addItemDecoration(new CardInsetDividerDecoration(resourcesProvider));
+            }
         } else {
             listView.setCaptureSectionsDecoratorAllowed(false);
             if (listView.adapter != null) {
@@ -242,8 +276,146 @@ public final class EveAdminUiChrome {
         private static boolean isNonRowDecorator(View view) {
             return view instanceof HeaderCell
                     || view instanceof ShadowSectionCell
+                    || view instanceof TextInfoPrivacyCell
                     || view instanceof FlickerLoadingView
+                    || view instanceof UniversalAdapter.SpaceView
+                    || RecyclerListView.TAG_NOT_SECTION.equals(view.getTag())
                     || view.getHeight() <= dp(20);
+        }
+    }
+
+    private static final class CardInsetDividerDecoration extends RecyclerView.ItemDecoration {
+        private final Theme.ResourcesProvider resourcesProvider;
+
+        CardInsetDividerDecoration(@Nullable Theme.ResourcesProvider resourcesProvider) {
+            this.resourcesProvider = resourcesProvider;
+        }
+
+        @Override
+        public void onDrawOver(@NonNull Canvas canvas, @NonNull RecyclerView parent, @NonNull RecyclerView.State state) {
+            Paint paint = resourcesProvider != null ? resourcesProvider.getPaint(Theme.key_paint_divider) : Theme.dividerPaint;
+            if (paint == null) {
+                paint = Theme.dividerPaint;
+            }
+            if (paint == null) {
+                return;
+            }
+            int childCount = parent.getChildCount();
+            int cardEdgePad = dp(12);
+            for (int i = 0; i < childCount - 1; i++) {
+                View child = parent.getChildAt(i);
+                View next = parent.getChildAt(i + 1);
+                if (EdgeListDividerDecoration.isNonRowDecorator(child)
+                        || EdgeListDividerDecoration.isNonRowDecorator(next)
+                        || drawsOwnNativeDivider(child)) {
+                    continue;
+                }
+                int leftInset = resolveLeftInset(child);
+                int startX = LocaleController.isRTL ? cardEdgePad : (cardEdgePad + leftInset);
+                int endX = parent.getWidth() - (LocaleController.isRTL ? (cardEdgePad + leftInset) : cardEdgePad);
+                if (endX <= startX) {
+                    continue;
+                }
+                int y = Math.round(child.getBottom() + child.getTranslationY());
+                canvas.drawLine(startX, y, endX, y, paint);
+            }
+        }
+
+        private static boolean drawsOwnNativeDivider(View view) {
+            return view instanceof TextCheckCell
+                    || view instanceof NotificationsCheckCell
+                    || view instanceof TextSettingsCell
+                    || view instanceof TextCell
+                    || view instanceof TextDetailCell
+                    || view instanceof DialogRadioCell
+                    || view instanceof CheckBoxCell
+                    || view instanceof RadioButtonCell;
+        }
+
+        private static int resolveLeftInset(View view) {
+            if (view instanceof SettingsActivity.SettingCell) {
+                return dp(58);
+            }
+            if (view instanceof AvatarRowCell) {
+                return dp(66);
+            }
+            return dp(20);
+        }
+    }
+
+    /**
+     * Lightweight foreground auto-sync controller for Admin & Leaderboard screens.
+     * Triggers silent refreshes on resume (when stale) and at a gentle foreground interval,
+     * cancelling cleanly on pause/destroy without ever blocking loaded UI.
+     */
+    public static final class AutoSyncController {
+        public static final long DEFAULT_MIN_RESUME_INTERVAL_MS = 15_000L;
+        public static final long DEFAULT_PERIODIC_INTERVAL_MS = 25_000L;
+
+        private final long minResumeIntervalMs;
+        private final long periodicIntervalMs;
+        private final Runnable syncAction;
+        private boolean resumed;
+        private boolean destroyed;
+        private boolean hasSyncedOnce;
+        private long lastSyncAtMs;
+
+        private final Runnable periodicTask = new Runnable() {
+            @Override
+            public void run() {
+                if (destroyed || !resumed) {
+                    return;
+                }
+                lastSyncAtMs = System.currentTimeMillis();
+                syncAction.run();
+                scheduleNext();
+            }
+        };
+
+        public AutoSyncController(@NonNull Runnable syncAction) {
+            this(syncAction, DEFAULT_MIN_RESUME_INTERVAL_MS, DEFAULT_PERIODIC_INTERVAL_MS);
+        }
+
+        public AutoSyncController(@NonNull Runnable syncAction, long minResumeIntervalMs, long periodicIntervalMs) {
+            this.syncAction = syncAction;
+            this.minResumeIntervalMs = minResumeIntervalMs;
+            this.periodicIntervalMs = periodicIntervalMs;
+        }
+
+        public void markSynced() {
+            hasSyncedOnce = true;
+            lastSyncAtMs = System.currentTimeMillis();
+        }
+
+        public void onResume() {
+            if (destroyed) {
+                return;
+            }
+            resumed = true;
+            long now = System.currentTimeMillis();
+            if (hasSyncedOnce && (now - lastSyncAtMs) >= minResumeIntervalMs) {
+                lastSyncAtMs = now;
+                syncAction.run();
+            }
+            scheduleNext();
+        }
+
+        public void onPause() {
+            resumed = false;
+            AndroidUtilities.cancelRunOnUIThread(periodicTask);
+        }
+
+        public void destroy() {
+            destroyed = true;
+            resumed = false;
+            AndroidUtilities.cancelRunOnUIThread(periodicTask);
+        }
+
+        private void scheduleNext() {
+            AndroidUtilities.cancelRunOnUIThread(periodicTask);
+            if (!destroyed && resumed && periodicIntervalMs > 0) {
+                AndroidUtilities.runOnUIThread(periodicTask, periodicIntervalMs);
+            }
         }
     }
 

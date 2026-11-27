@@ -41,7 +41,6 @@ import java.util.List;
 public class EveAdminFeedbackFragment extends BaseFragment {
 
     private static final int MENU_ADD_POST = 1;
-    private static final int MENU_REFRESH = 2;
 
     private static final int ID_RETRY = 101;
     private static final int BASE_MSG_ID = 1000;
@@ -54,6 +53,7 @@ public class EveAdminFeedbackFragment extends BaseFragment {
     private boolean loading = true;
     private boolean destroyed = false;
     private String errorText = "";
+    private final EveAdminUiChrome.AutoSyncController autoSync = new EveAdminUiChrome.AutoSyncController(this::reload);
 
     @Override
     public boolean onFragmentCreate() {
@@ -110,8 +110,6 @@ public class EveAdminFeedbackFragment extends BaseFragment {
                             finishFragment();
                         } else if (id == MENU_ADD_POST) {
                             showCreatePostDialog();
-                        } else if (id == MENU_REFRESH) {
-                            reload();
                         }
                     }
                 },
@@ -122,7 +120,6 @@ public class EveAdminFeedbackFragment extends BaseFragment {
         if (simpleActionBar != null) {
             SimpleActionBarMenu menu = simpleActionBar.createMenu();
             menu.addItem(MENU_ADD_POST, R.drawable.msg_add, getResourceProvider());
-            menu.addItem(MENU_REFRESH, R.drawable.msg_retry, getResourceProvider());
         }
 
         fragmentView = chrome.rootView;
@@ -131,15 +128,30 @@ public class EveAdminFeedbackFragment extends BaseFragment {
     }
 
     @Override
+    public void onResume() {
+        super.onResume();
+        autoSync.onResume();
+    }
+
+    @Override
+    public void onPause() {
+        autoSync.onPause();
+        super.onPause();
+    }
+
+    @Override
     public void onFragmentDestroy() {
         destroyed = true;
+        autoSync.destroy();
         super.onFragmentDestroy();
     }
 
     private void reload() {
-        loading = true;
+        loading = messages.isEmpty() && posts.isEmpty();
         errorText = "";
-        updateList();
+        if (loading) {
+            updateList();
+        }
 
         EveAdminRepository.ResultCallback<List<EveAdminModels.FeedbackMessageItem>> cb =
                 new EveAdminRepository.ResultCallback<List<EveAdminModels.FeedbackMessageItem>>() {
@@ -148,6 +160,7 @@ public class EveAdminFeedbackFragment extends BaseFragment {
                         if (destroyed) return;
                         messages = msgData != null ? msgData : Collections.emptyList();
                         loading = false;
+                        autoSync.markSynced();
                         updateSubtitle();
                         updateList();
                     }
@@ -156,6 +169,7 @@ public class EveAdminFeedbackFragment extends BaseFragment {
                     public void onError(String message, int httpStatus) {
                         if (destroyed) return;
                         loading = false;
+                        autoSync.markSynced();
                         errorText = message != null ? message : "Unable to load feedback.";
                         updateSubtitle();
                         updateList();

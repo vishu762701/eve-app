@@ -36,7 +36,6 @@ public class EveAdminPaymentsFragment extends BaseFragment {
 
     private static final int MENU_SEARCH = 1;
     private static final int MENU_FILTER = 2;
-    private static final int MENU_REFRESH = 3;
 
     private static final int ID_RETRY = 101;
     private static final int BASE_TX_ID = 1000;
@@ -51,6 +50,7 @@ public class EveAdminPaymentsFragment extends BaseFragment {
     private String searchQuery = "";
     private List<EveAdminModels.PaymentTransactionItem> transactions = Collections.emptyList();
     private final List<EveAdminModels.PaymentTransactionItem> filteredTransactions = new ArrayList<>();
+    private final EveAdminUiChrome.AutoSyncController autoSync = new EveAdminUiChrome.AutoSyncController(this::reload);
 
     @Override
     public boolean onFragmentCreate() {
@@ -118,8 +118,6 @@ public class EveAdminPaymentsFragment extends BaseFragment {
                             finishFragment();
                         } else if (id == MENU_FILTER) {
                             showStatusFilterPicker();
-                        } else if (id == MENU_REFRESH) {
-                            reload();
                         }
                     }
                 },
@@ -150,7 +148,6 @@ public class EveAdminPaymentsFragment extends BaseFragment {
                     });
             searchItem.setSearchFieldHint("Search order ID or student email");
             menu.addItem(MENU_FILTER, R.drawable.msg_select, getResourceProvider());
-            menu.addItem(MENU_REFRESH, R.drawable.msg_retry, getResourceProvider());
         }
 
         fragmentView = chrome.rootView;
@@ -159,15 +156,30 @@ public class EveAdminPaymentsFragment extends BaseFragment {
     }
 
     @Override
+    public void onResume() {
+        super.onResume();
+        autoSync.onResume();
+    }
+
+    @Override
+    public void onPause() {
+        autoSync.onPause();
+        super.onPause();
+    }
+
+    @Override
     public void onFragmentDestroy() {
         destroyed = true;
+        autoSync.destroy();
         super.onFragmentDestroy();
     }
 
     private void reload() {
-        loading = true;
+        loading = transactions.isEmpty();
         errorText = "";
-        updateList();
+        if (loading) {
+            updateList();
+        }
 
         final String serverFilter = "ALL".equals(statusFilter) ? "" : statusFilter;
         EveAdminRepository.ResultCallback<List<EveAdminModels.PaymentTransactionItem>> cb =
@@ -177,6 +189,7 @@ public class EveAdminPaymentsFragment extends BaseFragment {
                         if (destroyed) return;
                         loading = false;
                         errorText = "";
+                        autoSync.markSynced();
                         transactions = data != null ? data : Collections.emptyList();
                         applyLocalSearch(searchQuery);
                     }
@@ -185,6 +198,7 @@ public class EveAdminPaymentsFragment extends BaseFragment {
                     public void onError(String message, int httpStatus) {
                         if (destroyed) return;
                         loading = false;
+                        autoSync.markSynced();
                         errorText = message != null ? message : "Unable to load payment orders.";
                         updateSubtitle();
                         updateList();

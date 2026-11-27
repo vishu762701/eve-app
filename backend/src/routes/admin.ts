@@ -528,7 +528,8 @@ adminRoutes.get("/analytics/exams", requirePermission("view_analytics_logs"), as
           COUNT(a.id) as attempt_count,
           COUNT(DISTINCT a.user_id) as unique_users,
           COALESCE(MAX(a.timestamp), 0) as last_attempt_at,
-          COALESCE(AVG(a.score), 0.0) as average_score
+          COALESCE(AVG(a.score), 0.0) as average_score,
+          COALESCE(MAX(a.score), 0.0) as highest_score
         FROM exams e
         LEFT JOIN attempts a ON (e.id = a.exam_id OR substr(a.exam_id, 1, length(e.id) + 2) = e.id || '__') AND a.counted = 1 AND a.timestamp >= ?
         GROUP BY e.id, e.exam_name, e.category
@@ -542,7 +543,8 @@ adminRoutes.get("/analytics/exams", requirePermission("view_analytics_logs"), as
           COUNT(a.id) as attempt_count,
           COUNT(DISTINCT a.user_id) as unique_users,
           COALESCE(MAX(a.timestamp), 0) as last_attempt_at,
-          COALESCE(AVG(a.score), 0.0) as average_score
+          COALESCE(AVG(a.score), 0.0) as average_score,
+          COALESCE(MAX(a.score), 0.0) as highest_score
         FROM exams e
         LEFT JOIN attempts a ON (e.id = a.exam_id OR substr(a.exam_id, 1, length(e.id) + 2) = e.id || '__') AND a.counted = 1
         GROUP BY e.id, e.exam_name, e.category
@@ -560,6 +562,7 @@ adminRoutes.get("/analytics/exams", requirePermission("view_analytics_logs"), as
       uniqueUsers: r.unique_users || 0,
       lastAttemptAt: r.last_attempt_at || 0,
       averageScore: Math.round((r.average_score || 0.0) * 10.0) / 10.0,
+      highestScore: Math.round((r.highest_score || 0.0) * 10.0) / 10.0,
     }));
 
     return c.json({ success: true, data: list });
@@ -576,6 +579,7 @@ adminRoutes.get("/analytics/exams", requirePermission("view_analytics_logs"), as
       uniqueUsers: r.unique_users,
       lastAttemptAt: r.last_attempt_at,
       averageScore: 0.0,
+      highestScore: 0.0,
     }));
 
     return c.json({ success: true, data: list });
@@ -771,6 +775,78 @@ adminRoutes.get("/users", requirePermission("manage_users"), async (c) => {
   }
 });
 
+// GET /api/admin/users/:id - Fetch single student profile by UID for admin inspection
+adminRoutes.get("/users/:id", requirePermission("manage_users"), async (c) => {
+  const userId = (c.req.param("id") || "").trim();
+  if (!userId) {
+    return c.json({ success: false, error: "User ID is required" }, 400);
+  }
+  const db = c.env.DB;
+  try {
+    let availableColumns = new Set<string>();
+    try {
+      const tableInfo = await db.prepare("PRAGMA table_info(users)").all<{ name: string }>();
+      availableColumns = new Set(
+        (tableInfo.results || []).map((col) => String(col?.name || "").trim().toLowerCase()).filter(Boolean)
+      );
+    } catch {
+      availableColumns = new Set<string>();
+    }
+    const hasTableInfo = availableColumns.size > 0;
+    const hasDisabled = !hasTableInfo || availableColumns.has("disabled");
+    const hasUsername = availableColumns.has("username");
+    const hasPhone = availableColumns.has("phone");
+    const hasBio = availableColumns.has("bio");
+    const photoColumn = availableColumns.has("photo_url")
+      ? "photo_url"
+      : (availableColumns.has("avatar_url") ? "avatar_url" : null);
+
+    const selectCols = [
+      "id",
+      "eve_id",
+      "email",
+      "display_name",
+      "dob",
+      "category",
+      "created_at",
+      "last_active",
+    ];
+    if (hasDisabled) selectCols.push("COALESCE(disabled, 0) AS disabled");
+    if (hasUsername) selectCols.push("COALESCE(username, '') AS username");
+    if (hasPhone) selectCols.push("COALESCE(phone, '') AS phone");
+    if (hasBio) selectCols.push("COALESCE(bio, '') AS bio");
+    if (photoColumn) selectCols.push(`COALESCE(${photoColumn}, '') AS photo_url`);
+
+    const u = await db
+      .prepare("SELECT " + selectCols.join(", ") + " FROM users WHERE id = ? LIMIT 1")
+      .bind(userId)
+      .first<any>();
+    if (!u) {
+      return c.json({ success: false, error: "Student not found" }, 404);
+    }
+    return c.json({
+      success: true,
+      data: {
+        id: u.id,
+        eveId: u.eve_id || null,
+        email: u.email,
+        displayName: u.display_name || "Student",
+        dob: u.dob || "",
+        category: u.category || "General",
+        createdAt: u.created_at || 0,
+        lastActive: u.last_active || 0,
+        disabled: Boolean(u.disabled),
+        username: hasUsername ? (u.username || "") : "",
+        phone: hasPhone ? (u.phone || "") : "",
+        bio: hasBio ? (u.bio || "") : "",
+        photoUrl: photoColumn ? (u.photo_url || "") : "",
+      },
+    });
+  } catch (_err: any) {
+    return c.json({ success: false, error: "Unable to load student profile" }, 500);
+  }
+});
+
 // POST /api/admin/users/:id/status - Toggle user disabled/ban status
 adminRoutes.post("/users/:id/status", requirePermission("manage_users"), async (c) => {
   const user = c.get("user");
@@ -920,8 +996,8 @@ adminRoutes.put("/config", requirePermission("manage_config_maintenance"), async
   let defaultPublishMode = prevConfig.default_publish_mode || "paused";
   if (body.default_publish_mode !== undefined && body.default_publish_mode !== null) {
     const mode = String(body.default_publish_mode).trim().toLowerCase();
-    if (mode !== "paused" && mode !== "live") {
-      return c.json({ success: false, error: "default_publish_mode must be 'paused' or 'live'" }, 400);
+    if (mode !== "paused" && mode !== "live" && mode !== "draft") {
+      return c.json({ success: false, error: "default_publish_mode must be 'paused', 'live', or 'draft'" }, 400);
     }
     defaultPublishMode = mode;
   }

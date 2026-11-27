@@ -35,7 +35,6 @@ import java.util.List;
 public class EveAdminPollsFragment extends BaseFragment {
 
     private static final int MENU_ADD = 1;
-    private static final int MENU_REFRESH = 2;
 
     private static final int ID_RETRY = 101;
     private static final int BASE_POLL_ID = 1000;
@@ -46,6 +45,7 @@ public class EveAdminPollsFragment extends BaseFragment {
     private boolean loading = true;
     private boolean destroyed = false;
     private String errorText = "";
+    private final EveAdminUiChrome.AutoSyncController autoSync = new EveAdminUiChrome.AutoSyncController(this::reload);
 
     @Override
     public boolean onFragmentCreate() {
@@ -102,8 +102,6 @@ public class EveAdminPollsFragment extends BaseFragment {
                             finishFragment();
                         } else if (id == MENU_ADD) {
                             presentFragment(new EveAdminPollCreateFragment(EveAdminPollsFragment.this::reload));
-                        } else if (id == MENU_REFRESH) {
-                            reload();
                         }
                     }
                 },
@@ -114,7 +112,6 @@ public class EveAdminPollsFragment extends BaseFragment {
         if (simpleActionBar != null) {
             SimpleActionBarMenu menu = simpleActionBar.createMenu();
             menu.addItem(MENU_ADD, R.drawable.msg_add, getResourceProvider());
-            menu.addItem(MENU_REFRESH, R.drawable.msg_retry, getResourceProvider());
         }
 
         fragmentView = chrome.rootView;
@@ -123,15 +120,30 @@ public class EveAdminPollsFragment extends BaseFragment {
     }
 
     @Override
+    public void onResume() {
+        super.onResume();
+        autoSync.onResume();
+    }
+
+    @Override
+    public void onPause() {
+        autoSync.onPause();
+        super.onPause();
+    }
+
+    @Override
     public void onFragmentDestroy() {
         destroyed = true;
+        autoSync.destroy();
         super.onFragmentDestroy();
     }
 
     public void reload() {
-        loading = true;
+        loading = polls.isEmpty();
         errorText = "";
-        updateList();
+        if (loading) {
+            updateList();
+        }
 
         EveAdminRepository.ResultCallback<List<EveAdminModels.PollItem>> cb =
                 new EveAdminRepository.ResultCallback<List<EveAdminModels.PollItem>>() {
@@ -140,6 +152,7 @@ public class EveAdminPollsFragment extends BaseFragment {
                         if (destroyed) return;
                         loading = false;
                         errorText = "";
+                        autoSync.markSynced();
                         polls = data != null ? data : Collections.emptyList();
                         updateSubtitle();
                         updateList();
@@ -149,6 +162,7 @@ public class EveAdminPollsFragment extends BaseFragment {
                     public void onError(String message, int httpStatus) {
                         if (destroyed) return;
                         loading = false;
+                        autoSync.markSynced();
                         errorText = message != null ? message : "Unable to load polls.";
                         updateSubtitle();
                         updateList();

@@ -47,7 +47,6 @@ public class EveAdminQuestionsFragment extends BaseFragment {
     private static final int MENU_ADD = 2;
     private static final int MENU_MORE = 3;
     private static final int MENU_IMPORT_JSON = 4;
-    private static final int MENU_REFRESH = 5;
 
     private static final int ID_RETRY = 101;
     private static final int BASE_QUESTION_ID = 1000;
@@ -63,6 +62,7 @@ public class EveAdminQuestionsFragment extends BaseFragment {
     private String searchQuery = "";
     private final List<EveAdminModels.AdminQuestionItem> allQuestions = new ArrayList<>();
     private final List<EveAdminModels.AdminQuestionItem> filteredQuestions = new ArrayList<>();
+    private final EveAdminUiChrome.AutoSyncController autoSync = new EveAdminUiChrome.AutoSyncController(this::reload);
 
     public EveAdminQuestionsFragment(EveAdminModels.AdminExamItem exam) {
         this.exam = exam;
@@ -138,8 +138,6 @@ public class EveAdminQuestionsFragment extends BaseFragment {
                         } else if (id == MENU_IMPORT_JSON) {
                             EveAdminDialogs.showBulkImportQuestionsDialog(
                                     EveAdminQuestionsFragment.this, repo, exam, EveAdminQuestionsFragment.this::reload);
-                        } else if (id == MENU_REFRESH) {
-                            reload();
                         }
                     }
                 },
@@ -174,7 +172,6 @@ public class EveAdminQuestionsFragment extends BaseFragment {
             menu.addItem(MENU_ADD, R.drawable.msg_add, getResourceProvider());
             SimpleActionBarMenuItem moreItem = menu.addItem(MENU_MORE, R.drawable.ic_ab_other, getResourceProvider());
             moreItem.addSubItem(MENU_IMPORT_JSON, R.drawable.msg_download, "Bulk Import JSON");
-            moreItem.addSubItem(MENU_REFRESH, R.drawable.msg_retry, "Refresh Questions");
         }
 
         fragmentView = chrome.rootView;
@@ -183,16 +180,31 @@ public class EveAdminQuestionsFragment extends BaseFragment {
     }
 
     @Override
+    public void onResume() {
+        super.onResume();
+        autoSync.onResume();
+    }
+
+    @Override
+    public void onPause() {
+        autoSync.onPause();
+        super.onPause();
+    }
+
+    @Override
     public void onFragmentDestroy() {
         destroyed = true;
+        autoSync.destroy();
         super.onFragmentDestroy();
     }
 
     private void reload() {
         if (destroyed) return;
-        loading = true;
+        loading = allQuestions.isEmpty();
         errorText = "";
-        updateList();
+        if (loading) {
+            updateList();
+        }
         EveAdminRepository.ResultCallback<List<EveAdminModels.AdminQuestionItem>> cb =
                 new EveAdminRepository.ResultCallback<List<EveAdminModels.AdminQuestionItem>>() {
                     @Override
@@ -200,6 +212,7 @@ public class EveAdminQuestionsFragment extends BaseFragment {
                         if (destroyed) return;
                         loading = false;
                         errorText = "";
+                        autoSync.markSynced();
                         allQuestions.clear();
                         if (data != null) {
                             allQuestions.addAll(data);
@@ -211,6 +224,7 @@ public class EveAdminQuestionsFragment extends BaseFragment {
                     public void onError(String message, int httpStatus) {
                         if (destroyed) return;
                         loading = false;
+                        autoSync.markSynced();
                         errorText = message != null ? message : "Unable to load questions.";
                         updateList();
                     }

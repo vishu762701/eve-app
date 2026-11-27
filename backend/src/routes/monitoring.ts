@@ -1,9 +1,10 @@
 import { Hono } from 'hono';
+import { getAdminPermissions } from '../auth';
 import { requireAdmin, requirePermission } from '../middleware/authMiddleware';
 import { getGeminiApiKeys } from '../ai/generator';
 import { runGeneration, GenerationBusyError } from '../services/generation';
 import { AuthUser, Env, ExamRow } from '../types';
-import { recordAdminAction } from '../util/auditLog';
+import { prepareAdminAuditLog, recordAdminAction, runBatch } from '../util/auditLog';
 
 export const monitoringRoutes = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
 monitoringRoutes.use('*', requirePermission("view_analytics_logs"));
@@ -94,19 +95,125 @@ monitoringRoutes.post('/jobs/:id/retry', requirePermission("manage_generated_tes
 });
 
 // ----------------------------------------------------------------------------
-// Crash Center Admin Endpoints (Mission 00B)
+// Crash Center, App Errors & Security Monitor Endpoints
 // Protected by router-wide requirePermission("view_analytics_logs")
 // ----------------------------------------------------------------------------
+function describeTopFrameLocation(topFrame: string): string {
+  const frame = (topFrame || "").trim();
+  if (!frame) return "Unknown app screen";
+  const withoutArgs = frame.split("(")[0].trim();
+  const segments = withoutArgs.split(".");
+  const className = segments.length >= 2 ? segments[segments.length - 2] : withoutArgs;
+  const methodName = segments.length >= 2 ? segments[segments.length - 1] : "";
+  const lineMatch = frame.match(/:(\d+)\)/);
+  const lineSuffix = lineMatch ? ` (line ${lineMatch[1]})` : "";
+
+  const screenMap: Record<string, string> = {
+    EveTestPlayerFragment: "Test Player screen",
+    EveTestResultFragment: "Test Result & Review screen",
+    EveExamTestsFragment: "Exam Tests list",
+    EveLeaderboardFragment: "Leaderboard screen",
+    EveResultHistoryFragment: "Result History screen",
+    EveAnnouncementsFragment: "Announcements & Polls feed",
+    EveAdminControlCenterActivity: "Admin Control Center",
+    EveAdminExamsFragment: "Admin Exams screen",
+    EveAdminStudentsFragment: "Admin Students directory",
+    EveAdminStudentDetailFragment: "Admin Student Profile screen",
+    EveAdminFeedbackFragment: "Admin Feedback screen",
+    EveAdminRolesFragment: "Admin Roles screen",
+    EveAdminAuditLogFragment: "Admin Audit Log screen",
+    EveBackendClient: "Cloud API sync",
+    DialogsActivity: "Exams Home screen",
+    ProfileActivity: "Profile screen",
+    SettingsActivity: "Settings screen",
+    Theme: "App Theme & Colors",
+  };
+
+  const friendlyModule = screenMap[className] || className.replace(/^Eve/, "EVE ");
+  return methodName ? `${friendlyModule} in ${methodName}()${lineSuffix}` : `${friendlyModule}${lineSuffix}`;
+}
+
+function buildPlainEnglishCrashInfo(
+  exceptionClass: string,
+  topFrame: string,
+  sanitizedMessage: string,
+  suggestedCause: string
+): { plainEnglishSummary: string; whereItHappened: string } {
+  const ex = (exceptionClass || "").trim();
+  const msg = (sanitizedMessage || "").trim();
+  const whereItHappened = describeTopFrameLocation(topFrame);
+
+  let causeText: string;
+  if (ex.includes("NullPointerException")) {
+    causeText = "The app tried to read a missing or uninitialized value";
+  } else if (ex.includes("OutOfMemoryError")) {
+    causeText = "The device ran out of memory while loading images, animations, or exam data";
+  } else if (ex.includes("IllegalStateException")) {
+    causeText = "A screen or background task ran in an unexpected lifecycle state";
+  } else if (ex.includes("IndexOutOfBoundsException")) {
+    causeText = "A list, question, or option index went out of range";
+  } else if (ex.includes("ClassCastException")) {
+    causeText = "An incompatible view or data model type was encountered";
+  } else if (ex.includes("BadTokenException")) {
+    causeText = "A popup dialog tried to open after its screen was already closed";
+  } else if (ex.includes("SQLite")) {
+    causeText = "Local device storage read or write failed";
+  } else if (ex.includes("JSONException")) {
+    causeText = "A server response could not be parsed cleanly";
+  } else if (ex.includes("Timeout") || ex.includes("ConnectException") || ex.includes("UnknownHost")) {
+    causeText = "Network connection timed out or could not reach the EVE server";
+  } else if (ex.includes("SecurityException")) {
+    causeText = "Android denied a required permission or security check";
+  } else if (ex) {
+    const shortEx = ex.includes(".") ? ex.substring(ex.lastIndexOf(".") + 1) : ex;
+    causeText = `Unexpected ${shortEx} failure`;
+  } else {
+    causeText = suggestedCause && suggestedCause !== "no rule matched"
+      ? suggestedCause
+      : "Unexpected application error";
+  }
+
+  const cleanSnippet = msg && msg.length <= 120 ? `: ${msg}` : "";
+  return {
+    plainEnglishSummary: `${causeText}${cleanSnippet}`,
+    whereItHappened,
+  };
+}
+
+function enrichCrashSignatureRow(row: any) {
+  if (!row) return row;
+  const info = buildPlainEnglishCrashInfo(
+    String(row.exception_class || ""),
+    String(row.top_frame || ""),
+    String(row.sanitized_message || ""),
+    String(row.suggested_cause || "")
+  );
+  return {
+    ...row,
+    plainEnglishSummary: info.plainEnglishSummary,
+    whereItHappened: info.whereItHappened,
+  };
+}
+
 monitoringRoutes.get('/crashes', async (c) => {
   if (!c.env.DB) {
     return c.json({ success: false, error: "Database unavailable" }, 503);
   }
+  const statusParam = (c.req.query("status") || "open").trim().toLowerCase();
+  let whereSql = "WHERE COALESCE(status, 'open') = 'open'";
+  const bindings: any[] = [];
+  if (statusParam === "resolved") {
+    whereSql = "WHERE status = 'resolved'";
+  } else if (statusParam === "all") {
+    whereSql = "";
+  }
   const { results } = await c.env.DB.prepare(`
     SELECT signature, exception_class, top_frame, sanitized_message, first_seen, last_seen, occurrence_count, status, suggested_cause
     FROM crash_signatures
+    ${whereSql}
     ORDER BY last_seen DESC LIMIT 100
-  `).all();
-  return c.json({ success: true, data: results || [] });
+  `).bind(...bindings).all();
+  return c.json({ success: true, data: (results || []).map(enrichCrashSignatureRow) });
 });
 
 monitoringRoutes.get('/crashes/:signature', async (c) => {
@@ -131,5 +238,160 @@ monitoringRoutes.get('/crashes/:signature', async (c) => {
     ORDER BY timestamp DESC LIMIT 20
   `).bind(signature).all();
 
-  return c.json({ success: true, data: { signature: sigRow, incidents: incidents || [] } });
+  return c.json({ success: true, data: { signature: enrichCrashSignatureRow(sigRow), incidents: incidents || [] } });
+});
+
+monitoringRoutes.post('/crashes/:signature/resolve', async (c) => {
+  if (!c.env.DB) {
+    return c.json({ success: false, error: "Database unavailable" }, 503);
+  }
+  const db = c.env.DB;
+  const user = c.get("user");
+  const signature = (c.req.param("signature") || "").trim();
+  if (!signature) {
+    return c.json({ success: false, error: "Crash signature is required" }, 400);
+  }
+
+  const existing = await db
+    .prepare("SELECT signature, exception_class, status FROM crash_signatures WHERE signature = ?")
+    .bind(signature)
+    .first<{ signature: string; exception_class: string; status: string }>();
+  if (!existing) {
+    return c.json({ success: false, error: "Crash signature not found" }, 404);
+  }
+
+  const updateStmt = db
+    .prepare("UPDATE crash_signatures SET status = 'resolved' WHERE signature = ?")
+    .bind(signature);
+  const { stmt: auditStmt } = prepareAdminAuditLog(db, user, {
+    actionType: "CRASH_RESOLVED",
+    description: `Marked crash signature '${existing.exception_class}' (${signature}) as resolved`,
+    targetType: "crash_signature",
+    targetId: signature,
+  });
+  await runBatch(db, [updateStmt, auditStmt]);
+
+  return c.json({ success: true, data: { signature, status: "resolved" } });
+});
+
+monitoringRoutes.delete('/crashes/:signature', async (c) => {
+  if (!c.env.DB) {
+    return c.json({ success: false, error: "Database unavailable" }, 503);
+  }
+  const db = c.env.DB;
+  const user = c.get("user");
+  const perms = await getAdminPermissions(db, user?.email);
+  if (!perms?.isOwner) {
+    return c.json({ success: false, error: "Only the Owner can permanently delete crash signatures" }, 403);
+  }
+
+  const signature = (c.req.param("signature") || "").trim();
+  if (!signature) {
+    return c.json({ success: false, error: "Crash signature is required" }, 400);
+  }
+  const existing = await db
+    .prepare("SELECT signature, exception_class FROM crash_signatures WHERE signature = ?")
+    .bind(signature)
+    .first<{ signature: string; exception_class: string }>();
+  if (!existing) {
+    return c.json({ success: false, error: "Crash signature not found" }, 404);
+  }
+
+  const delIncidents = db.prepare("DELETE FROM crash_incidents WHERE signature = ?").bind(signature);
+  const delSig = db.prepare("DELETE FROM crash_signatures WHERE signature = ?").bind(signature);
+  const { stmt: auditStmt } = prepareAdminAuditLog(db, user, {
+    actionType: "CRASH_DELETED",
+    description: `Deleted crash signature '${existing.exception_class}' (${signature})`,
+    targetType: "crash_signature",
+    targetId: signature,
+  });
+  await runBatch(db, [delIncidents, delSig, auditStmt]);
+
+  return c.json({ success: true, data: { signature, deleted: true } });
+});
+
+monitoringRoutes.get('/security-events', async (c) => {
+  if (!c.env.DB) {
+    return c.json({ success: false, error: "Database unavailable" }, 503);
+  }
+  const limitRaw = parseInt(c.req.query("limit") || "60", 10);
+  const limit = Math.max(1, Math.min(isNaN(limitRaw) ? 60 : limitRaw, 100));
+
+  const { results } = await c.env.DB.prepare(`
+    SELECT id, operation, timestamp, category, status, retryable, correlation_id
+    FROM operation_events
+    ORDER BY timestamp DESC, id DESC
+    LIMIT ?
+  `).bind(limit).all<any>();
+
+  let securityCount = 0;
+  let errorCount = 0;
+
+  const events = (results || []).map((row) => {
+    const category = String(row.category || "BACKEND_FAILURE").toUpperCase();
+    const operation = String(row.operation || "operation").toLowerCase();
+    const status = Number(row.status || 500);
+    const correlation = String(row.correlation_id || "");
+
+    const isSecurity = category === "AUTHENTICATION" || category === "AUTHORIZATION" || category === "RATE_LIMIT";
+    const kind = isSecurity ? "security" : "app_error";
+    if (isSecurity) {
+      securityCount++;
+    } else {
+      errorCount++;
+    }
+
+    let severity = "low";
+    if (category === "AUTHORIZATION" || status >= 500) {
+      severity = "high";
+    } else if (category === "RATE_LIMIT" || category === "AUTHENTICATION") {
+      severity = "medium";
+    }
+
+    let plainEnglishTitle = "Backend Operation Error";
+    let plainEnglishDetail = `${operation} returned HTTP ${status}`;
+    if (category === "AUTHORIZATION") {
+      plainEnglishTitle = "Unauthorized Admin Access Blocked";
+      plainEnglishDetail = `A non-admin or unpermitted request was blocked with HTTP ${status} (${operation}).`;
+    } else if (category === "AUTHENTICATION") {
+      plainEnglishTitle = "Rejected Authentication Attempt";
+      plainEnglishDetail = `An invalid, missing, or expired credential was rejected with HTTP ${status} (${operation}).`;
+    } else if (category === "RATE_LIMIT") {
+      plainEnglishTitle = "Rate Limit Protection Triggered";
+      plainEnglishDetail = `Excessive request burst was throttled with HTTP 429 (${operation}).`;
+    } else if (operation === "submission") {
+      plainEnglishTitle = status >= 500 ? "Test Submission Server Error" : "Test Submission Rejected";
+      plainEnglishDetail = `A student test submission ended with HTTP ${status} (${category.toLowerCase()}).`;
+    } else if (operation === "generation") {
+      plainEnglishTitle = status >= 500 ? "AI Test Generation Failed" : "AI Generation Request Rejected";
+      plainEnglishDetail = `An AI test generation job failed with HTTP ${status} (${category.toLowerCase()}).`;
+    }
+
+    if (correlation && correlation.includes("path=")) {
+      plainEnglishDetail += ` • ${correlation}`;
+    }
+
+    return {
+      id: String(row.id || ""),
+      kind,
+      severity,
+      operation,
+      category,
+      status,
+      retryable: Boolean(row.retryable),
+      correlationId: correlation,
+      plainEnglishTitle,
+      plainEnglishDetail,
+      timestamp: Number(row.timestamp || 0),
+    };
+  });
+
+  return c.json({
+    success: true,
+    data: {
+      events,
+      securityCount,
+      errorCount,
+    },
+  });
 });

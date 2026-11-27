@@ -41,7 +41,6 @@ import java.util.Locale;
 public class EveAdminPremiumUsersFragment extends BaseFragment {
 
     private static final int MENU_SEARCH = 1;
-    private static final int MENU_REFRESH = 2;
 
     private static final int ID_RETRY = 101;
     private static final int BASE_USER_ID = 1000;
@@ -55,6 +54,7 @@ public class EveAdminPremiumUsersFragment extends BaseFragment {
     private String searchQuery = "";
     private List<EveAdminModels.PremiumUserItem> users = Collections.emptyList();
     private final List<EveAdminModels.PremiumUserItem> filteredUsers = new ArrayList<>();
+    private final EveAdminUiChrome.AutoSyncController autoSync = new EveAdminUiChrome.AutoSyncController(this::reload);
 
     @Override
     public boolean onFragmentCreate() {
@@ -120,8 +120,6 @@ public class EveAdminPremiumUsersFragment extends BaseFragment {
                     public void onItemClick(int id) {
                         if (id == -1) {
                             finishFragment();
-                        } else if (id == MENU_REFRESH) {
-                            reload();
                         }
                     }
                 },
@@ -151,7 +149,6 @@ public class EveAdminPremiumUsersFragment extends BaseFragment {
                         }
                     });
             searchItem.setSearchFieldHint("Search subscriber name or email");
-            menu.addItem(MENU_REFRESH, R.drawable.msg_retry, getResourceProvider());
         }
 
         fragmentView = chrome.rootView;
@@ -160,15 +157,30 @@ public class EveAdminPremiumUsersFragment extends BaseFragment {
     }
 
     @Override
+    public void onResume() {
+        super.onResume();
+        autoSync.onResume();
+    }
+
+    @Override
+    public void onPause() {
+        autoSync.onPause();
+        super.onPause();
+    }
+
+    @Override
     public void onFragmentDestroy() {
         destroyed = true;
+        autoSync.destroy();
         super.onFragmentDestroy();
     }
 
     private void reload() {
-        loading = true;
+        loading = users.isEmpty();
         errorText = "";
-        updateList();
+        if (loading) {
+            updateList();
+        }
 
         EveAdminRepository.ResultCallback<List<EveAdminModels.PremiumUserItem>> cb =
                 new EveAdminRepository.ResultCallback<List<EveAdminModels.PremiumUserItem>>() {
@@ -177,6 +189,7 @@ public class EveAdminPremiumUsersFragment extends BaseFragment {
                         if (destroyed) return;
                         loading = false;
                         errorText = "";
+                        autoSync.markSynced();
                         users = data != null ? data : Collections.emptyList();
                         applyFilter(searchQuery);
                     }
@@ -185,6 +198,7 @@ public class EveAdminPremiumUsersFragment extends BaseFragment {
                     public void onError(String message, int httpStatus) {
                         if (destroyed) return;
                         loading = false;
+                        autoSync.markSynced();
                         errorText = message != null ? message : "Unable to load subscribers.";
                         updateSubtitle();
                         updateList();

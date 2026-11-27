@@ -41,7 +41,6 @@ import java.util.List;
 public class EveAdminBroadcastsFragment extends BaseFragment {
 
     private static final int MENU_ADD = 1;
-    private static final int MENU_REFRESH = 2;
 
     private static final int ID_RETRY = 101;
     private static final int BASE_ITEM_ID = 1000;
@@ -54,6 +53,7 @@ public class EveAdminBroadcastsFragment extends BaseFragment {
     private boolean destroyed = false;
     private boolean composerOpened = false;
     private String errorText = "";
+    private final EveAdminUiChrome.AutoSyncController autoSync = new EveAdminUiChrome.AutoSyncController(this::reload);
 
     public EveAdminBroadcastsFragment() {
         this(false);
@@ -118,8 +118,6 @@ public class EveAdminBroadcastsFragment extends BaseFragment {
                             finishFragment();
                         } else if (id == MENU_ADD) {
                             showBroadcastComposer();
-                        } else if (id == MENU_REFRESH) {
-                            reload();
                         }
                     }
                 },
@@ -130,7 +128,6 @@ public class EveAdminBroadcastsFragment extends BaseFragment {
         if (simpleActionBar != null) {
             SimpleActionBarMenu menu = simpleActionBar.createMenu();
             menu.addItem(MENU_ADD, R.drawable.msg_add, getResourceProvider());
-            menu.addItem(MENU_REFRESH, R.drawable.msg_retry, getResourceProvider());
         }
 
         fragmentView = chrome.rootView;
@@ -147,15 +144,30 @@ public class EveAdminBroadcastsFragment extends BaseFragment {
     }
 
     @Override
+    public void onResume() {
+        super.onResume();
+        autoSync.onResume();
+    }
+
+    @Override
+    public void onPause() {
+        autoSync.onPause();
+        super.onPause();
+    }
+
+    @Override
     public void onFragmentDestroy() {
         destroyed = true;
+        autoSync.destroy();
         super.onFragmentDestroy();
     }
 
     private void reload() {
-        loading = true;
+        loading = broadcasts.isEmpty();
         errorText = "";
-        updateList();
+        if (loading) {
+            updateList();
+        }
 
         EveAdminRepository.ResultCallback<List<EveAdminModels.BroadcastItem>> cb =
                 new EveAdminRepository.ResultCallback<List<EveAdminModels.BroadcastItem>>() {
@@ -164,6 +176,7 @@ public class EveAdminBroadcastsFragment extends BaseFragment {
                         if (destroyed) return;
                         loading = false;
                         errorText = "";
+                        autoSync.markSynced();
                         broadcasts = data != null ? data : Collections.emptyList();
                         updateSubtitle();
                         updateList();
@@ -173,6 +186,7 @@ public class EveAdminBroadcastsFragment extends BaseFragment {
                     public void onError(String message, int httpStatus) {
                         if (destroyed) return;
                         loading = false;
+                        autoSync.markSynced();
                         errorText = message != null ? message : "Unable to load broadcasts.";
                         updateSubtitle();
                         updateList();

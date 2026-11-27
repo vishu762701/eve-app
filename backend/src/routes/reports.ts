@@ -3,6 +3,7 @@
 // ============================================================================
 
 import { Hono } from "hono";
+import { getAdminPermissions } from "../auth";
 import { requireAdmin, requirePermission } from "../middleware/authMiddleware";
 import { checkRateLimit } from "../middleware/rateLimiter";
 import { AuthUser, Env, QuestionReportRow, AdminAuditLogRow } from "../types";
@@ -414,4 +415,58 @@ adminAuditLogRoutes.get("/", async (c) => {
     nextCursor,
     hasMore,
   });
+});
+
+const AUDIT_CATEGORY_PREDICATES: Record<string, string> = {
+  exams:
+    "(action_type LIKE 'EXAM_%' OR action_type LIKE 'TEST_%' OR action_type LIKE 'GENERATED_TEST_%' OR action_type LIKE 'QUESTION_%' OR action_type LIKE 'SYLLABUS_%' OR action_type = 'JOB_RETRIED')",
+  students:
+    "(action_type LIKE 'USER_%' OR action_type LIKE 'PREMIUM_%' OR action_type LIKE 'PAYMENT_%')",
+  content:
+    "(action_type LIKE 'POLL_%' OR action_type LIKE 'BROADCAST_%' OR action_type LIKE 'BANNER_%' OR action_type LIKE 'REPORT_%' OR action_type LIKE 'FEEDBACK_%' OR action_type LIKE 'APP_CONTENT_%' OR action_type = 'FLOATING_LINK_UPDATED')",
+};
+
+// DELETE /api/admin/audit-log - Owner-only audit log clear (all, by category, or by types)
+adminAuditLogRoutes.delete("/", async (c) => {
+  const user = c.get("user");
+  const db = c.env.DB;
+  const perms = await getAdminPermissions(db, user?.email);
+  if (!perms?.isOwner) {
+    return c.json({ success: false, error: "Only the Owner can clear audit logs" }, 403);
+  }
+
+  const category = (c.req.query("category") || "").trim().toLowerCase();
+  const typesRaw = (c.req.query("types") || "").trim();
+
+  if (typesRaw) {
+    const types = typesRaw
+      .split(",")
+      .map((t) => t.trim().toUpperCase())
+      .filter(Boolean);
+    if (types.length === 0 || types.length > 50 || types.some((t) => !/^[A-Z0-9_]{3,64}$/.test(t))) {
+      return c.json({ success: false, error: "Invalid types parameter" }, 400);
+    }
+    const placeholders = types.map(() => "?").join(",");
+    const res = await db
+      .prepare(`DELETE FROM admin_audit_log WHERE action_type IN (${placeholders})`)
+      .bind(...types)
+      .run();
+    return c.json({ success: true, deletedCount: Number(res?.meta?.changes || 0) });
+  }
+
+  if (category && category !== "all") {
+    let whereSql: string;
+    if (category === "system") {
+      whereSql = `NOT (${AUDIT_CATEGORY_PREDICATES.exams} OR ${AUDIT_CATEGORY_PREDICATES.students} OR ${AUDIT_CATEGORY_PREDICATES.content})`;
+    } else if (AUDIT_CATEGORY_PREDICATES[category]) {
+      whereSql = AUDIT_CATEGORY_PREDICATES[category];
+    } else {
+      return c.json({ success: false, error: "Invalid audit log category" }, 400);
+    }
+    const res = await db.prepare(`DELETE FROM admin_audit_log WHERE ${whereSql}`).bind().run();
+    return c.json({ success: true, deletedCount: Number(res?.meta?.changes || 0) });
+  }
+
+  const res = await db.prepare("DELETE FROM admin_audit_log").bind().run();
+  return c.json({ success: true, deletedCount: Number(res?.meta?.changes || 0) });
 });

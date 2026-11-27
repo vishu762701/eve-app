@@ -46,7 +46,6 @@ import java.util.List;
 public class EveAdminPremiumConfigFragment extends BaseFragment {
 
     private static final int MENU_SAVE = 1;
-    private static final int MENU_REFRESH = 2;
 
     private static final int ID_RETRY = 101;
     private static final int ID_ENABLE_PREMIUM = 201;
@@ -133,6 +132,7 @@ public class EveAdminPremiumConfigFragment extends BaseFragment {
                 "Premium Plans & UPI",
                 "Pricing & QR checkout",
                 true,
+                true,
                 this::fillItems,
                 this::onClick,
                 new ActionBar.ActionBarMenuOnItemClick() {
@@ -142,8 +142,6 @@ public class EveAdminPremiumConfigFragment extends BaseFragment {
                             finishFragment();
                         } else if (id == MENU_SAVE) {
                             saveChanges();
-                        } else if (id == MENU_REFRESH) {
-                            reload();
                         }
                     }
                 },
@@ -154,7 +152,6 @@ public class EveAdminPremiumConfigFragment extends BaseFragment {
         if (simpleActionBar != null) {
             SimpleActionBarMenu menu = simpleActionBar.createMenu();
             menu.addItem(MENU_SAVE, R.drawable.ic_ab_done, getResourceProvider());
-            menu.addItem(MENU_REFRESH, R.drawable.msg_retry, getResourceProvider());
         }
 
         fragmentView = chrome.rootView;

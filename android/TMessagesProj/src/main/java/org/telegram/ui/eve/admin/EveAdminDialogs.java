@@ -6,7 +6,6 @@ import android.graphics.Bitmap;
 import android.net.Uri;
 import android.text.InputType;
 import android.view.Gravity;
-import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -19,6 +18,7 @@ import org.telegram.messenger.R;
 import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.Theme;
+import org.telegram.ui.Cells.TextCheckCell;
 import org.telegram.ui.Components.BulletinFactory;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.eve.premium.EvePremiumRepository;
@@ -718,24 +718,24 @@ public final class EveAdminDialogs {
             Activity activity = fragment.getParentActivity();
             if (activity == null) return;
             LinearLayout container = makeFormContainer(activity);
-            CheckBox enabledCheck = new CheckBox(activity);
-            enabledCheck.setText("Premium Subscriptions Enabled");
-            enabledCheck.setChecked(cfg.isEnabled);
+            TextCheckCell enabledCheck = new TextCheckCell(activity);
+            enabledCheck.setTextAndCheck("Premium Subscriptions Enabled", cfg.isEnabled, true);
+            enabledCheck.setOnClickListener(v -> enabledCheck.setChecked(!enabledCheck.isChecked()));
             container.addView(enabledCheck);
 
-            CheckBox lifetimeCheck = new CheckBox(activity);
-            lifetimeCheck.setText("Lifetime Plan");
-            lifetimeCheck.setChecked(cfg.isLifetime);
+            TextCheckCell lifetimeCheck = new TextCheckCell(activity);
+            lifetimeCheck.setTextAndCheck("Lifetime Plan", cfg.isLifetime, true);
+            lifetimeCheck.setOnClickListener(v -> lifetimeCheck.setChecked(!lifetimeCheck.isChecked()));
             container.addView(lifetimeCheck);
 
-            CheckBox upiCheck = new CheckBox(activity);
-            upiCheck.setText("UPI Payments Enabled");
-            upiCheck.setChecked(cfg.upiEnabled);
+            TextCheckCell upiCheck = new TextCheckCell(activity);
+            upiCheck.setTextAndCheck("UPI Payments Enabled", cfg.upiEnabled, true);
+            upiCheck.setOnClickListener(v -> upiCheck.setChecked(!upiCheck.isChecked()));
             container.addView(upiCheck);
 
-            CheckBox qrCheck = new CheckBox(activity);
-            qrCheck.setText("QR Code Checkout Enabled");
-            qrCheck.setChecked(cfg.qrEnabled);
+            TextCheckCell qrCheck = new TextCheckCell(activity);
+            qrCheck.setTextAndCheck("QR Code Checkout Enabled", cfg.qrEnabled, false);
+            qrCheck.setOnClickListener(v -> qrCheck.setChecked(!qrCheck.isChecked()));
             container.addView(qrCheck);
 
             EditText planInput = addField(activity, container, "Plan Name", cfg.planName, InputType.TYPE_CLASS_TEXT);
@@ -892,12 +892,13 @@ public final class EveAdminDialogs {
         }
         EditText titleInput = addField(activity, container, "Custom Role Title", existing != null ? existing.customTitle : "Moderator", InputType.TYPE_CLASS_TEXT);
 
-        List<CheckBox> rightChecks = new ArrayList<>();
+        List<TextCheckCell> rightChecks = new ArrayList<>();
         Set<String> currentRights = existing != null ? existing.rights : new HashSet<>();
-        for (String right : EveAdminModels.ALL_RIGHTS) {
-            CheckBox check = new CheckBox(activity);
-            check.setText(right);
-            check.setChecked(currentRights.contains(right));
+        for (int i = 0; i < EveAdminModels.ALL_RIGHTS.length; i++) {
+            String right = EveAdminModels.ALL_RIGHTS[i];
+            TextCheckCell check = new TextCheckCell(activity);
+            check.setTextAndCheck(EveAdminUiChrome.formatActionTitle(right), currentRights.contains(right), i < EveAdminModels.ALL_RIGHTS.length - 1);
+            check.setOnClickListener(v -> check.setChecked(!check.isChecked()));
             rightChecks.add(check);
             container.addView(check);
         }
@@ -1104,6 +1105,43 @@ public final class EveAdminDialogs {
             return lower;
         }
         return "inherit";
+    }
+
+    public static void showGenerationJobsDialog(
+            BaseFragment fragment,
+            EveAdminRepository repo,
+            List<EveAdminModels.GenerationJobItem> generationJobs,
+            Runnable onRetried) {
+        Activity act = fragment.getParentActivity();
+        if (act == null) return;
+        if (generationJobs == null || generationJobs.isEmpty()) {
+            BulletinFactory.of(fragment).createSimpleBulletin(R.raw.info, "No recent generation jobs.").show();
+            return;
+        }
+        String[] labels = new String[generationJobs.size()];
+        for (int i = 0; i < generationJobs.size(); i++) {
+            EveAdminModels.GenerationJobItem j = generationJobs.get(i);
+            labels[i] = "[" + j.status + "] " + j.examId + (j.retryable ? " (Tap to Retry)" : "");
+        }
+        fragment.showDialog(new AlertDialog.Builder(act, fragment.getResourceProvider())
+                .setTitle("Generation Jobs")
+                .setItems(labels, (d, idx) -> {
+                    EveAdminModels.GenerationJobItem j = generationJobs.get(idx);
+                    if (!j.retryable) {
+                        showTextDialog(act, "Job " + j.id, "Status: " + j.status + "\nCategory: " + j.errorCategory);
+                        return;
+                    }
+                    EveAdminRepository.ResultCallback<Void> cb = callback(fragment, ignored -> {
+                        BulletinFactory.of(fragment).createSimpleBulletin(R.raw.contact_check, "Job retried.").show();
+                        if (onRetried != null) onRetried.run();
+                    });
+                    repo.runWithAdminToken(cb, token -> {
+                        repo.retryGenerationJob(token, j.id);
+                        repo.postSuccess(cb, null);
+                    });
+                })
+                .setNegativeButton("Close", null)
+                .create());
     }
 
     private static void showTextDialog(Activity activity, String title, String message) {

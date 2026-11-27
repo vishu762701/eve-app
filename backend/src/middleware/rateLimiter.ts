@@ -44,6 +44,23 @@ export async function checkRateLimit(
   return { limited: false, retryAfter: 0 };
 }
 
+async function recordRateLimitEvent(db: D1Database | undefined, operation: string, path: string) {
+  if (!db) return;
+  try {
+    const safePath = (path || "").slice(0, 100);
+    const stmt = db
+      .prepare(
+        "INSERT INTO operation_events (id, operation, timestamp, category, status, retryable, correlation_id) VALUES (?, ?, ?, 'RATE_LIMIT', 429, 1, ?)"
+      )
+      .bind(crypto.randomUUID(), operation, Date.now(), `path=${safePath}`);
+    if (typeof stmt?.run === "function") {
+      await stmt.run().catch(() => {});
+    }
+  } catch {
+    // Rate-limit telemetry must never disrupt request handling.
+  }
+}
+
 /**
  * Layer 1 (BEFORE authMiddleware):
  * Per-IP rate limiting: 300 requests / 60 seconds.
@@ -55,6 +72,7 @@ export function ipRateLimit() {
 
     const { limited, retryAfter } = await checkRateLimit(c.env.DB, key, 300, 60);
     if (limited) {
+      await recordRateLimitEvent(c.env.DB, "rate_limit_ip", c.req.path);
       c.header("Retry-After", String(retryAfter));
       return c.json(
         {
@@ -102,6 +120,7 @@ export function userRateLimit() {
       const endpointKey = `uid:${uid}:${endpointBucket.name}`;
       const { limited, retryAfter } = await checkRateLimit(c.env.DB, endpointKey, endpointBucket.limit, 60);
       if (limited) {
+        await recordRateLimitEvent(c.env.DB, `rate_limit_${endpointBucket.name}`, path);
         c.header("Retry-After", String(retryAfter));
         return c.json(
           {
@@ -117,6 +136,7 @@ export function userRateLimit() {
     const generalKey = `uid:${uid}:general`;
     const { limited: generalLimited, retryAfter: generalRetryAfter } = await checkRateLimit(c.env.DB, generalKey, 120, 60);
     if (generalLimited) {
+      await recordRateLimitEvent(c.env.DB, "rate_limit_user", path);
       c.header("Retry-After", String(generalRetryAfter));
       return c.json(
         {

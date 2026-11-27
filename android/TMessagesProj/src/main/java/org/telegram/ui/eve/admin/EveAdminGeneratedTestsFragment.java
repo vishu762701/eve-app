@@ -42,7 +42,6 @@ public class EveAdminGeneratedTestsFragment extends BaseFragment {
 
     private static final int MENU_SEARCH = 1;
     private static final int MENU_ADD = 2;
-    private static final int MENU_REFRESH = 3;
 
     private static final int ID_RETRY = 101;
     private static final int BASE_TEST_ID = 1000;
@@ -60,6 +59,7 @@ public class EveAdminGeneratedTestsFragment extends BaseFragment {
     private List<EveAdminModels.AdminExamItem> exams = Collections.emptyList();
     private List<EveAdminModels.AdminGeneratedTestItem> allTests = Collections.emptyList();
     private final List<EveAdminModels.AdminGeneratedTestItem> filteredTests = new ArrayList<>();
+    private final EveAdminUiChrome.AutoSyncController autoSync = new EveAdminUiChrome.AutoSyncController(this::reload);
 
     public EveAdminGeneratedTestsFragment() {
         this(null);
@@ -153,8 +153,6 @@ public class EveAdminGeneratedTestsFragment extends BaseFragment {
                                         exams,
                                         EveAdminGeneratedTestsFragment.this::reload);
                             }
-                        } else if (id == MENU_REFRESH) {
-                            reload();
                         }
                     }
                 },
@@ -187,7 +185,6 @@ public class EveAdminGeneratedTestsFragment extends BaseFragment {
                     });
             searchItem.setSearchFieldHint("Search mock tests");
             menu.addItem(MENU_ADD, R.drawable.msg_add, getResourceProvider());
-            menu.addItem(MENU_REFRESH, R.drawable.msg_retry, getResourceProvider());
         }
 
         applyFilter();
@@ -197,8 +194,21 @@ public class EveAdminGeneratedTestsFragment extends BaseFragment {
     }
 
     @Override
+    public void onResume() {
+        super.onResume();
+        autoSync.onResume();
+    }
+
+    @Override
+    public void onPause() {
+        autoSync.onPause();
+        super.onPause();
+    }
+
+    @Override
     public void onFragmentDestroy() {
         destroyed = true;
+        autoSync.destroy();
         super.onFragmentDestroy();
     }
 
@@ -206,9 +216,11 @@ public class EveAdminGeneratedTestsFragment extends BaseFragment {
         if (destroyed) {
             return;
         }
-        loading = true;
+        loading = allTests.isEmpty();
         errorText = "";
-        updateList();
+        if (loading) {
+            updateList();
+        }
         repo.loadExamsCatalogAsync(new EveAdminRepository.ResultCallback<EveAdminRepository.ExamsCatalogData>() {
             @Override
             public void onSuccess(EveAdminRepository.ExamsCatalogData data) {
@@ -216,6 +228,7 @@ public class EveAdminGeneratedTestsFragment extends BaseFragment {
                     return;
                 }
                 loading = false;
+                autoSync.markSynced();
                 if (data != null) {
                     exams = data.exams;
                     allTests = data.generatedTests;

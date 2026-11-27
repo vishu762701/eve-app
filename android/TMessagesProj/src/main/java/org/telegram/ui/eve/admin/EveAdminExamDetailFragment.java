@@ -34,8 +34,6 @@ import java.util.Locale;
  */
 public class EveAdminExamDetailFragment extends BaseFragment {
 
-    private static final int MENU_REFRESH = 1;
-
     private static final int ID_MOCK_TESTS = 101;
     private static final int ID_QUESTION_BANK = 102;
     private static final int ID_SYLLABUS = 103;
@@ -56,6 +54,7 @@ public class EveAdminExamDetailFragment extends BaseFragment {
     private List<EveAdminModels.AdminGeneratedTestItem> allTests = Collections.emptyList();
     private UniversalRecyclerView listView;
     private boolean destroyed = false;
+    private final EveAdminUiChrome.AutoSyncController autoSync = new EveAdminUiChrome.AutoSyncController(this::reloadCatalog);
 
     public EveAdminExamDetailFragment(
             EveAdminModels.AdminExamItem exam,
@@ -120,6 +119,7 @@ public class EveAdminExamDetailFragment extends BaseFragment {
                 exam.examName,
                 buildSubtitle(),
                 true,
+                true,
                 this::fillItems,
                 this::onClick,
                 new ActionBar.ActionBarMenuOnItemClick() {
@@ -127,8 +127,6 @@ public class EveAdminExamDetailFragment extends BaseFragment {
                     public void onItemClick(int id) {
                         if (id == -1) {
                             finishFragment();
-                        } else if (id == MENU_REFRESH) {
-                            reloadCatalog();
                         }
                     }
                 },
@@ -136,19 +134,27 @@ public class EveAdminExamDetailFragment extends BaseFragment {
         );
         listView = chrome.listView;
 
-        if (simpleActionBar != null) {
-            SimpleActionBarMenu menu = simpleActionBar.createMenu();
-            menu.addItem(MENU_REFRESH, R.drawable.msg_retry, getResourceProvider());
-        }
-
         fragmentView = chrome.rootView;
         reloadCatalog();
         return chrome.rootView;
     }
 
     @Override
+    public void onResume() {
+        super.onResume();
+        autoSync.onResume();
+    }
+
+    @Override
+    public void onPause() {
+        autoSync.onPause();
+        super.onPause();
+    }
+
+    @Override
     public void onFragmentDestroy() {
         destroyed = true;
+        autoSync.destroy();
         super.onFragmentDestroy();
     }
 
@@ -164,6 +170,7 @@ public class EveAdminExamDetailFragment extends BaseFragment {
             @Override
             public void onSuccess(EveAdminRepository.ExamsCatalogData data) {
                 if (destroyed || data == null) return;
+                autoSync.markSynced();
                 allExams = data.exams;
                 allTests = data.generatedTests;
                 for (EveAdminModels.AdminExamItem item : data.exams) {

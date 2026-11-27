@@ -32,7 +32,6 @@ public class EveAdminExamsFragment extends BaseFragment {
 
     private static final int MENU_SEARCH = 1;
     private static final int MENU_ADD = 2;
-    private static final int MENU_REFRESH = 3;
 
     private static final int ID_RETRY = 101;
     private static final int BASE_EXAM_ID = 1000;
@@ -47,6 +46,7 @@ public class EveAdminExamsFragment extends BaseFragment {
     private List<EveAdminModels.AdminExamItem> exams = Collections.emptyList();
     private final List<EveAdminModels.AdminExamItem> filteredExams = new ArrayList<>();
     private List<EveAdminModels.AdminGeneratedTestItem> generatedTests = Collections.emptyList();
+    private final EveAdminUiChrome.AutoSyncController autoSync = new EveAdminUiChrome.AutoSyncController(this::reload);
 
     @Override
     public boolean onFragmentCreate() {
@@ -121,8 +121,6 @@ public class EveAdminExamsFragment extends BaseFragment {
                         } else if (id == MENU_ADD) {
                             EveAdminDialogs.showCreateOrEditExamDialog(
                                     EveAdminExamsFragment.this, repo, null, EveAdminExamsFragment.this::reload);
-                        } else if (id == MENU_REFRESH) {
-                            reload();
                         }
                     }
                 },
@@ -155,7 +153,6 @@ public class EveAdminExamsFragment extends BaseFragment {
                     });
             searchItem.setSearchFieldHint("Search exams or category");
             menu.addItem(MENU_ADD, R.drawable.msg_add, getResourceProvider());
-            menu.addItem(MENU_REFRESH, R.drawable.msg_retry, getResourceProvider());
         }
 
         applyFilter();
@@ -165,21 +162,37 @@ public class EveAdminExamsFragment extends BaseFragment {
     }
 
     @Override
+    public void onResume() {
+        super.onResume();
+        autoSync.onResume();
+    }
+
+    @Override
+    public void onPause() {
+        autoSync.onPause();
+        super.onPause();
+    }
+
+    @Override
     public void onFragmentDestroy() {
         destroyed = true;
+        autoSync.destroy();
         super.onFragmentDestroy();
     }
 
     public void reload() {
         if (destroyed) return;
-        loading = true;
+        loading = exams.isEmpty();
         errorText = "";
-        updateList();
+        if (loading) {
+            updateList();
+        }
         repo.loadExamsCatalogAsync(new EveAdminRepository.ResultCallback<EveAdminRepository.ExamsCatalogData>() {
             @Override
             public void onSuccess(EveAdminRepository.ExamsCatalogData data) {
                 if (destroyed) return;
                 loading = false;
+                autoSync.markSynced();
                 if (data != null) {
                     exams = data.exams;
                     generatedTests = data.generatedTests;
@@ -191,6 +204,7 @@ public class EveAdminExamsFragment extends BaseFragment {
             public void onError(String message, int httpStatus) {
                 if (destroyed) return;
                 loading = false;
+                autoSync.markSynced();
                 errorText = message != null ? message : "Failed to load exams.";
                 updateList();
             }

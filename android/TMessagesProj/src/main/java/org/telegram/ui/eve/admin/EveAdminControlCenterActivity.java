@@ -11,9 +11,7 @@ import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.R;
 import org.telegram.ui.ActionBar.ActionBar;
 import org.telegram.ui.ActionBar.BaseFragment;
-import org.telegram.ui.ActionBar.SimpleActionBarMenu;
 import org.telegram.ui.Components.BulletinFactory;
-import org.telegram.ui.Components.FlickerLoadingView;
 import org.telegram.ui.Components.IconBackgroundColors;
 import org.telegram.ui.Components.RecyclerListView;
 import org.telegram.ui.Components.UItem;
@@ -31,8 +29,6 @@ import java.util.Locale;
  * EVE Admin Control Center organized into 3 clean Telegram Settings cards.
  */
 public class EveAdminControlCenterActivity extends BaseFragment {
-
-    private static final int MENU_REFRESH = 1;
 
     private static final int ID_ADMIN_REFRESH = 1001;
     private static final int ID_ADMIN_SIGN_IN = 1002;
@@ -52,13 +48,13 @@ public class EveAdminControlCenterActivity extends BaseFragment {
     private UniversalRecyclerView listView;
     private final EveAdminRepository repo = EveAdminRepository.getInstance();
 
-    private boolean loading;
     private boolean destroyed;
     private String loadError = "";
     private int lastHttpStatus;
     private int activeRequestSeq;
     private EveAdminRepository.ResultCallback<EveAdminModels.DashboardSnapshot> activeCallback;
     private EveAdminModels.DashboardSnapshot snapshot;
+    private final EveAdminUiChrome.AutoSyncController autoSync = new EveAdminUiChrome.AutoSyncController(this::refreshDashboard);
 
     @Override
     public boolean onFragmentCreate() {
@@ -121,19 +117,12 @@ public class EveAdminControlCenterActivity extends BaseFragment {
                     public void onItemClick(int id) {
                         if (id == -1) {
                             finishFragment();
-                        } else if (id == MENU_REFRESH) {
-                            refreshDashboard();
                         }
                     }
                 },
                 null
         );
         listView = chrome.listView;
-
-        if (simpleActionBar != null) {
-            SimpleActionBarMenu menu = simpleActionBar.createMenu();
-            menu.addItem(MENU_REFRESH, R.drawable.msg_retry, getResourceProvider());
-        }
 
         fragmentView = chrome.rootView;
         refreshDashboard();
@@ -149,11 +138,19 @@ public class EveAdminControlCenterActivity extends BaseFragment {
             updateHeaderSubtitle();
             updateList();
         }
+        autoSync.onResume();
+    }
+
+    @Override
+    public void onPause() {
+        autoSync.onPause();
+        super.onPause();
     }
 
     @Override
     public void onFragmentDestroy() {
         destroyed = true;
+        autoSync.destroy();
         activeRequestSeq++;
         if (activeCallback != null) {
             repo.cancelDashboardCallback(activeCallback);
@@ -176,9 +173,7 @@ public class EveAdminControlCenterActivity extends BaseFragment {
         if (activeCallback != null) {
             repo.cancelDashboardCallback(activeCallback);
         }
-        loading = true;
         loadError = "";
-        updateList();
         EveAdminRepository.ResultCallback<EveAdminModels.DashboardSnapshot> callback =
                 new EveAdminRepository.ResultCallback<EveAdminModels.DashboardSnapshot>() {
                     @Override
@@ -186,10 +181,10 @@ public class EveAdminControlCenterActivity extends BaseFragment {
                         if (destroyed || requestSeq != activeRequestSeq) {
                             return;
                         }
-                        loading = false;
                         loadError = "";
                         lastHttpStatus = 200;
                         snapshot = data;
+                        autoSync.markSynced();
                         updateHeaderSubtitle();
                         updateList();
                     }
@@ -199,9 +194,9 @@ public class EveAdminControlCenterActivity extends BaseFragment {
                         if (destroyed || requestSeq != activeRequestSeq) {
                             return;
                         }
-                        loading = false;
                         loadError = message != null ? message : "Unable to load admin dashboard.";
                         lastHttpStatus = httpStatus;
+                        autoSync.markSynced();
                         updateList();
                     }
                 };
@@ -253,25 +248,17 @@ public class EveAdminControlCenterActivity extends BaseFragment {
             items.add(UItem.asShadow(null));
         }
 
-        if (loading && snapshot == null) {
-            for (int i = 0; i < 6; i++) {
-                items.add(UItem.asFlicker(FlickerLoadingView.DIALOG_CELL_TYPE));
-            }
-            return;
-        }
-
-        if (snapshot == null || snapshot.adminProfile == null) {
-            return;
-        }
-
-        EveAdminModels.AdminProfile profile = snapshot.adminProfile;
+        EveAdminModels.AdminProfile profile = snapshot != null ? snapshot.adminProfile : null;
+        boolean hasSnapshot = snapshot != null && profile != null;
 
         // Card 1: Exams & Content
-        boolean canExams = EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_EXAMS)
+        boolean canExams = !hasSnapshot
+                || EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_EXAMS)
                 || EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_SYLLABUS)
                 || EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_GENERATED_TESTS)
                 || EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_QUESTIONS);
-        boolean canContent = EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_CONTENT)
+        boolean canContent = !hasSnapshot
+                || EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_CONTENT)
                 || EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_SEND_BROADCASTS)
                 || EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MODERATE_FEEDBACK);
 
@@ -283,8 +270,10 @@ public class EveAdminControlCenterActivity extends BaseFragment {
                         IconBackgroundColors.ORANGE.top, IconBackgroundColors.ORANGE.bottom,
                         R.drawable.msg_folders,
                         "Exams & Syllabus",
-                        snapshot.publishedExams + " live • " + snapshot.draftExams + " paused",
-                        String.valueOf(snapshot.totalExams)));
+                        hasSnapshot
+                                ? (snapshot.publishedExams + " live • " + snapshot.draftExams + " paused")
+                                : "Manage exams, tests & question banks",
+                        hasSnapshot ? String.valueOf(snapshot.totalExams) : null));
             }
             if (canContent) {
                 items.add(SettingsActivity.SettingCell.Factory.of(
@@ -293,14 +282,14 @@ public class EveAdminControlCenterActivity extends BaseFragment {
                         R.drawable.settings_sounds,
                         "Content & Moderation",
                         "Banners, polls, broadcasts & flags",
-                        snapshot.pendingReports > 0 ? String.valueOf(snapshot.pendingReports) : null));
+                        hasSnapshot && snapshot.pendingReports > 0 ? String.valueOf(snapshot.pendingReports) : null));
             }
             items.add(UItem.asShadow(null));
         }
 
         // Card 2: Students & Revenue
-        boolean canUsers = EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_USERS);
-        boolean canPremium = EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_PREMIUM);
+        boolean canUsers = !hasSnapshot || EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_USERS);
+        boolean canPremium = !hasSnapshot || EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_PREMIUM);
         if (canUsers || canPremium) {
             items.add(UItem.asHeader("Students & Revenue"));
             if (canUsers) {
@@ -309,8 +298,10 @@ public class EveAdminControlCenterActivity extends BaseFragment {
                         IconBackgroundColors.BLUE.top, IconBackgroundColors.BLUE.bottom,
                         R.drawable.settings_account,
                         "Students",
-                        snapshot.activeStudents + " active now • Manage accounts",
-                        String.valueOf(snapshot.totalStudents)));
+                        hasSnapshot
+                                ? (snapshot.activeStudents + " active now • Manage accounts")
+                                : "Directory, profiles & test attempts",
+                        hasSnapshot ? String.valueOf(snapshot.totalStudents) : null));
             }
             if (canPremium) {
                 items.add(SettingsActivity.SettingCell.Factory.of(
@@ -318,8 +309,10 @@ public class EveAdminControlCenterActivity extends BaseFragment {
                         IconBackgroundColors.GREEN.top, IconBackgroundColors.GREEN.bottom,
                         R.drawable.msg_stats,
                         "Payment Orders",
-                        "₹" + snapshot.totalRevenueInr + " earned • " + snapshot.pendingTransactions + " pending",
-                        String.valueOf(snapshot.totalTransactions)));
+                        hasSnapshot
+                                ? ("₹" + snapshot.totalRevenueInr + " earned • " + snapshot.pendingTransactions + " pending")
+                                : "UPI & QR payment transactions",
+                        hasSnapshot ? String.valueOf(snapshot.totalTransactions) : null));
                 items.add(SettingsActivity.SettingCell.Factory.of(
                         ID_MOD_PREMIUM,
                         0xFFB659FF, 0xFF617CFF,
@@ -333,7 +326,7 @@ public class EveAdminControlCenterActivity extends BaseFragment {
                         R.drawable.msg_groups,
                         "Premium Subscribers",
                         "Active memberships",
-                        String.valueOf(snapshot.activePremiumUsers)));
+                        hasSnapshot ? String.valueOf(snapshot.activePremiumUsers) : null));
             }
             items.add(UItem.asShadow(null));
         }
@@ -345,9 +338,11 @@ public class EveAdminControlCenterActivity extends BaseFragment {
                 IconBackgroundColors.CYAN.top, IconBackgroundColors.CYAN.bottom,
                 R.drawable.msg_stats,
                 "Analytics & Health",
-                snapshot.completedAttempts + " attempts • Avg " + String.format(Locale.US, "%.1f", snapshot.averageScorePct),
+                hasSnapshot
+                        ? (snapshot.completedAttempts + " attempts • Avg " + String.format(Locale.US, "%.1f", snapshot.averageScorePct))
+                        : "Exam scores, crash alerts & config",
                 null));
-        if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_ADMINS_RIGHTS)) {
+        if (!hasSnapshot || EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_MANAGE_ADMINS_RIGHTS)) {
             items.add(SettingsActivity.SettingCell.Factory.of(
                     ID_MOD_ADMINS,
                     IconBackgroundColors.BLUE_DEEP.top, IconBackgroundColors.BLUE_DEEP.bottom,
@@ -356,7 +351,7 @@ public class EveAdminControlCenterActivity extends BaseFragment {
                     "Manage team & permissions",
                     null));
         }
-        if (EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_VIEW_ANALYTICS_LOGS)) {
+        if (!hasSnapshot || EveAdminConfig.hasRight(profile, EveAdminModels.RIGHT_VIEW_ANALYTICS_LOGS)) {
             items.add(SettingsActivity.SettingCell.Factory.of(
                     ID_MOD_AUDIT,
                     IconBackgroundColors.BLUE_ALT.top, IconBackgroundColors.BLUE_ALT.bottom,

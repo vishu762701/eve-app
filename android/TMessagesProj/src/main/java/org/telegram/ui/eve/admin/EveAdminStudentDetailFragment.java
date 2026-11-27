@@ -44,8 +44,6 @@ import java.util.Locale;
  */
 public class EveAdminStudentDetailFragment extends BaseFragment {
 
-    private static final int MENU_REFRESH = 1;
-
     private static final int ID_INFO_EMAIL = 101;
     private static final int ID_INFO_EVE_ID = 102;
     private static final int ID_INFO_USERNAME = 103;
@@ -74,6 +72,7 @@ public class EveAdminStudentDetailFragment extends BaseFragment {
     private boolean loadingAttempts = true;
     private String attemptsError = "";
     private boolean destroyed = false;
+    private final EveAdminUiChrome.AutoSyncController autoSync = new EveAdminUiChrome.AutoSyncController(this::loadAttempts);
 
     public EveAdminStudentDetailFragment(EveAdminModels.AdminStudentItem student, Runnable onStudentMutated) {
         this.student = student;
@@ -136,6 +135,7 @@ public class EveAdminStudentDetailFragment extends BaseFragment {
                 "Student Profile",
                 null,
                 true,
+                true,
                 this::fillItems,
                 this::onClick,
                 new ActionBar.ActionBarMenuOnItemClick() {
@@ -143,8 +143,6 @@ public class EveAdminStudentDetailFragment extends BaseFragment {
                     public void onItemClick(int id) {
                         if (id == -1) {
                             finishFragment();
-                        } else if (id == MENU_REFRESH) {
-                            loadAttempts();
                         }
                     }
                 },
@@ -155,11 +153,6 @@ public class EveAdminStudentDetailFragment extends BaseFragment {
                 }
         );
         listView = chrome.listView;
-
-        if (simpleActionBar != null) {
-            SimpleActionBarMenu menu = simpleActionBar.createMenu();
-            menu.addItem(MENU_REFRESH, R.drawable.msg_retry, getResourceProvider());
-        }
 
         fragmentView = chrome.rootView;
         if (adminProfile == null) {
@@ -182,8 +175,21 @@ public class EveAdminStudentDetailFragment extends BaseFragment {
     }
 
     @Override
+    public void onResume() {
+        super.onResume();
+        autoSync.onResume();
+    }
+
+    @Override
+    public void onPause() {
+        autoSync.onPause();
+        super.onPause();
+    }
+
+    @Override
     public void onFragmentDestroy() {
         destroyed = true;
+        autoSync.destroy();
         super.onFragmentDestroy();
     }
 
@@ -191,9 +197,11 @@ public class EveAdminStudentDetailFragment extends BaseFragment {
         if (destroyed || student == null) {
             return;
         }
-        loadingAttempts = true;
+        loadingAttempts = attempts.isEmpty();
         attemptsError = "";
-        updateList();
+        if (loadingAttempts) {
+            updateList();
+        }
         EveAdminRepository.ResultCallback<List<EveAdminModels.StudentAttemptItem>> cb =
                 new EveAdminRepository.ResultCallback<List<EveAdminModels.StudentAttemptItem>>() {
                     @Override
@@ -201,6 +209,7 @@ public class EveAdminStudentDetailFragment extends BaseFragment {
                         if (destroyed) return;
                         loadingAttempts = false;
                         attemptsError = "";
+                        autoSync.markSynced();
                         attempts.clear();
                         if (data != null) {
                             attempts.addAll(data);
@@ -212,6 +221,7 @@ public class EveAdminStudentDetailFragment extends BaseFragment {
                     public void onError(String message, int httpStatus) {
                         if (destroyed) return;
                         loadingAttempts = false;
+                        autoSync.markSynced();
                         attemptsError = message != null ? message : "Unable to load test attempts.";
                         updateList();
                     }

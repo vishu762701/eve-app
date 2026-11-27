@@ -86,14 +86,16 @@ crashIngestRoutes.post("/", async (c) => {
   const now = Date.now();
   const suggestedCause = classifyCause(rawClass, rawTopFrame);
 
-  // 6. Persist signature and incident in D1
+  // 6. Persist signature and incident in D1 (reopen if a previously resolved crash recurs)
   await c.env.DB.prepare(`
     INSERT INTO crash_signatures (signature, exception_class, top_frame, sanitized_message, first_seen, last_seen, occurrence_count, status, suggested_cause)
     VALUES (?, ?, ?, ?, ?, ?, 1, 'open', ?)
     ON CONFLICT(signature) DO UPDATE SET
       last_seen = excluded.last_seen,
       occurrence_count = occurrence_count + 1,
-      sanitized_message = excluded.sanitized_message
+      sanitized_message = excluded.sanitized_message,
+      status = 'open',
+      suggested_cause = excluded.suggested_cause
   `).bind(signature, rawClass, rawTopFrame, rawMessage, now, now, suggestedCause).run();
 
   const incidentId = crypto.randomUUID();
