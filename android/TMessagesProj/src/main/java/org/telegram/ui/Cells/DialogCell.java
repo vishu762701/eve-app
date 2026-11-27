@@ -498,6 +498,16 @@ public class DialogCell extends BaseCell implements Theme.Colorable {
         overrideSwipeActionDrawable = isPinned ? Theme.dialogs_swipeUnpinDrawable : Theme.dialogs_swipePinDrawable;
     }
 
+    public static void syncAvatarImageCoords(ImageReceiver avatarImage, RectF avatarRect) {
+        if (avatarImage != null && avatarRect != null) {
+            avatarImage.setImageCoords(avatarRect);
+        }
+    }
+
+    public static int resolveCustomDialogAvatarRoundRadiusDp(boolean threeLinesLayout) {
+        return threeLinesLayout ? 28 : 26;
+    }
+
     private int thumbsCount;
     private boolean hasVideoThumb;
     private Paint thumbBackgroundPaint;
@@ -803,6 +813,10 @@ public class DialogCell extends BaseCell implements Theme.Colorable {
 
     public void setDialog(CustomDialog dialog) {
         customDialog = dialog;
+        isDialogCell = false;
+        currentDialogId = 0;
+        currentDialogFolderId = 0;
+        currentDialogCommunityId = 0;
         messageId = 0;
         update(0);
         checkOnline();
@@ -2458,6 +2472,7 @@ public class DialogCell extends BaseCell implements Theme.Colorable {
                 thumbLeft = avatarLeft + dp(56 + 13);
             }
             originalAvatarRect.set(avatarLeft, avatarTop, avatarLeft + dp(56), avatarTop + dp(56));
+            syncAvatarImageCoords(avatarImage, originalAvatarRect);
             for (int i = 0; i < thumbImage.length; ++i) {
                 thumbImage[i].setImageCoords(thumbLeft + (thumbSize + 2) * i, avatarTop + dp(31) + (twoLinesForName ? dp(20) : 0) - (!(useForceThreeLines || SharedConfig.useThreeLinesLayout) && tags != null && !tags.isEmpty() ? dp(9) : 0), dp(18), dp(18));
             }
@@ -2481,6 +2496,7 @@ public class DialogCell extends BaseCell implements Theme.Colorable {
                 thumbLeft = avatarLeft + dp(56 + 11);
             }
             originalAvatarRect.set(avatarLeft, avatarTop, avatarLeft + dp(52), avatarTop + dp(52));
+            syncAvatarImageCoords(avatarImage, originalAvatarRect);
             for (int i = 0; i < thumbImage.length; ++i) {
                 thumbImage[i].setImageCoords(thumbLeft + (thumbSize + 2) * i, avatarTop + dp(30) + (twoLinesForName ? dp(20) : 0) - (!(useForceThreeLines || SharedConfig.useThreeLinesLayout) && tags != null && !tags.isEmpty() ? dp(9) : 0), dp(thumbSize), dp(thumbSize));
             }
@@ -3289,7 +3305,8 @@ public class DialogCell extends BaseCell implements Theme.Colorable {
             }
             drawMonoforumAvatar = false;
             drawCommunityAvatar = false;
-            avatarImage.setRoundRadius(dp(26));
+            avatarImage.setAspectFit(false);
+            avatarImage.setRoundRadius(dp(resolveCustomDialogAvatarRoundRadiusDp(useForceThreeLines || SharedConfig.useThreeLinesLayout)));
             drawUnmute = false;
         } else {
             int oldUnreadCount = unreadCount;
@@ -4790,8 +4807,7 @@ public class DialogCell extends BaseCell implements Theme.Colorable {
                     avatarImage.getCenterX(), avatarImage.getCenterY(), dp(48));
                 avatarImage.draw(canvas);
             } else {
-                if (isShareToStoryCell) {
-                }
+                syncAvatarImageCoords(avatarImage, originalAvatarRect);
                 avatarImage.draw(canvas);
             }
 

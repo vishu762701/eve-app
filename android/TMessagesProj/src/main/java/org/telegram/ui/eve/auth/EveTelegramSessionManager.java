@@ -28,9 +28,8 @@ import org.telegram.ui.eve.exams.EveExamRepository;
  * Coordinates Telegram MTProto connectivity alongside EVE's Firebase / Cloudflare Worker session.
  *
  * Dual-session invariants:
- *  - Debug builds default to Telegram Test DC (BuildVars.DEBUG_VERSION == true), where +999662XXXX
- *    and code 22222 authenticate safely without risking real phone numbers.
- *  - Release builds target Production DC.
+ *  - Both Debug and Release builds target Production DC (`shouldUseTestDc() == false`) because Telegram
+ *    disabled +99966XYYYY Test DC accounts; `recoverStuckTestDcIfNeeded(...)` returns stale Test DC clients to Production.
  *  - Real MTProto sessions are tracked separately from EVE's synthetic in-memory UI mirror user so
  *    EveAuthManager.ensureLocalUiUser(...) never overwrites a real Telegram UserConfig / MessagesController user.
  *  - Disconnecting Telegram MTProto never signs out of Firebase / EVE Exams / Admin Control Center.

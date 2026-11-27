@@ -7,6 +7,7 @@ import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
 import android.content.Context;
+import android.graphics.RectF;
 import android.os.Handler;
 import android.os.Looper;
 
@@ -19,7 +20,9 @@ import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 import org.telegram.messenger.ApplicationLoader;
+import org.telegram.messenger.ImageReceiver;
 import org.telegram.messenger.R;
+import org.telegram.ui.Cells.DialogCell;
 import org.telegram.ui.MainTabsActivity;
 import org.telegram.ui.eve.admin.EveAdminConfig;
 import org.telegram.ui.eve.admin.EveAdminModels;
@@ -28,6 +31,9 @@ import org.telegram.ui.eve.auth.EveBackendClient;
 import org.telegram.ui.eve.auth.EveTelegramChatOnboardingFragment;
 import org.telegram.ui.eve.auth.EveTelegramSessionManager;
 import org.telegram.ui.eve.auth.EveUserProfile;
+import org.telegram.ui.eve.exams.EveExamDialogsMapper;
+import org.telegram.ui.eve.exams.EveExamModels;
+import org.telegram.ui.eve.exams.EveExamRepository;
 import org.telegram.ui.eve.premium.EvePremiumRepository;
 
 import java.util.concurrent.atomic.AtomicReference;
@@ -156,5 +162,41 @@ public class EveTelegramDualSessionTest {
         assertEquals("Exams", appContext.getString(R.string.MainTabsExams));
         assertEquals("Chats", appContext.getString(R.string.MainTabsChats));
         assertEquals("Telegram Chat & Sync", appContext.getString(R.string.EveTelegramChatSync));
+    }
+
+    @Test
+    public void dialogCellAvatarCoordinatesAndBindings_workForChatsAndExams() {
+        ImageReceiver receiver = new ImageReceiver(null);
+        assertEquals(0f, receiver.getImageWidth(), 0.01f);
+        assertEquals(0f, receiver.getImageHeight(), 0.01f);
+
+        RectF avatarRect = new RectF(16f, 12f, 120f, 116f);
+        DialogCell.syncAvatarImageCoords(receiver, avatarRect);
+        assertEquals(16f, receiver.getImageX(), 0.01f);
+        assertEquals(12f, receiver.getImageY(), 0.01f);
+        assertEquals(104f, receiver.getImageWidth(), 0.01f);
+        assertEquals(104f, receiver.getImageHeight(), 0.01f);
+        assertFalse(receiver.isAspectFit());
+
+        assertEquals(26, DialogCell.resolveCustomDialogAvatarRoundRadiusDp(false));
+        assertEquals(28, DialogCell.resolveCustomDialogAvatarRoundRadiusDp(true));
+
+        EveExamModels.ExamSummary exam = new EveExamModels.ExamSummary(
+                "ex-1", "UPSC CSE", 120, "UPSC", 100, "live", "", 1, 1700000000, "Mock 1", "Test 1",
+                "/api/exams/ex-1/avatar?v=4", "\uD83D\uDCDA", 3, false);
+        DialogCell.CustomDialog examDialog = EveExamDialogsMapper.toCustomDialog(exam);
+        assertEquals("/api/exams/ex-1/avatar?v=4", examDialog.avatarUrl);
+        assertEquals("\uD83D\uDCDA", examDialog.avatarEmoji);
+        assertEquals(3, examDialog.avatarColor);
+        assertTrue(EveBackendClient.resolveMediaUrl(examDialog.avatarUrl).startsWith("https://"));
+
+        DialogCell.CustomDialog channelDialog = EveExamDialogsMapper.toAnnouncementChannelDialog(
+                new EveExamRepository.AnnouncementChannelSummary(
+                        "EVE Updates", "/api/announcement-channel/avatar?v=2", "Notice", 1700000000, 1700000000000L, 1));
+        assertEquals("/api/announcement-channel/avatar?v=2", channelDialog.avatarUrl);
+        assertTrue(EveBackendClient.resolveMediaUrl(channelDialog.avatarUrl).startsWith("https://"));
+
+        assertFalse(EveTelegramChatOnboardingFragment.LOGIN_CAPTION.contains("999662"));
+        assertFalse(EveTelegramChatOnboardingFragment.LOGIN_CAPTION.contains("22222"));
     }
 }

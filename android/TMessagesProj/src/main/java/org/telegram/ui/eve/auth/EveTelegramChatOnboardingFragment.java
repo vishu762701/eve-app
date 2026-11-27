@@ -39,6 +39,9 @@ import java.util.HashSet;
  */
 public class EveTelegramChatOnboardingFragment extends BaseFragment implements MainTabsActivity.TabFragmentDelegate {
 
+    public static final String LOGIN_CAPTION =
+            "Sign in once with your phone number. Your login code arrives in Telegram and stays signed in across updates.";
+
     private ScrollView scrollView;
     private LinearLayout contentContainer;
     private RLottieImageView iconView;
@@ -112,7 +115,7 @@ public class EveTelegramChatOnboardingFragment extends BaseFragment implements M
         contentContainer.addView(connectButton, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48, Gravity.CENTER_HORIZONTAL, 12, 0, 12, 14));
 
         debugCaptionView = new TextView(context);
-        debugCaptionView.setText("Sign in once with your phone number. Your login code will arrive in your Telegram app and your session will stay signed in across updates.");
+        debugCaptionView.setText(LOGIN_CAPTION);
         debugCaptionView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12.5f);
         debugCaptionView.setGravity(Gravity.CENTER);
         debugCaptionView.setLineSpacing(dp(2), 1f);
