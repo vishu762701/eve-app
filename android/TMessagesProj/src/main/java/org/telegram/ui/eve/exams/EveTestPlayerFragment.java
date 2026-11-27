@@ -794,8 +794,6 @@ public class EveTestPlayerFragment extends BaseFragment {
         }
     }
 
-    private void recordCurrentQuestionTime() {
-        if (allQuestions.isEmpty() || questionShownElapsedMs <= 0L) return;
     private EveExamModels.TestQuestion currentQuestion() {
         if (allQuestions == null || currentQuestionIdx < 0 || currentQuestionIdx >= allQuestions.size()) {
             return null;
@@ -804,6 +802,7 @@ public class EveTestPlayerFragment extends BaseFragment {
     }
 
     private void recordCurrentQuestionTime() {
+        if (questionShownElapsedMs <= 0L) return;
         EveExamModels.TestQuestion q = currentQuestion();
         if (q == null) return;
         int deltaSec = (int) Math.max(0L, (SystemClock.elapsedRealtime() - questionShownElapsedMs) / 1000L);
