@@ -279,7 +279,7 @@ public final class EveAdminUiChrome {
                     || view instanceof TextInfoPrivacyCell
                     || view instanceof FlickerLoadingView
                     || view instanceof UniversalAdapter.SpaceView
-                    || RecyclerListView.TAG_NOT_SECTION.equals(view.getTag())
+                    || Integer.valueOf(RecyclerListView.TAG_NOT_SECTION).equals(view.getTag())
                     || view.getHeight() <= dp(20);
         }
     }
