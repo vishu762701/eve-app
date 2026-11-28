@@ -1426,13 +1426,14 @@ public class DialogCell extends BaseCell implements Theme.Colorable {
                 }
                 messageString = Emoji.replaceEmoji(stringBuilder, Theme.dialogs_messagePaint[paintIndex].getFontMetricsInt(), false);
             } else {
-                messageString = customDialog.message;
+                messageString = org.telegram.ui.eve.admin.EveAnimatedEmojiHelper.decode(
+                        customDialog.message, Theme.dialogs_messagePaint[paintIndex].getFontMetricsInt());
                 if (customDialog.isMedia) {
                     currentMessagePaint = Theme.dialogs_messagePrintingPaint[paintIndex];
                 }
             }
 
-            timeString = LocaleController.stringForMessageListDate(customDialog.date);
+            timeString = customDialog.date > 0 ? LocaleController.stringForMessageListDate(customDialog.date) : "";
 
             if (customDialog.unread_count != 0) {
                 drawCount = true;
@@ -2415,7 +2416,11 @@ public class DialogCell extends BaseCell implements Theme.Colorable {
             if (nameString instanceof String) {
                 nameString = ((String) nameString).replace('\n', ' ');
             }
-            CharSequence nameStringFinal = nameString;
+            CharSequence nameStringFinal = customDialog != null
+                    ? org.telegram.ui.eve.admin.EveAnimatedEmojiHelper.decode(
+                            nameString != null ? nameString.toString() : "",
+                            Theme.dialogs_namePaint[paintIndex].getFontMetricsInt())
+                    : nameString;
             if (nameLayoutEllipsizeByGradient) {
                 nameLayoutFits = nameStringFinal.length() == TextUtils.ellipsize(nameStringFinal, Theme.dialogs_namePaint[paintIndex], ellipsizeWidth, TextUtils.TruncateAt.END).length();
                 ellipsizeWidth += dp(48);
@@ -3273,10 +3278,15 @@ public class DialogCell extends BaseCell implements Theme.Colorable {
             hasUnmutedTopics = false;
             hasUnmutedCommunityDialogs = false;
             String customEmoji = customDialog.avatarEmoji != null ? customDialog.avatarEmoji.trim() : "";
-            if (!customEmoji.isEmpty()) {
-                avatarDrawable.setInfo(customDialog.id, customDialog.name, null, customEmoji);
+            org.telegram.ui.eve.admin.EveAnimatedEmojiHelper.AnimatedAvatarSpec animSpec =
+                    org.telegram.ui.eve.admin.EveAnimatedEmojiHelper.parseAnimatedAvatarDescriptor(customEmoji);
+            TLRPC.TL_videoSizeEmojiMarkup animMarkup =
+                    org.telegram.ui.eve.admin.EveAnimatedEmojiHelper.toVideoSizeMarkup(animSpec);
+            String plainAvatarTitle = org.telegram.ui.eve.admin.EveAnimatedEmojiHelper.stripMarkupToPlainText(customDialog.name);
+            if (!customEmoji.isEmpty() && animMarkup == null) {
+                avatarDrawable.setInfo(customDialog.id, plainAvatarTitle, null, customEmoji);
             } else {
-                avatarDrawable.setInfo(customDialog.id, customDialog.name, null);
+                avatarDrawable.setInfo(customDialog.id, plainAvatarTitle, null);
             }
             if (customDialog.avatarColor >= 0 && customDialog.avatarColor < Theme.keys_avatar_background.length) {
                 avatarDrawable.setColor(
@@ -3287,6 +3297,10 @@ public class DialogCell extends BaseCell implements Theme.Colorable {
             String resolvedAvatarUrl = org.telegram.ui.eve.auth.EveBackendClient.resolveMediaUrl(customDialog.avatarUrl);
             if (isShareToStoryCell) {
                 avatarImage.setImage(null, "50_50", repostStoryDrawable, null, 0);
+            } else if (animMarkup != null) {
+                VectorAvatarThumbDrawable vectorDrawable = new VectorAvatarThumbDrawable(animMarkup, true, VectorAvatarThumbDrawable.TYPE_SMALL);
+                vectorDrawable.setRoundRadius(dp(resolveCustomDialogAvatarRoundRadiusDp(useForceThreeLines || SharedConfig.useThreeLinesLayout)));
+                avatarImage.setImage(null, "50_50", vectorDrawable, null, 0);
             } else if (!resolvedAvatarUrl.isEmpty()) {
                 avatarImage.setImage(
                         org.telegram.messenger.ImageLocation.getForPath(resolvedAvatarUrl),

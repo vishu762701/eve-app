@@ -523,7 +523,7 @@ public class EveLeaderboardFragment extends BaseFragment {
 
             StringBuilder sub = new StringBuilder();
             if (!TextUtils.isEmpty(entry.examName)) {
-                sub.append(entry.examName);
+                sub.append(org.telegram.ui.eve.admin.EveAnimatedEmojiHelper.stripMarkupToPlainText(entry.examName));
             }
             if (entry.accuracy >= 60) {
                 if (sub.length() > 0) sub.append(" • ");

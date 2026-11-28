@@ -217,9 +217,15 @@ generatedTestRoutes.post("/:id/avatar", requirePermission("manage_generated_test
       storedLocation
     );
 
+    const headerEmojiRaw = (c.req.header("X-Eve-Avatar-Emoji") || "").trim();
+    const headerEmoji = headerEmojiRaw.length <= 128 ? headerEmojiRaw : "";
+
     const sets: string[] = ["avatar_url = ?"];
     const binds: Array<string | number | null> = [avatarUrl];
-    if (hasAvatarEmoji) sets.push("avatar_emoji = ''");
+    if (hasAvatarEmoji) {
+      sets.push("avatar_emoji = ?");
+      binds.push(headerEmoji);
+    }
     if (hasAvatarColor) sets.push("avatar_color = NULL");
     binds.push(id);
 
@@ -229,7 +235,7 @@ generatedTestRoutes.post("/:id/avatar", requirePermission("manage_generated_test
       description: `Uploaded ${detected.ext.toUpperCase()} avatar for test '${existing.title}'`,
       targetType: "generated_test",
       targetId: id,
-      metadata: { mode: "image", mime: detected.mime },
+      metadata: { mode: headerEmoji ? "animated_emoji" : "image", mime: detected.mime, avatarEmoji: headerEmoji },
     });
     try {
       const results = await db.batch([updateStmt, auditStmt]);
@@ -241,12 +247,12 @@ generatedTestRoutes.post("/:id/avatar", requirePermission("manage_generated_test
     if (oldKey && oldKey !== cleanupRef) {
       try { await storage.deleteFiles([oldKey]); } catch {}
     }
-    return c.json({ success: true, data: { avatarUrl, avatarEmoji: "", avatarColor: null } });
+    return c.json({ success: true, data: { avatarUrl, avatarEmoji: headerEmoji, avatarColor: null } });
   }
 
   const emojiRaw = typeof parsedBody?.avatarEmoji === "string" ? parsedBody.avatarEmoji.trim() : "";
-  if (emojiRaw.length > 32) {
-    return c.json({ success: false, error: "avatarEmoji must be 32 characters or fewer" }, 400);
+  if (emojiRaw.length > 128) {
+    return c.json({ success: false, error: "avatarEmoji must be 128 characters or fewer" }, 400);
   }
   let avatarColor: number | null = null;
   if (parsedBody?.avatarColor !== undefined && parsedBody.avatarColor !== null && parsedBody.avatarColor !== "") {

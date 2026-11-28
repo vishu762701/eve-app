@@ -24,6 +24,7 @@ export interface NormalizedAppConfig {
   default_publish_mode: string;
   announcement_channel_name: string;
   announcement_channel_avatar_url: string;
+  announcement_channel_avatar_emoji: string;
   official_telegram_channel_username: string;
   official_telegram_support_username: string;
   ai_provider: AiProviderName;
@@ -34,6 +35,7 @@ export interface NormalizedAppConfig {
   defaultPublishMode: string;
   announcementChannelName: string;
   announcementChannelAvatarUrl: string;
+  announcementChannelAvatarEmoji: string;
   officialTelegramChannelUsername: string;
   officialTelegramSupportUsername: string;
   aiProvider: AiProviderName;
@@ -101,6 +103,10 @@ export function normalizeAppConfigObject(raw: Record<string, any> | null | undef
   const announcementChannelAvatarUrl =
     typeof chAvatarRaw === "string" ? chAvatarRaw.trim() : "";
 
+  const chAvatarEmojiRaw = src.announcement_channel_avatar_emoji ?? src.announcementChannelAvatarEmoji;
+  const announcementChannelAvatarEmoji =
+    typeof chAvatarEmojiRaw === "string" ? chAvatarEmojiRaw.trim().slice(0, 128) : "";
+
   const tgChannelRes = sanitizeTelegramAtUsername(
     src.official_telegram_channel_username ?? src.officialTelegramChannelUsername
   );
@@ -123,6 +129,7 @@ export function normalizeAppConfigObject(raw: Record<string, any> | null | undef
     default_publish_mode: defaultPublishMode,
     announcement_channel_name: announcementChannelName,
     announcement_channel_avatar_url: announcementChannelAvatarUrl,
+    announcement_channel_avatar_emoji: announcementChannelAvatarEmoji,
     official_telegram_channel_username: officialTelegramChannelUsername,
     official_telegram_support_username: officialTelegramSupportUsername,
     ai_provider: aiProvider,
@@ -133,6 +140,7 @@ export function normalizeAppConfigObject(raw: Record<string, any> | null | undef
     defaultPublishMode,
     announcementChannelName,
     announcementChannelAvatarUrl,
+    announcementChannelAvatarEmoji,
     officialTelegramChannelUsername,
     officialTelegramSupportUsername,
     aiProvider,

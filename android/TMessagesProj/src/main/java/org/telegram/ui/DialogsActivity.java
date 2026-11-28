@@ -13283,19 +13283,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             });
         });
         if (isEveExamsMode()) {
-            io.addGap();
-            io.add(R.drawable.msg_stats, getString(R.string.EveResultHistory), () -> {
-                presentFragment(new org.telegram.ui.eve.exams.EveResultHistoryFragment());
-            });
-            io.add(R.drawable.msg_list, getString(R.string.EveLeaderboard), () -> {
-                presentFragment(new org.telegram.ui.eve.exams.EveLeaderboardFragment("overall", getString(R.string.EveLeaderboard)));
-            });
-            io.add(R.drawable.msg_notifications, getString(R.string.EveAnnouncements), () -> {
-                org.telegram.ui.eve.auth.EveTelegramSessionManager.getInstance().openAnnouncementsDestination(DialogsActivity.this);
-            });
-            io.add(R.drawable.msg_settings_old, getString(R.string.Settings), () -> {
-                presentFragment(new SettingsActivity());
-            });
             io.show();
             io.setTranslationY(-dp(64));
             return;

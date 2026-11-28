@@ -88,7 +88,16 @@ public class AvatarConstructorFragment extends BaseFragment {
     LinearLayout linearLayout;
 
     boolean forGroup;
+    private boolean eveLocalAvatarMode;
     private CharSequence buttonText, lockedButtonText;
+
+    public void setEveLocalAvatarMode(boolean value) {
+        eveLocalAvatarMode = value;
+    }
+
+    public boolean isEveLocalAvatarMode() {
+        return eveLocalAvatarMode;
+    }
     private boolean buttonIsLocked;
     private ButtonWithCounterView button;
     private FrameLayout bottomBulletinContainer;
@@ -537,6 +546,7 @@ public class AvatarConstructorFragment extends BaseFragment {
     }
 
     private boolean isLocked() {
+        if (eveLocalAvatarMode) return false;
         if (UserConfig.getInstance(currentAccount).isPremium()) return false;
         if (previewView.backgroundGradient != null && previewView.backgroundGradient.premium || previewView.isCustomGradient) {
             return true;
@@ -1064,12 +1074,13 @@ public class AvatarConstructorFragment extends BaseFragment {
                     if (holder.getItemViewType() == VIEW_TYPE_GRADIENT) {
                         view.setCustom(false);
                         final BackgroundGradient gradient = gradients.get(position);
-                        view.setLocked(gradient.premium && !UserConfig.getInstance(currentAccount).isPremium());
+                        view.setLocked(!eveLocalAvatarMode && gradient.premium && !UserConfig.getInstance(currentAccount).isPremium());
                         view.setGradient(gradient);
                         view.setSelectedInternal(selectedItemId == gradients.get(position).stableId, true);
                     } else {
                         view.setCustom(true);
-                        view.setLocked(!UserConfig.getInstance(currentAccount).isPremium());
+                        view.setContentDescription("Custom Color");
+                        view.setLocked(!eveLocalAvatarMode && !UserConfig.getInstance(currentAccount).isPremium());
                         view.setGradient(customSelectedGradient);
                         view.setSelectedInternal(selectedItemId == 1, true);
                     }

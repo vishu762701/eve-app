@@ -1,14 +1,8 @@
-# EVE Handoff
-
-**Authoritative Android client:** `android/` (`:TMessagesProj_App:assembleAfatDebug`), NOT legacy `app/`.
-**Branch & Git rule:** Commit and push directly to `main` (no PRs/branches/force-push). Keep this file <= 30 lines.
-
-## Done
-- **9 Critical Stability, Search, Emoji, Sticker, Quiz & Admin IA Upgrades (`android/` & `backend/`):**
-  1. `EveTestPlayerFragment` & `EveExamRepository`: added null/`Bundle` constructors, null-safe `perQuestionSeconds`, bounds/OEM guards on `CircularTimerView`/`ProgressBar`/`inlinePaletteView`, `"null"` JSON sanitization, `try/catch` crash boundary with Retry/Go Back card, and Telegram Quiz-style MCQ & Review cards with `💡 Explanation`.
-  2. Video Banner & Cache Fixes: added RFC byte-range `206 Partial Content` + `Accept-Ranges: bytes` in `backend/src/util/mediaCache.ts` (for `GET /api/banners/:id/media`), single-fetch 40 MB LRU local `.mp4` cache + `try/catch` poster fallback in `EveHomeBannerCarouselView.java`, 10 MB LRU cap in `EveLocalDiskCache.java`, and throttled `AutoSyncController` (`EveAdminUiChrome.java`).
-  3. `Exams` Tab Over-Scroll & Search Isolation (`DialogsActivity.java`, `DialogsAdapter.java`, `EveExamDialogsMapper.java`): clamped viewport-fitting list scroll, zeroed `LastEmptyView` in exams mode, and restricted search strictly to top-level main exams (`isMainExam()`).
-  4. Announcements UI, `EditTextEmoji`, Animated Emojis/Stickers & Telegram Quizzes: overhauled `EveAnnouncementsFragment.java` (centered date pill, natural `<=88%` rounded bubble, clean ActionBar title only, `[tg_emoji:...]` `AnimatedEmojiSpan` & animated sticker rendering); created `EveAnimatedEmojiHelper.java`; wired `EditTextEmoji` into Broadcasts/Channel Name (`EveAdminBroadcastsFragment`), Exam/Sub-Exam Name (`EveAdminDialogs`), and Quiz Creator (`EveAdminPollCreateFragment`); added `backend/migrations/0037_quizzes_and_broadcast_stickers.sql` + `PRAGMA table_info` fallbacks (`polls.ts`, `broadcasts.ts`); upgraded `EveTelegramPollCardView` & `EvePollModel` to Quiz Mode; consolidated Admin Dashboard into 3 zero-duplicate cards (`EveAdminControlCenterActivity`, `EveAdminContentAndCommsFragment`, `EveAdminInsightsAndSystemFragment`).
-
-## Next
-- Owner runs `Deploy Eve Worker & Apply D1 Migrations` (`confirm_production: true`, `preflight_only: false`) to apply migration `0037_quizzes_and_broadcast_stickers.sql` and install the green CI debug APK (`:TMessagesProj_App:assembleAfatDebug`) to verify on device.
+# EVE App Handoff (Authoritative Android Base = `android/`)
+- Branch: `main` only (no alternate branches/PRs, direct commit+push to `main`).
+- Latest batch (2026-11-28):
+  1. Fixed `EveTestPlayerFragment` `Start Test` UI-thread crash (`SimpleGlass.setViews` + guarded `glassEngine.invalidate()` + lifecycle timer/draft/render guards) & redesigned Start Test launch popup in `EveExamTestsFragment` as an official Telegram `BottomSheet` (`Start Test` -> `Leaderboard` -> red `Cancel`).
+  2. Anchored Telegram `EditTextEmoji`/`EmojiView` strictly to bottom keyboard slot via `EmojiHostSizeNotifierFrameLayout` & fixed `EditTextEmoji` cursor fallback; decoded `[tg_emoji:...]` everywhere including ActionBars, `EveExamDialogsMapper`, `DialogCell`, and `PremiumPreviewFragment` (EVE Premium).
+  3. Implemented live animated emoji avatars (`tg_anim:<docId>:<hex>` via `VectorAvatarThumbDrawable`), unlocked `AvatarConstructorFragment` background gradients + custom color picker in `eveLocalAvatarMode = true` ONLY (leaving personal Telegram MTProto locked), fixed `01.01.70` zero-date in `DialogCell`, switched `EveAnnouncementsFragment` to `Theme.key_windowBackgroundWhite` + inset hairline dividers, kept only Night Mode in `Exams` 3-dot menu (`DialogsActivity`), and compacted Home/Admin banner height to `120dp`.
+- Backend check: `cd backend && npm run build && npm test` passed `420/420`.
+- Next: Monitor GitHub Actions CI on `main`, then deploy Cloudflare Worker (`backend/`) if avatar descriptor header persistence is needed live, and test `:TMessagesProj_App:assembleAfatDebug` APK on phone.

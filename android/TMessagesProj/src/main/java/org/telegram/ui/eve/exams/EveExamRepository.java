@@ -72,6 +72,7 @@ public final class EveExamRepository {
     public static final class AnnouncementChannelSummary {
         public final String channelName;
         public final String channelAvatarUrl;
+        public final String channelAvatarEmoji;
         public final String latestPreview;
         public final int latestTimestampSec;
         public final long latestTimestampMs;
@@ -84,8 +85,20 @@ public final class EveExamRepository {
                 int latestTimestampSec,
                 long latestTimestampMs,
                 int unreadCount) {
+            this(channelName, channelAvatarUrl, latestPreview, latestTimestampSec, latestTimestampMs, unreadCount, "");
+        }
+
+        public AnnouncementChannelSummary(
+                String channelName,
+                String channelAvatarUrl,
+                String latestPreview,
+                int latestTimestampSec,
+                long latestTimestampMs,
+                int unreadCount,
+                String channelAvatarEmoji) {
             this.channelName = channelName != null && !channelName.trim().isEmpty() ? channelName.trim() : "Announcements";
             this.channelAvatarUrl = channelAvatarUrl != null ? channelAvatarUrl.trim() : "";
+            this.channelAvatarEmoji = channelAvatarEmoji != null ? channelAvatarEmoji.trim() : "";
             this.latestPreview = latestPreview != null ? latestPreview : "";
             this.latestTimestampSec = Math.max(0, latestTimestampSec);
             this.latestTimestampMs = Math.max(0L, latestTimestampMs);
@@ -1121,6 +1134,7 @@ public final class EveExamRepository {
             long lastSeenMs) {
         String name = cfg != null ? cfg.announcementChannelName : "Announcements";
         String avatarUrl = cfg != null ? cfg.announcementChannelAvatarUrl : "";
+        String avatarEmoji = cfg != null ? cfg.announcementChannelAvatarEmoji : "";
         String preview = "Broadcasts & live polls";
         long latestMs = 0L;
         int unread = 0;
@@ -1152,7 +1166,7 @@ public final class EveExamRepository {
             }
         }
         int tsSec = latestMs > 0L ? (int) (latestMs / 1000L) : 0;
-        return new AnnouncementChannelSummary(name, avatarUrl, preview, tsSec, latestMs, unread);
+        return new AnnouncementChannelSummary(name, avatarUrl, preview, tsSec, latestMs, unread, avatarEmoji);
     }
 
     public void fetchMyPollVote(String pollId, ApiCallback<Integer> callback) {

@@ -252,6 +252,12 @@ public class EveTestPlayerFragment extends BaseFragment {
         return false;
     }
 
+    @Nullable
+    @Override
+    protected ScrollView getScrollViewForSimpleGlass() {
+        return questionScrollView;
+    }
+
     @Override
     public boolean isSupportEdgeToEdge() {
         return true;
@@ -320,8 +326,11 @@ public class EveTestPlayerFragment extends BaseFragment {
             @Override
             protected void dispatchDraw(Canvas canvas) {
                 super.dispatchDraw(canvas);
-                if (glassEngine != null) {
-                    glassEngine.invalidate();
+                if (glassEngine != null && getWidth() > 0 && getHeight() > 0 && getParentActivity() != null) {
+                    try {
+                        glassEngine.invalidate();
+                    } catch (Throwable ignored) {
+                    }
                 }
                 if (navBarHeight > 0) {
                     AndroidUtilities.drawNavigationBarProtection(
@@ -533,7 +542,7 @@ public class EveTestPlayerFragment extends BaseFragment {
         rootFrame.addView(actionBarFadeView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 0, Gravity.TOP));
         if (simpleActionBar != null) {
             simpleActionBar.setBackButtonImage(R.drawable.ic_ab_back);
-            simpleActionBar.setTitle(title);
+            simpleActionBar.setTitle(EveAnimatedEmojiHelper.decode(title, simpleActionBar.getTitleFontMetricsInt()));
             simpleActionBar.setBackground(null);
             simpleActionBar.setActionBarMenuOnItemClick(new ActionBar.ActionBarMenuOnItemClick() {
                 @Override
@@ -571,6 +580,13 @@ public class EveTestPlayerFragment extends BaseFragment {
             return WindowInsetsCompat.CONSUMED;
         });
 
+        if (getBaseSimpleGlass() != null && simpleActionBar != null) {
+            try {
+                getBaseSimpleGlass().setViews(rootFrame, simpleActionBar, rp);
+                simpleActionBar.setupGlass(getBaseSimpleGlass());
+            } catch (Throwable ignored) {
+            }
+        }
         applyThemeColors();
         fragmentView = rootFrame;
         startTestSession();
@@ -586,21 +602,23 @@ public class EveTestPlayerFragment extends BaseFragment {
         int grayText = Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, rp);
         int accent = Theme.getColor(Theme.key_featuredStickers_addButton, rp);
 
-        statusHeaderStrip.setBackgroundColor(white);
-        statusStripText.setTextColor(grayText);
-        statusDivider.setBackgroundColor(divider);
-        footerDivider.setBackgroundColor(divider);
-        footerBar.setBackgroundColor(white);
+        if (statusHeaderStrip != null) statusHeaderStrip.setBackgroundColor(white);
+        if (statusStripText != null) statusStripText.setTextColor(grayText);
+        if (statusDivider != null) statusDivider.setBackgroundColor(divider);
+        if (footerDivider != null) footerDivider.setBackgroundColor(divider);
+        if (footerBar != null) footerBar.setBackgroundColor(white);
 
-        GradientDrawable cardBg = new GradientDrawable();
-        cardBg.setCornerRadius(dp(16));
-        cardBg.setColor(white);
-        cardBg.setStroke(Math.max(1, dp(0.6f)), Theme.multAlpha(divider, 0.7f));
-        questionCard.setBackground(cardBg);
-        questionCard.setElevation(dp(2));
+        if (questionCard != null) {
+            GradientDrawable cardBg = new GradientDrawable();
+            cardBg.setCornerRadius(dp(16));
+            cardBg.setColor(white);
+            cardBg.setStroke(Math.max(1, dp(0.6f)), Theme.multAlpha(divider, 0.7f));
+            questionCard.setBackground(cardBg);
+            questionCard.setElevation(dp(2));
+        }
 
-        questionMetaView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText, rp));
-        questionTextView.setTextColor(black);
+        if (questionMetaView != null) questionMetaView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText, rp));
+        if (questionTextView != null) questionTextView.setTextColor(black);
         for (TextView tv : optionTexts) {
             if (tv != null) tv.setTextColor(black);
         }
@@ -915,88 +933,110 @@ public class EveTestPlayerFragment extends BaseFragment {
     }
 
     private void renderCurrentQuestion() {
-        EveExamModels.TestQuestion q = currentQuestion();
-        if (q == null || getParentActivity() == null) {
-            return;
-        }
-        Theme.ResourcesProvider rp = getResourceProvider();
-
-        int fPos = filteredPosOf(currentQuestionIdx);
-        int totalFiltered = Math.max(1, filteredIndices.size());
-        statusStripText.setText(String.format(
-                Locale.US,
-                "Q %d / %d • Answered %d • Marked %d",
-                Math.max(1, fPos + 1),
-                totalFiltered,
-                selectedAnswers.size(),
-                markedForReview.size()
-        ));
-        questionProgressBar.setProgress(Math.round(((fPos + 1) * 1000f) / totalFiltered));
-
-        String meta = "MCQ • Q" + q.number + " / " + allQuestions.size();
-        if (!TextUtils.isEmpty(q.topic)) {
-            meta += "  •  " + q.topic;
-        }
-        questionMetaView.setText(meta);
-        EveAnimatedEmojiHelper.bindText(questionTextView, q.getQuestionText(preferHindi));
-
-        String picked = selectedAnswers.get(q.id);
-        String[] letters = new String[] { "A", "B", "C", "D" };
-        int accent = Theme.getColor(Theme.key_featuredStickers_addButton, rp);
-        int divider = Theme.getColor(Theme.key_divider, rp);
-        int surface = Theme.getColor(Theme.key_windowBackgroundWhite, rp);
-        int grayBg = Theme.getColor(Theme.key_windowBackgroundGray, rp);
-
-        for (int i = 0; i < 4; i++) {
-            String letter = letters[i];
-            boolean isPicked = letter.equalsIgnoreCase(picked);
-            EveAnimatedEmojiHelper.bindText(optionTexts[i], q.getOptionText(letter, preferHindi));
-
-            GradientDrawable cardBg = new GradientDrawable();
-            cardBg.setCornerRadius(dp(12));
-            cardBg.setStroke(dp(isPicked ? 1.8f : 1f), isPicked ? accent : Theme.multAlpha(divider, 0.7f));
-            cardBg.setColor(isPicked ? Theme.multAlpha(accent, 0.11f) : Theme.multAlpha(grayBg, 0.45f));
-            optionCards[i].setBackground(cardBg);
-
-            GradientDrawable badgeBg = new GradientDrawable();
-            badgeBg.setCornerRadius(dp(15));
-            badgeBg.setColor(isPicked ? accent : surface);
-            if (!isPicked) {
-                badgeBg.setStroke(Math.max(1, dp(1f)), Theme.multAlpha(divider, 0.9f));
+        try {
+            EveExamModels.TestQuestion q = currentQuestion();
+            if (q == null || getParentActivity() == null) {
+                return;
             }
-            optionBadges[i].setBackground(badgeBg);
-            optionBadges[i].setText(isPicked ? "\u2713" : letter);
-            optionBadges[i].setTextColor(isPicked ? Theme.getColor(Theme.key_featuredStickers_buttonText, rp) : Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, rp));
-        }
+            Theme.ResourcesProvider rp = getResourceProvider();
 
-        boolean marked = markedForReview.contains(q.id);
-        reviewBtn.setText(marked ? "Unmark" : "Mark");
-        styleActionButton(reviewBtn, false, marked);
-        styleActionButton(prevBtn, false, false);
-        styleActionButton(clearBtn, false, false);
-        nextBtn.setText(LocaleController.getString(isLastFilteredQuestion() ? R.string.EveSubmitTest : R.string.EveSaveAndNext));
-        styleActionButton(nextBtn, true, false);
+            int fPos = filteredPosOf(currentQuestionIdx);
+            int totalFiltered = Math.max(1, filteredIndices.size());
+            if (statusStripText != null) {
+                statusStripText.setText(String.format(
+                        Locale.US,
+                        "Q %d / %d • Answered %d • Marked %d",
+                        Math.max(1, fPos + 1),
+                        totalFiltered,
+                        selectedAnswers.size(),
+                        markedForReview.size()
+                ));
+            }
+            if (questionProgressBar != null) {
+                questionProgressBar.setProgress(Math.round(((fPos + 1) * 1000f) / totalFiltered));
+            }
 
-        if (bookmarkBtn != null) {
-            boolean bookmarked = bookmarkedIds.contains(q.id);
-            int tint = bookmarked ? accent : Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, rp);
-            bookmarkBtn.setColorFilter(new PorterDuffColorFilter(tint, PorterDuff.Mode.MULTIPLY));
-        }
+            String meta = "MCQ • Q" + q.number + " / " + allQuestions.size();
+            if (!TextUtils.isEmpty(q.topic)) {
+                meta += "  •  " + EveAnimatedEmojiHelper.stripMarkupToPlainText(q.topic);
+            }
+            if (questionMetaView != null) questionMetaView.setText(meta);
+            EveAnimatedEmojiHelper.bindText(questionTextView, q.getQuestionText(preferHindi));
 
-        if (inlinePaletteAdapter != null) {
-            inlinePaletteAdapter.notifyDataSetChanged();
-            if (fPos >= 0 && fPos < inlinePaletteAdapter.getItemCount() && inlinePaletteView != null) {
-                try {
-                    inlinePaletteView.scrollToPosition(fPos);
-                } catch (Throwable ignored) {
+            String picked = selectedAnswers.get(q.id);
+            String[] letters = new String[] { "A", "B", "C", "D" };
+            int accent = Theme.getColor(Theme.key_featuredStickers_addButton, rp);
+            int divider = Theme.getColor(Theme.key_divider, rp);
+            int surface = Theme.getColor(Theme.key_windowBackgroundWhite, rp);
+            int grayBg = Theme.getColor(Theme.key_windowBackgroundGray, rp);
+
+            for (int i = 0; i < 4; i++) {
+                String letter = letters[i];
+                boolean isPicked = letter.equalsIgnoreCase(picked);
+                if (optionTexts[i] != null) {
+                    EveAnimatedEmojiHelper.bindText(optionTexts[i], q.getOptionText(letter, preferHindi));
+                }
+
+                if (optionCards[i] != null) {
+                    GradientDrawable cardBg = new GradientDrawable();
+                    cardBg.setCornerRadius(dp(12));
+                    cardBg.setStroke(dp(isPicked ? 1.8f : 1f), isPicked ? accent : Theme.multAlpha(divider, 0.7f));
+                    cardBg.setColor(isPicked ? Theme.multAlpha(accent, 0.11f) : Theme.multAlpha(grayBg, 0.45f));
+                    optionCards[i].setBackground(cardBg);
+                }
+
+                if (optionBadges[i] != null) {
+                    GradientDrawable badgeBg = new GradientDrawable();
+                    badgeBg.setCornerRadius(dp(15));
+                    badgeBg.setColor(isPicked ? accent : surface);
+                    if (!isPicked) {
+                        badgeBg.setStroke(Math.max(1, dp(1f)), Theme.multAlpha(divider, 0.9f));
+                    }
+                    optionBadges[i].setBackground(badgeBg);
+                    optionBadges[i].setText(isPicked ? "\u2713" : letter);
+                    optionBadges[i].setTextColor(isPicked ? Theme.getColor(Theme.key_featuredStickers_buttonText, rp) : Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, rp));
                 }
             }
+
+            boolean marked = markedForReview.contains(q.id);
+            if (reviewBtn != null) {
+                reviewBtn.setText(marked ? "Unmark" : "Mark");
+                styleActionButton(reviewBtn, false, marked);
+            }
+            if (prevBtn != null) {
+                styleActionButton(prevBtn, false, false);
+                prevBtn.setEnabled(fPos > 0);
+                prevBtn.setAlpha(prevBtn.isEnabled() ? 1f : 0.45f);
+            }
+            if (clearBtn != null) styleActionButton(clearBtn, false, false);
+            if (nextBtn != null) {
+                nextBtn.setText(LocaleController.getString(isLastFilteredQuestion() ? R.string.EveSubmitTest : R.string.EveSaveAndNext));
+                styleActionButton(nextBtn, true, false);
+            }
+
+            if (bookmarkBtn != null) {
+                boolean bookmarked = bookmarkedIds.contains(q.id);
+                int tint = bookmarked ? accent : Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, rp);
+                bookmarkBtn.setColorFilter(new PorterDuffColorFilter(tint, PorterDuff.Mode.MULTIPLY));
+            }
+
+            if (inlinePaletteAdapter != null) {
+                inlinePaletteAdapter.notifyDataSetChanged();
+                if (fPos >= 0 && fPos < inlinePaletteAdapter.getItemCount() && inlinePaletteView != null) {
+                    try {
+                        inlinePaletteView.scrollToPosition(fPos);
+                    } catch (Throwable ignored) {
+                    }
+                }
+            }
+
+            if (questionScrollView != null) {
+                questionScrollView.smoothScrollTo(0, 0);
+            }
+        } catch (Throwable err) {
+            FileLog.e("EveTestPlayerFragment renderCurrentQuestion crash guarded", err);
+            showErrorCard("Could Not Render Question", "Unexpected formatting error in question payload.", false);
         }
-
-        prevBtn.setEnabled(fPos > 0);
-        prevBtn.setAlpha(prevBtn.isEnabled() ? 1f : 0.45f);
-
-        questionScrollView.smoothScrollTo(0, 0);
     }
 
     private void selectOption(String letter) {
@@ -1281,6 +1321,30 @@ public class EveTestPlayerFragment extends BaseFragment {
     }
 
     @Override
+    public void onResume() {
+        super.onResume();
+        if (!destroyed && !finishedAttempt && !submitting && !allQuestions.isEmpty()) {
+            if (timerAnchorElapsedMs <= 0L) {
+                timerAnchorElapsedMs = SystemClock.elapsedRealtime();
+            }
+            timerHandler.removeCallbacks(timerRunnable);
+            timerHandler.post(timerRunnable);
+        }
+    }
+
+    @Override
+    public void onPause() {
+        timerHandler.removeCallbacks(timerRunnable);
+        if (!finishedAttempt && !allQuestions.isEmpty()) {
+            remainingSeconds = computeSecondsLeft();
+            timerAnchorElapsedMs = SystemClock.elapsedRealtime();
+            recordCurrentQuestionTime();
+            saveDraftAnswers();
+        }
+        super.onPause();
+    }
+
+    @Override
     public void onFragmentDestroy() {
         destroyed = true;
         timerHandler.removeCallbacks(timerRunnable);
@@ -1298,6 +1362,7 @@ public class EveTestPlayerFragment extends BaseFragment {
 
     private String loadSavedClientAttemptId() {
         try {
+            if (ApplicationLoader.applicationContext == null) return "";
             SharedPreferences prefs = ApplicationLoader.applicationContext.getSharedPreferences(PREFS_DRAFTS, Context.MODE_PRIVATE);
             String raw = prefs.getString(draftKey(), "");
             if (raw.isEmpty()) return "";
@@ -1310,6 +1375,7 @@ public class EveTestPlayerFragment extends BaseFragment {
 
     private void saveDraftAnswers() {
         try {
+            if (ApplicationLoader.applicationContext == null) return;
             JSONObject root = new JSONObject();
             root.put("clientAttemptId", clientAttemptId);
             root.put("currentQuestionIdx", currentQuestionIdx);
@@ -1344,6 +1410,7 @@ public class EveTestPlayerFragment extends BaseFragment {
 
     private void restoreDraftAnswers() {
         try {
+            if (ApplicationLoader.applicationContext == null) return;
             String raw = ApplicationLoader.applicationContext.getSharedPreferences(PREFS_DRAFTS, Context.MODE_PRIVATE)
                     .getString(draftKey(), "");
             if (raw.isEmpty()) return;
@@ -1357,19 +1424,28 @@ public class EveTestPlayerFragment extends BaseFragment {
                 JSONArray names = picks.names();
                 for (int i = 0; i < names.length(); i++) {
                     String k = names.getString(i);
-                    selectedAnswers.put(k, picks.optString(k, ""));
+                    String v = picks.optString(k, "");
+                    if (!TextUtils.isEmpty(v) && !"null".equalsIgnoreCase(v)) {
+                        selectedAnswers.put(k, v);
+                    }
                 }
             }
             JSONArray reviewArr = root.optJSONArray("review");
             if (reviewArr != null) {
                 for (int i = 0; i < reviewArr.length(); i++) {
-                    markedForReview.add(reviewArr.getString(i));
+                    String rid = reviewArr.optString(i, "");
+                    if (!TextUtils.isEmpty(rid) && !"null".equalsIgnoreCase(rid)) {
+                        markedForReview.add(rid);
+                    }
                 }
             }
             JSONArray bookmarkArr = root.optJSONArray("bookmarks");
             if (bookmarkArr != null) {
                 for (int i = 0; i < bookmarkArr.length(); i++) {
-                    bookmarkedIds.add(bookmarkArr.getString(i));
+                    String bid = bookmarkArr.optString(i, "");
+                    if (!TextUtils.isEmpty(bid) && !"null".equalsIgnoreCase(bid)) {
+                        bookmarkedIds.add(bid);
+                    }
                 }
             }
             JSONObject times = root.optJSONObject("times");
@@ -1377,7 +1453,7 @@ public class EveTestPlayerFragment extends BaseFragment {
                 JSONArray names = times.names();
                 for (int i = 0; i < names.length(); i++) {
                     String k = names.getString(i);
-                    perQuestionSeconds.put(k, times.optInt(k, 0));
+                    perQuestionSeconds.put(k, Math.max(0, times.optInt(k, 0)));
                 }
             }
             int idx = root.optInt("currentQuestionIdx", 0);
@@ -1390,6 +1466,7 @@ public class EveTestPlayerFragment extends BaseFragment {
 
     private void clearSavedDraft() {
         try {
+            if (ApplicationLoader.applicationContext == null) return;
             ApplicationLoader.applicationContext.getSharedPreferences(PREFS_DRAFTS, Context.MODE_PRIVATE)
                     .edit()
                     .remove(draftKey())

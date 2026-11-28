@@ -930,11 +930,19 @@ public final class EveAdminRepository {
     }
 
     public JSONObject uploadGeneratedTestAvatarImage(String token, String testId, byte[] imageBytes, String mimeType) throws EveBackendClient.BackendException {
+        return uploadGeneratedTestAvatarImage(token, testId, imageBytes, mimeType, null);
+    }
+
+    public JSONObject uploadGeneratedTestAvatarImage(String token, String testId, byte[] imageBytes, String mimeType, String avatarEmojiDescriptor) throws EveBackendClient.BackendException {
         if (imageBytes == null || imageBytes.length == 0) {
             throw new IllegalArgumentException("Avatar image is empty");
         }
         String effectiveMime = mimeType != null && !mimeType.trim().isEmpty() ? mimeType.trim() : "image/jpeg";
-        JSONObject root = client.postBinaryRoot("/api/generated-tests/" + encode(testId) + "/avatar", token, effectiveMime, imageBytes);
+        java.util.Map<String, String> headers = null;
+        if (avatarEmojiDescriptor != null && !avatarEmojiDescriptor.trim().isEmpty()) {
+            headers = java.util.Collections.singletonMap("X-Eve-Avatar-Emoji", avatarEmojiDescriptor.trim());
+        }
+        JSONObject root = client.postBinaryRoot("/api/generated-tests/" + encode(testId) + "/avatar", token, effectiveMime, imageBytes, headers);
         invalidateExamAndTestCaches(null);
         return root != null ? root.optJSONObject("data") : null;
     }
@@ -1303,11 +1311,19 @@ public final class EveAdminRepository {
     }
 
     public JSONObject uploadExamAvatarImage(String token, String examId, byte[] imageBytes, String mimeType) throws EveBackendClient.BackendException {
+        return uploadExamAvatarImage(token, examId, imageBytes, mimeType, null);
+    }
+
+    public JSONObject uploadExamAvatarImage(String token, String examId, byte[] imageBytes, String mimeType, String avatarEmojiDescriptor) throws EveBackendClient.BackendException {
         if (imageBytes == null || imageBytes.length == 0) {
             throw new IllegalArgumentException("Avatar image is empty");
         }
         String effectiveMime = mimeType != null && !mimeType.trim().isEmpty() ? mimeType.trim() : "image/jpeg";
-        JSONObject root = client.postBinaryRoot("/api/exams/" + encode(examId) + "/avatar", token, effectiveMime, imageBytes);
+        java.util.Map<String, String> headers = null;
+        if (avatarEmojiDescriptor != null && !avatarEmojiDescriptor.trim().isEmpty()) {
+            headers = java.util.Collections.singletonMap("X-Eve-Avatar-Emoji", avatarEmojiDescriptor.trim());
+        }
+        JSONObject root = client.postBinaryRoot("/api/exams/" + encode(examId) + "/avatar", token, effectiveMime, imageBytes, headers);
         invalidateExamAndTestCaches(examId);
         return root != null ? root.optJSONObject("data") : null;
     }
@@ -1689,11 +1705,19 @@ public final class EveAdminRepository {
     }
 
     public EveAdminModels.AppConfigModel uploadAnnouncementChannelAvatar(String token, byte[] imageBytes, String mimeType) throws EveBackendClient.BackendException {
+        return uploadAnnouncementChannelAvatar(token, imageBytes, mimeType, null);
+    }
+
+    public EveAdminModels.AppConfigModel uploadAnnouncementChannelAvatar(String token, byte[] imageBytes, String mimeType, String avatarEmojiDescriptor) throws EveBackendClient.BackendException {
         if (imageBytes == null || imageBytes.length == 0) {
             throw new IllegalArgumentException("Channel avatar image is empty");
         }
         String effectiveMime = mimeType != null && !mimeType.trim().isEmpty() ? mimeType.trim() : "image/jpeg";
-        JSONObject root = client.postBinaryRoot("/api/admin/announcement-channel/avatar", token, effectiveMime, imageBytes);
+        java.util.Map<String, String> headers = null;
+        if (avatarEmojiDescriptor != null && !avatarEmojiDescriptor.trim().isEmpty()) {
+            headers = java.util.Collections.singletonMap("X-Eve-Avatar-Emoji", avatarEmojiDescriptor.trim());
+        }
+        JSONObject root = client.postBinaryRoot("/api/admin/announcement-channel/avatar", token, effectiveMime, imageBytes, headers);
         JSONObject data = root != null ? root.optJSONObject("data") : null;
         invalidateConfigCaches();
         if (data != null) putSwrJson("app_config", data.toString());

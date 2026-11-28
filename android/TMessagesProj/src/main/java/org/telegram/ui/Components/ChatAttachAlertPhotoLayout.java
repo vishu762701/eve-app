@@ -1551,6 +1551,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
 
     public void showAvatarConstructorFragment(AvatarConstructorPreviewCell view, TLRPC.VideoSize emojiMarkupStrat, long docId) {
         AvatarConstructorFragment avatarConstructorFragment = new AvatarConstructorFragment(parentAlert.parentImageUpdater, parentAlert.getAvatarFor());
+        avatarConstructorFragment.setEveLocalAvatarMode(parentAlert.parentImageUpdater != null && parentAlert.parentImageUpdater.isEveLocalAvatarMode());
         avatarConstructorFragment.finishOnDone = !(parentAlert.getAvatarFor() != null && parentAlert.getAvatarFor().type == ImageUpdater.TYPE_SUGGEST_PHOTO_FOR_USER);
         parentAlert.baseFragment.presentFragment(avatarConstructorFragment);
         if (view != null) {
@@ -1717,6 +1718,30 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
                 photoEntry.editedInfo.mediaEntities.add(mediaEntity);
             } else {
                 photoEntry = new MediaController.PhotoEntry(0, 0, 0, thumb.getPath(), 0, false, 0, 0, 0);
+                if (parentAlert.parentImageUpdater != null && parentAlert.parentImageUpdater.isEveLocalAvatarMode() && (previewView.documentId != 0 || previewView.document != null)) {
+                    if (previewView.documentId != 0) {
+                        TLRPC.TL_videoSizeEmojiMarkup emojiMarkup = new TLRPC.TL_videoSizeEmojiMarkup();
+                        emojiMarkup.emoji_id = previewView.documentId;
+                        if (previewView.backgroundGradient != null) {
+                            emojiMarkup.background_colors.add(previewView.backgroundGradient.color1);
+                            if (previewView.backgroundGradient.color2 != 0) emojiMarkup.background_colors.add(previewView.backgroundGradient.color2);
+                            if (previewView.backgroundGradient.color3 != 0) emojiMarkup.background_colors.add(previewView.backgroundGradient.color3);
+                            if (previewView.backgroundGradient.color4 != 0) emojiMarkup.background_colors.add(previewView.backgroundGradient.color4);
+                        }
+                        photoEntry.emojiMarkup = emojiMarkup;
+                    } else {
+                        TLRPC.TL_videoSizeStickerMarkup emojiMarkup = new TLRPC.TL_videoSizeStickerMarkup();
+                        emojiMarkup.sticker_id = previewView.document.id;
+                        emojiMarkup.stickerset = MessageObject.getInputStickerSet(previewView.document);
+                        if (previewView.backgroundGradient != null) {
+                            emojiMarkup.background_colors.add(previewView.backgroundGradient.color1);
+                            if (previewView.backgroundGradient.color2 != 0) emojiMarkup.background_colors.add(previewView.backgroundGradient.color2);
+                            if (previewView.backgroundGradient.color3 != 0) emojiMarkup.background_colors.add(previewView.backgroundGradient.color3);
+                            if (previewView.backgroundGradient.color4 != 0) emojiMarkup.background_colors.add(previewView.backgroundGradient.color4);
+                        }
+                        photoEntry.emojiMarkup = emojiMarkup;
+                    }
+                }
             }
             selectedPhotos.put(-1, photoEntry);
             selectedPhotosOrder.add(-1);

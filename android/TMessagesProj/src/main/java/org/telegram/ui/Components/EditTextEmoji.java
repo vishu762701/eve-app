@@ -897,8 +897,9 @@ public class EditTextEmoji extends FrameLayout implements NotificationCenter.Not
             public void onEmojiSelected(String symbol) {
                 int i = editText.getSelectionEnd();
                 if (i < 0) {
-                    i = 0;
+                    i = editText.length();
                 }
+                i = Math.max(0, Math.min(i, editText.length()));
                 try {
                     innerTextChange = 2;
                     CharSequence localCharSequence = Emoji.replaceEmoji(symbol, editText.getPaint().getFontMetricsInt(), false);
@@ -916,8 +917,9 @@ public class EditTextEmoji extends FrameLayout implements NotificationCenter.Not
             public void onCustomEmojiSelected(long documentId, TLRPC.Document document,  String emoticon, boolean isRecent) {
                 int i = editText.getSelectionEnd();
                 if (i < 0) {
-                    i = 0;
+                    i = editText.length();
                 }
+                i = Math.max(0, Math.min(i, editText.length()));
 
                 try {
                     innerTextChange = 2;
@@ -954,7 +956,7 @@ public class EditTextEmoji extends FrameLayout implements NotificationCenter.Not
                 }
             }
         });
-        sizeNotifierLayout.addView(emojiView);
+        sizeNotifierLayout.addView(emojiView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.BOTTOM));
     }
 
     protected void updatedEmojiExpanded() {}

@@ -30,6 +30,7 @@ import org.telegram.messenger.ImageLocation;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.R;
 import org.telegram.messenger.Utilities;
+import org.telegram.tgnet.TLRPC;
 import org.telegram.ui.eve.auth.EveBackendClient;
 import org.telegram.ui.ActionBar.ActionBar;
 import org.telegram.ui.ActionBar.BaseFragment;
@@ -46,6 +47,7 @@ import org.telegram.ui.Cells.TextCheckCell;
 import org.telegram.ui.Cells.TextDetailCell;
 import org.telegram.ui.Cells.TextInfoPrivacyCell;
 import org.telegram.ui.Cells.TextSettingsCell;
+import org.telegram.ui.Components.AnimatedEmojiSpan;
 import org.telegram.ui.Components.AvatarDrawable;
 import org.telegram.ui.Components.BackupImageView;
 import org.telegram.ui.Components.FlickerLoadingView;
@@ -55,6 +57,7 @@ import org.telegram.ui.Components.SizeNotifierFrameLayout;
 import org.telegram.ui.Components.UItem;
 import org.telegram.ui.Components.UniversalAdapter;
 import org.telegram.ui.Components.UniversalRecyclerView;
+import org.telegram.ui.Components.VectorAvatarThumbDrawable;
 import org.telegram.ui.SettingsActivity;
 import org.telegram.utils.glass.BaseFragmentSimpleGlass;
 import org.telegram.utils.glass.GlassEngine;
@@ -163,7 +166,12 @@ public final class EveAdminUiChrome {
             actionBarFadeView.setBackground(simpleGlass.createActionBarFadeDrawable(actionBarFadeView));
         }
 
-        final SizeNotifierFrameLayout contentView = new SizeNotifierFrameLayout(context) {
+        final EveAnimatedEmojiHelper.EmojiHostSizeNotifierFrameLayout contentView = new EveAnimatedEmojiHelper.EmojiHostSizeNotifierFrameLayout(context) {
+            @Override
+            protected boolean isActionBarChild(@NonNull View child) {
+                return child == simpleActionBar || child == actionBarFadeView;
+            }
+
             @Override
             protected void dispatchDraw(Canvas canvas) {
                 super.dispatchDraw(canvas);
@@ -202,8 +210,14 @@ public final class EveAdminUiChrome {
 
         if (simpleActionBar != null) {
             simpleActionBar.setBackButtonImage(R.drawable.ic_ab_back);
-            simpleActionBar.setTitle(title);
-            if (subtitle != null) {
+            if (title instanceof String) {
+                simpleActionBar.setTitle(EveAnimatedEmojiHelper.decode((String) title, simpleActionBar.getTitleFontMetricsInt()));
+            } else {
+                simpleActionBar.setTitle(title);
+            }
+            if (subtitle instanceof String) {
+                simpleActionBar.setSubtitle(EveAnimatedEmojiHelper.decode((String) subtitle, null));
+            } else if (subtitle != null) {
                 simpleActionBar.setSubtitle(subtitle);
             }
             simpleActionBar.setBackground(null);
@@ -442,10 +456,24 @@ public final class EveAdminUiChrome {
             int avatarColor,
             int sizeDp,
             @Nullable Theme.ResourcesProvider resourcesProvider) {
-        String name = !TextUtils.isEmpty(examName) ? examName.trim() : "Exam";
+        String name = !TextUtils.isEmpty(examName) ? EveAnimatedEmojiHelper.stripMarkupToPlainText(examName.trim()) : "Exam";
         String effectiveSeed = !TextUtils.isEmpty(examId) ? examId : name;
         long seedHash = effectiveSeed.hashCode();
         String emoji = avatarEmoji != null ? avatarEmoji.trim() : "";
+        avatarView.setRoundRadius(dp(sizeDp / 2f));
+        String resolvedUrl = EveBackendClient.resolveMediaUrl(avatarUrl);
+        avatarView.setTag(effectiveSeed + "|" + resolvedUrl + "|" + emoji + "|" + avatarColor);
+
+        EveAnimatedEmojiHelper.AnimatedAvatarSpec animSpec = EveAnimatedEmojiHelper.parseAnimatedAvatarDescriptor(emoji);
+        TLRPC.TL_videoSizeEmojiMarkup animMarkup = EveAnimatedEmojiHelper.toVideoSizeMarkup(animSpec);
+        if (animMarkup != null) {
+            int thumbType = sizeDp >= 56 ? VectorAvatarThumbDrawable.TYPE_PROFILE : VectorAvatarThumbDrawable.TYPE_SMALL;
+            VectorAvatarThumbDrawable vectorDrawable = new VectorAvatarThumbDrawable(animMarkup, true, thumbType);
+            vectorDrawable.setRoundRadius(dp(sizeDp / 2f));
+            avatarView.setImage(null, "50_50", vectorDrawable, null, 0);
+            return;
+        }
+
         if (!emoji.isEmpty()) {
             avatarDrawable.setInfo(seedHash, name, null, emoji);
         } else {
@@ -460,9 +488,6 @@ public final class EveAdminUiChrome {
                     Theme.getColor(Theme.keys_avatar_background2[avatarColor], resourcesProvider)
             );
         }
-        avatarView.setRoundRadius(dp(sizeDp / 2f));
-        String resolvedUrl = EveBackendClient.resolveMediaUrl(avatarUrl);
-        avatarView.setTag(effectiveSeed + "|" + resolvedUrl + "|" + emoji + "|" + avatarColor);
         if (!resolvedUrl.isEmpty()) {
             avatarView.setImage(ImageLocation.getForPath(resolvedUrl), "100_100", avatarDrawable, null);
         } else {
@@ -577,7 +602,7 @@ public final class EveAdminUiChrome {
         private final Theme.ResourcesProvider resourcesProvider;
         private final AvatarDrawable avatarDrawable;
         private final BackupImageView avatarView;
-        private final TextView titleView;
+        private final AnimatedEmojiSpan.TextViewEmojis titleView;
         private final TextView subtitleView;
         private final TextView badgeView;
         private int badgeStyle = BADGE_NEUTRAL;
@@ -593,7 +618,7 @@ public final class EveAdminUiChrome {
             LinearLayout textColumn = new LinearLayout(context);
             textColumn.setOrientation(LinearLayout.VERTICAL);
 
-            titleView = new TextView(context);
+            titleView = EveAnimatedEmojiHelper.createEmojiTextView(context);
             titleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16);
             titleView.setTypeface(AndroidUtilities.bold());
             titleView.setSingleLine(true);
@@ -640,7 +665,7 @@ public final class EveAdminUiChrome {
             } else {
                 bindAvatar(avatarView, avatarDrawable, seed, title != null ? title.toString() : "", photoUrl, 44);
             }
-            titleView.setText(title);
+            EveAnimatedEmojiHelper.bindText(titleView, title != null ? title.toString() : "");
             subtitleView.setVisibility(TextUtils.isEmpty(subtitle) ? View.GONE : View.VISIBLE);
             subtitleView.setText(subtitle);
             badgeView.setVisibility(TextUtils.isEmpty(badge) ? View.GONE : View.VISIBLE);

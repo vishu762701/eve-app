@@ -3,27 +3,37 @@ package org.telegram.ui.eve.exams;
 import android.app.Activity;
 import android.content.Context;
 import android.text.TextUtils;
+import android.util.TypedValue;
+import android.view.Gravity;
 import android.view.View;
 import android.widget.EditText;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.R;
 import org.telegram.ui.ActionBar.ActionBar;
 import org.telegram.ui.ActionBar.ActionBarMenuItem;
 import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.BaseFragment;
+import org.telegram.ui.ActionBar.BottomSheet;
 import org.telegram.ui.ActionBar.SimpleActionBarMenu;
 import org.telegram.ui.ActionBar.SimpleActionBarMenuItem;
+import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.BulletinFactory;
 import org.telegram.ui.Components.FlickerLoadingView;
 import org.telegram.ui.Components.IconBackgroundColors;
+import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.RecyclerListView;
 import org.telegram.ui.Components.UItem;
 import org.telegram.ui.Components.UniversalAdapter;
 import org.telegram.ui.Components.UniversalRecyclerView;
 import org.telegram.ui.SettingsActivity;
+import org.telegram.ui.eve.admin.EveAnimatedEmojiHelper;
 import org.telegram.ui.eve.admin.EveAdminUiChrome;
 
 import java.text.SimpleDateFormat;
@@ -478,32 +488,111 @@ public class EveExamTestsFragment extends BaseFragment {
             sb.append("\nLatest Test: ").append(exam.nextTestLabel);
         }
         AlertDialog.Builder builder = new AlertDialog.Builder(activity, getResourceProvider());
-        builder.setTitle(exam.examName);
+        builder.setTitle(EveAnimatedEmojiHelper.decode(exam.examName, null));
         builder.setMessage(sb.toString());
         builder.setPositiveButton(LocaleController.getString(R.string.OK), null);
         showDialog(builder.create());
     }
 
+    @NonNull
+    public static List<String> getLaunchDialogActionOrder() {
+        return java.util.Arrays.asList("Start Test", "Leaderboard", "Cancel");
+    }
+
     private void openTestLaunchDialog(EveExamModels.GeneratedTestSummary selected) {
         Activity activity = getParentActivity();
         if (activity == null || selected == null) return;
+        Theme.ResourcesProvider rp = getResourceProvider();
         String attemptKey = EveExamModels.buildAttemptKey(exam != null ? exam.id : selected.examId, selected.id);
         int qCount = selected.questionCount > 0 ? selected.questionCount : (exam != null ? exam.questionCount : 20);
-        int mins = exam != null ? exam.timeLimitMinutes : 30;
-        String neg = exam != null ? exam.negativeMarkingText : "0";
+        int mins = exam != null && exam.timeLimitMinutes > 0 ? exam.timeLimitMinutes : 30;
+        String neg = exam != null && !TextUtils.isEmpty(exam.negativeMarkingText) ? exam.negativeMarkingText : "0";
+        String negMeta = ("0".equals(neg) || "none".equalsIgnoreCase(neg))
+                ? "No Negative Marking"
+                : ("Negative Marking (-" + neg + ")");
+        String metadata = qCount + " Qs • " + mins + " min • " + negMeta;
 
-        String msg = LocaleController.getString(R.string.EveQuestionsPerTest) + ": " + qCount + "\n"
-                + LocaleController.getString(R.string.EveTimeLimit) + ": " + mins + " min\n"
-                + LocaleController.getString(R.string.EveNegativeMarking) + ": " + neg;
+        BottomSheet sheet = new BottomSheet(activity, false, rp);
+        sheet.setApplyTopPadding(false);
+        sheet.setApplyBottomPadding(false);
 
-        AlertDialog.Builder builder = new AlertDialog.Builder(activity, getResourceProvider());
-        builder.setTitle(selected.getDisplayTitle());
-        builder.setMessage(msg);
-        builder.setPositiveButton(LocaleController.getString(R.string.EveStartTest), (d, w) ->
-                presentFragment(new EveTestPlayerFragment(exam, selected)));
-        builder.setNeutralButton(LocaleController.getString(R.string.EveLeaderboard), (d, w) ->
-                presentFragment(new EveLeaderboardFragment(attemptKey, selected.getDisplayTitle())));
-        builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
-        showDialog(builder.create());
+        LinearLayout container = new LinearLayout(activity);
+        container.setOrientation(LinearLayout.VERTICAL);
+        container.setPadding(
+                AndroidUtilities.dp(20),
+                AndroidUtilities.dp(20),
+                AndroidUtilities.dp(20),
+                AndroidUtilities.dp(16) + AndroidUtilities.navigationBarHeight
+        );
+        container.setBackgroundColor(Theme.getColor(Theme.key_dialogBackground, rp));
+
+        TextView titleView = EveAnimatedEmojiHelper.createEmojiTextView(activity);
+        EveAnimatedEmojiHelper.bindText(titleView, selected.getDisplayTitle());
+        titleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 19);
+        titleView.setTypeface(AndroidUtilities.bold());
+        titleView.setTextColor(Theme.getColor(Theme.key_dialogTextBlack, rp));
+        titleView.setGravity(Gravity.START);
+        container.addView(titleView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 6));
+
+        TextView metaView = new TextView(activity);
+        metaView.setText(metadata);
+        metaView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
+        metaView.setTextColor(Theme.getColor(Theme.key_dialogTextGray3, rp));
+        metaView.setGravity(Gravity.START);
+        container.addView(metaView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 18));
+
+        int primaryBg = Theme.getColor(Theme.key_featuredStickers_addButton, rp);
+        int primaryFg = Theme.getColor(Theme.key_featuredStickers_buttonText, rp);
+        int secondaryBg = Theme.getColor(Theme.key_windowBackgroundGray, rp);
+        int secondaryFg = Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, rp);
+        int redFg = Theme.getColor(Theme.key_text_RedBold, rp);
+
+        TextView startBtn = new TextView(activity);
+        startBtn.setText(LocaleController.getString(R.string.EveStartTest));
+        startBtn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15.5f);
+        startBtn.setTypeface(AndroidUtilities.bold());
+        startBtn.setTextColor(primaryFg);
+        startBtn.setGravity(Gravity.CENTER);
+        startBtn.setBackground(Theme.createSimpleSelectorRoundRectDrawable(
+                AndroidUtilities.dp(12),
+                primaryBg,
+                Theme.multAlpha(primaryBg, 0.85f)));
+        startBtn.setOnClickListener(v -> {
+            sheet.dismiss();
+            presentFragment(new EveTestPlayerFragment(exam, selected));
+        });
+        container.addView(startBtn, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48, 0, 0, 0, 10));
+
+        TextView leaderboardBtn = new TextView(activity);
+        leaderboardBtn.setText(LocaleController.getString(R.string.EveLeaderboard));
+        leaderboardBtn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
+        leaderboardBtn.setTypeface(AndroidUtilities.bold());
+        leaderboardBtn.setTextColor(secondaryFg);
+        leaderboardBtn.setGravity(Gravity.CENTER);
+        leaderboardBtn.setBackground(Theme.createSimpleSelectorRoundRectDrawable(
+                AndroidUtilities.dp(12),
+                secondaryBg,
+                Theme.multAlpha(primaryBg, 0.14f)));
+        leaderboardBtn.setOnClickListener(v -> {
+            sheet.dismiss();
+            presentFragment(new EveLeaderboardFragment(attemptKey, selected.getDisplayTitle()));
+        });
+        container.addView(leaderboardBtn, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 46, 0, 0, 0, 6));
+
+        TextView cancelBtn = new TextView(activity);
+        cancelBtn.setText(LocaleController.getString(R.string.Cancel));
+        cancelBtn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
+        cancelBtn.setTypeface(AndroidUtilities.bold());
+        cancelBtn.setTextColor(redFg);
+        cancelBtn.setGravity(Gravity.CENTER);
+        cancelBtn.setBackground(Theme.createSimpleSelectorRoundRectDrawable(
+                AndroidUtilities.dp(12),
+                0,
+                Theme.multAlpha(redFg, 0.10f)));
+        cancelBtn.setOnClickListener(v -> sheet.dismiss());
+        container.addView(cancelBtn, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 44));
+
+        sheet.setCustomView(container);
+        showDialog(sheet);
     }
 }

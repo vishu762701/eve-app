@@ -79,7 +79,7 @@ public class EveHomeBannerCarouselView extends FrameLayout implements Theme.Colo
     private int currentPage = 0;
 
     public static int computeBannerHeightPx() {
-        return Math.round(dp(72) * 2.5f);
+        return dp(120);
     }
 
     public EveHomeBannerCarouselView(Context context, @Nullable Theme.ResourcesProvider resourcesProvider) {
@@ -386,7 +386,7 @@ public class EveHomeBannerCarouselView extends FrameLayout implements Theme.Colo
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     computeBannerHeightPx()
             ));
-            slot.setPadding(dp(12), 0, dp(12), 0);
+            slot.setPadding(dp(14), 0, dp(14), 0);
             BannerCardHolder holder = new BannerCardHolder(slot);
             activeVideoHolders.add(holder);
             return holder;
@@ -428,14 +428,14 @@ public class EveHomeBannerCarouselView extends FrameLayout implements Theme.Colo
             card.setOutlineProvider(new ViewOutlineProvider() {
                 @Override
                 public void getOutline(View view, Outline outline) {
-                    outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), dp(14));
+                    outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), dp(18));
                 }
             });
             card.setBackgroundColor(0xFF1B2434);
 
             imageView = new BackupImageView(context);
             imageView.setAspectFit(false);
-            imageView.setRoundRadius(dp(14));
+            imageView.setRoundRadius(dp(18));
             card.addView(imageView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
 
             textureView = new TextureView(context);

@@ -35,6 +35,14 @@ public final class EveTelegramAvatarPicker {
 
     public interface Delegate {
         void onAvatarCaptured(@NonNull byte[] imageBytes, @NonNull String mimeType, @Nullable Bitmap previewBitmap);
+        default void onAnimatedEmojiAvatarCaptured(
+                long documentId,
+                @NonNull int[] backgroundColors,
+                @NonNull byte[] fallbackPngBytes,
+                @NonNull String mimeType,
+                @Nullable Bitmap previewBitmap) {
+            onAvatarCaptured(fallbackPngBytes, mimeType, previewBitmap);
+        }
         default void onAvatarRemoved() {}
     }
 
@@ -54,6 +62,7 @@ public final class EveTelegramAvatarPicker {
         // Open Telegram's official ChatAttachAlert/PhotoCropActivity pipeline with local-only output.
         this.imageUpdater = new ImageUpdater(false, isChannel ? ImageUpdater.FOR_TYPE_CHANNEL : ImageUpdater.FOR_TYPE_GROUP, true);
         this.imageUpdater.parentFragment = parentFragment;
+        this.imageUpdater.setEveLocalAvatarMode(true);
         this.imageUpdater.setSearchAvailable(false, true);
         this.imageUpdater.setUploadAfterSelect(false);
         this.imageUpdater.setDelegate(new ImageUpdater.ImageUpdaterDelegate() {
@@ -67,7 +76,7 @@ public final class EveTelegramAvatarPicker {
                     TLRPC.PhotoSize smallSize,
                     boolean isVideo,
                     TLRPC.VideoSize emojiMarkup) {
-                extractCapturedBytes(bigSize, smallSize);
+                extractCapturedBytes(bigSize, smallSize, emojiMarkup);
             }
         });
     }
@@ -114,7 +123,23 @@ public final class EveTelegramAvatarPicker {
         }
     }
 
-    private void extractCapturedBytes(@Nullable TLRPC.PhotoSize bigSize, @Nullable TLRPC.PhotoSize smallSize) {
+    private void extractCapturedBytes(
+            @Nullable TLRPC.PhotoSize bigSize,
+            @Nullable TLRPC.PhotoSize smallSize,
+            @Nullable TLRPC.VideoSize emojiMarkup) {
+        final long animDocId;
+        final int[] animColors;
+        if (emojiMarkup instanceof TLRPC.TL_videoSizeEmojiMarkup) {
+            TLRPC.TL_videoSizeEmojiMarkup em = (TLRPC.TL_videoSizeEmojiMarkup) emojiMarkup;
+            animDocId = em.emoji_id;
+            animColors = new int[em.background_colors.size()];
+            for (int i = 0; i < em.background_colors.size(); i++) {
+                animColors[i] = em.background_colors.get(i);
+            }
+        } else {
+            animDocId = 0L;
+            animColors = new int[0];
+        }
         Utilities.globalQueue.postRunnable(() -> {
             byte[] bytes = null;
             String mime = "image/jpeg";
@@ -151,7 +176,11 @@ public final class EveTelegramAvatarPicker {
             AndroidUtilities.runOnUIThread(() -> {
                 if (destroyed) return;
                 if (finalBytes != null && finalBytes.length > 0) {
-                    delegate.onAvatarCaptured(finalBytes, finalMime, finalPreview);
+                    if (animDocId != 0L) {
+                        delegate.onAnimatedEmojiAvatarCaptured(animDocId, animColors, finalBytes, finalMime, finalPreview);
+                    } else {
+                        delegate.onAvatarCaptured(finalBytes, finalMime, finalPreview);
+                    }
                 }
             });
         });

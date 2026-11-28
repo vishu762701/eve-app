@@ -230,9 +230,9 @@ public class EveStudentExamExecutionTest {
                 org.telegram.ui.eve.auth.EveBackendClient.resolveMediaUrl(dialog.avatarUrl)
         );
 
-        // Exact Home banner carousel height = 2.5x single exam row (72dp * 2.5 = 180dp)
+        // Compact sleek Home banner carousel height = 120dp
         assertEquals(
-                Math.round(org.telegram.messenger.AndroidUtilities.dp(72) * 2.5f),
+                org.telegram.messenger.AndroidUtilities.dp(120),
                 org.telegram.ui.eve.exams.EveHomeBannerCarouselView.computeBannerHeightPx()
         );
 
@@ -362,5 +362,56 @@ public class EveStudentExamExecutionTest {
         boundedCache.put("k3", new String(new char[140]).replace('\0', 'c'));
         assertTrue(boundedCache.totalDiskBytes() <= 256L);
         tempCache.delete();
+
+        // 8. EveTestPlayerFragment initialization, createView, and lifecycle safety + Start Test action order
+        android.content.Context testCtx = ApplicationProvider.getApplicationContext();
+        EveExamModels.ExamSummary launchExam = new EveExamModels.ExamSummary(
+                "ex-launch", "[tg_emoji:4913925111:🔥] Reasoning", 30, "SSC", 20, "Test 1", "0.25",
+                "", "live", 0L, 1, "Hello - Test 1", 0, false, "", "", -1);
+        EveExamModels.GeneratedTestSummary launchTest = new EveExamModels.GeneratedTestSummary(
+                "gt-1", "ex-launch", "SSC", "Hello - Test 1", "Hello - Test 1", 1000L, "live", 20, 0L);
+        EveTestPlayerFragment playerFragment = new EveTestPlayerFragment(launchExam, launchTest);
+        playerFragment.onFragmentCreate();
+        android.view.View playerView = playerFragment.createView(testCtx);
+        assertNotNull(playerView);
+        playerFragment.onResume();
+        playerFragment.onPause();
+        playerFragment.onFragmentDestroy();
+
+        java.util.List<String> dialogActions = org.telegram.ui.eve.exams.EveExamTestsFragment.getLaunchDialogActionOrder();
+        assertEquals(java.util.Arrays.asList("Start Test", "Leaderboard", "Cancel"), dialogActions);
+
+        // 9. Animated avatar descriptor (tg_anim) roundtrip & AvatarConstructor local-only unlock flag
+        String animDesc = EveAnimatedEmojiHelper.encodeAnimatedAvatarDescriptor(
+                5368324170671202286L, new int[] { 0xFF1A73E8, 0xFF8E24AA });
+        assertEquals("tg_anim:5368324170671202286:FF1A73E8,FF8E24AA", animDesc);
+        EveAnimatedEmojiHelper.AnimatedAvatarSpec parsedAnim = EveAnimatedEmojiHelper.parseAnimatedAvatarDescriptor(animDesc);
+        assertNotNull(parsedAnim);
+        assertEquals(5368324170671202286L, parsedAnim.documentId);
+        assertEquals(2, parsedAnim.backgroundColors.length);
+        org.telegram.tgnet.TLRPC.TL_videoSizeEmojiMarkup tlMarkup = EveAnimatedEmojiHelper.toVideoSizeMarkup(parsedAnim);
+        assertNotNull(tlMarkup);
+        assertEquals(5368324170671202286L, tlMarkup.emoji_id);
+
+        org.telegram.ui.Components.ImageUpdater iu = new org.telegram.ui.Components.ImageUpdater(false, org.telegram.ui.Components.ImageUpdater.FOR_TYPE_CHANNEL, true);
+        assertFalse(iu.isEveLocalAvatarMode());
+        iu.setEveLocalAvatarMode(true);
+        assertTrue(iu.isEveLocalAvatarMode());
+
+        // 10. Mapper preserves [tg_emoji] for DialogCell, filters cleanly by stripped text, and keeps zero-date for 01.01.70 fix
+        org.telegram.ui.Cells.DialogCell.CustomDialog emojiDialog =
+                org.telegram.ui.eve.exams.EveExamDialogsMapper.toCustomDialog(launchExam);
+        assertEquals("[tg_emoji:4913925111:🔥] Reasoning", emojiDialog.name);
+        assertEquals(0, emojiDialog.date);
+        assertEquals(1, org.telegram.ui.eve.exams.EveExamDialogsMapper.filterExams(
+                java.util.Collections.singletonList(launchExam), "reasoning").size());
+
+        EveExamRepository.AnnouncementChannelSummary chSum = new EveExamRepository.AnnouncementChannelSummary(
+                "News [tg_emoji:123:📢]", "/api/admin/announcement-channel/avatar", "Hi", 0, 0L, 0, animDesc);
+        org.telegram.ui.Cells.DialogCell.CustomDialog chDialog =
+                org.telegram.ui.eve.exams.EveExamDialogsMapper.toAnnouncementChannelDialog(chSum);
+        assertEquals("News [tg_emoji:123:📢]", chDialog.name);
+        assertEquals(animDesc, chDialog.avatarEmoji);
+        assertEquals(0, chDialog.date);
     }
 }

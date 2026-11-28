@@ -191,13 +191,12 @@ public class EveAnnouncementsFragment extends BaseFragment {
     }
 
     private void applyChatTheme() {
-        boolean dark = Theme.isCurrentThemeDark();
-        int chatBg = dark ? 0xFF0E1621 : 0xFFE5EBEE;
+        int bg = Theme.getColor(Theme.key_windowBackgroundWhite, getResourceProvider());
         if (chatRoot != null) {
-            chatRoot.setBackgroundColor(chatBg);
+            chatRoot.setBackgroundColor(bg);
         }
         if (listView != null) {
-            listView.setBackgroundColor(chatBg);
+            listView.setBackgroundColor(bg);
         }
     }
 
@@ -467,6 +466,7 @@ public class EveAnnouncementsFragment extends BaseFragment {
         ChannelDatePillCell(Context context, Theme.ResourcesProvider rp) {
             super(context);
             this.rp = rp;
+            setTag(RecyclerListView.TAG_NOT_SECTION);
             setLayoutParams(new RecyclerView.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -600,8 +600,8 @@ public class EveAnnouncementsFragment extends BaseFragment {
             bubble.setWillNotDraw(false);
             bubble.setOrientation(LinearLayout.VERTICAL);
             bubble.setPadding(dp(14), dp(11), dp(14), dp(9));
-            bubble.setElevation(dp(1.5f));
-            addView(bubble, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.START));
+            bubble.setElevation(0);
+            addView(bubble, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.START));
 
             stickerView = new BackupImageView(context);
             stickerView.setAspectFit(true);
@@ -755,8 +755,7 @@ public class EveAnnouncementsFragment extends BaseFragment {
 
         @Override
         public void updateColors() {
-            boolean dark = Theme.isCurrentThemeDark();
-            bubblePaint.setColor(dark ? 0xFF182533 : Theme.getColor(Theme.key_windowBackgroundWhite, rp));
+            bubblePaint.setColor(Theme.getColor(Theme.key_windowBackgroundWhite, rp));
             authorView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueHeader, rp));
             titleView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, rp));
             bodyView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, rp));

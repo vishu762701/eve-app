@@ -1374,10 +1374,19 @@ adminRoutes.post("/announcement-channel/avatar", async (c) => {
     storedLocation
   );
 
-  const updated = normalizeAppConfigObject({ ...prev, announcement_channel_avatar_url: avatarUrl });
+  const headerEmojiRaw = (c.req.header("X-Eve-Avatar-Emoji") || "").trim();
+  const headerEmoji = headerEmojiRaw.length <= 128 ? headerEmojiRaw : "";
+
+  const updated = normalizeAppConfigObject({
+    ...prev,
+    announcement_channel_avatar_url: avatarUrl,
+    announcement_channel_avatar_emoji: headerEmoji,
+  });
   const patch = {
     announcement_channel_avatar_url: avatarUrl,
     announcementChannelAvatarUrl: avatarUrl,
+    announcement_channel_avatar_emoji: headerEmoji,
+    announcementChannelAvatarEmoji: headerEmoji,
   };
   const saveStmt = db
     .prepare(
@@ -1413,10 +1422,16 @@ adminRoutes.delete("/announcement-channel/avatar", async (c) => {
   }
   const prev = await readAppConfig(db).catch(() => normalizeAppConfigObject({}));
   const oldKey = extractStorageAvatarKey(prev.announcementChannelAvatarUrl, "channel-avatars/");
-  const updated = normalizeAppConfigObject({ ...prev, announcement_channel_avatar_url: "" });
+  const updated = normalizeAppConfigObject({
+    ...prev,
+    announcement_channel_avatar_url: "",
+    announcement_channel_avatar_emoji: "",
+  });
   const patch = {
     announcement_channel_avatar_url: "",
     announcementChannelAvatarUrl: "",
+    announcement_channel_avatar_emoji: "",
+    announcementChannelAvatarEmoji: "",
   };
   const saveStmt = db
     .prepare(

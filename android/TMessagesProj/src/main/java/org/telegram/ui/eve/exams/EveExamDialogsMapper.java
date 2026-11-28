@@ -51,6 +51,7 @@ public final class EveExamDialogsMapper {
                 continue;
             }
             if (containsIgnoreCase(exam.examName, normalized)
+                    || containsIgnoreCase(org.telegram.ui.eve.admin.EveAnimatedEmojiHelper.stripMarkupToPlainText(exam.examName), normalized)
                     || containsIgnoreCase(exam.category, normalized)) {
                 matched.add(exam);
             }
@@ -97,7 +98,7 @@ public final class EveExamDialogsMapper {
         DialogCell.CustomDialog custom = new DialogCell.CustomDialog();
         custom.id = stableDialogIdForExam(exam.id);
         String plainName = org.telegram.ui.eve.admin.EveAnimatedEmojiHelper.stripMarkupToPlainText(exam.examName).trim();
-        custom.name = plainName.isEmpty() ? "Untitled Exam" : plainName;
+        custom.name = plainName.isEmpty() ? "Untitled Exam" : exam.examName.trim();
         custom.message = buildExamSubtitle(exam);
         custom.unread_count = exam.liveTestCount;
         custom.date = exam.latestTestTimestampSec;
@@ -116,10 +117,12 @@ public final class EveExamDialogsMapper {
     public static DialogCell.CustomDialog toAnnouncementChannelDialog(
             EveExamRepository.AnnouncementChannelSummary summary) {
         DialogCell.CustomDialog custom = new DialogCell.CustomDialog();
-        String name = summary != null && !summary.channelName.trim().isEmpty()
-                ? org.telegram.ui.eve.admin.EveAnimatedEmojiHelper.stripMarkupToPlainText(summary.channelName).trim() : "Announcements";
-        String preview = summary != null && !summary.latestPreview.trim().isEmpty()
-                ? org.telegram.ui.eve.admin.EveAnimatedEmojiHelper.stripMarkupToPlainText(summary.latestPreview).trim() : "Broadcasts & live quizzes";
+        String rawName = summary != null && !summary.channelName.trim().isEmpty() ? summary.channelName.trim() : "Announcements";
+        String plainName = org.telegram.ui.eve.admin.EveAnimatedEmojiHelper.stripMarkupToPlainText(rawName).trim();
+        String name = plainName.isEmpty() ? "Announcements" : rawName;
+        String rawPreview = summary != null && !summary.latestPreview.trim().isEmpty() ? summary.latestPreview.trim() : "Broadcasts & live quizzes";
+        String plainPreview = org.telegram.ui.eve.admin.EveAnimatedEmojiHelper.stripMarkupToPlainText(rawPreview).trim();
+        String preview = plainPreview.isEmpty() ? "Broadcasts & live quizzes" : rawPreview;
         custom.id = -90002;
         custom.name = name;
         custom.message = preview;
@@ -132,7 +135,7 @@ public final class EveExamDialogsMapper {
         custom.isMedia = false;
         custom.sent = -1;
         custom.avatarUrl = summary != null ? summary.channelAvatarUrl : "";
-        custom.avatarEmoji = "";
+        custom.avatarEmoji = summary != null ? summary.channelAvatarEmoji : "";
         custom.avatarColor = 4;
         return custom;
     }

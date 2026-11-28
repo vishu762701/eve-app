@@ -149,7 +149,20 @@ public class EveAdminGeneratedTestsFragment extends BaseFragment {
             @Override
             public void onAvatarCaptured(@NonNull byte[] imageBytes, @NonNull String mimeType, @Nullable Bitmap previewBitmap) {
                 if (pendingAvatarTest != null) {
-                    uploadTestAvatar(pendingAvatarTest, imageBytes, mimeType);
+                    uploadTestAvatar(pendingAvatarTest, imageBytes, mimeType, null);
+                }
+            }
+
+            @Override
+            public void onAnimatedEmojiAvatarCaptured(
+                    long documentId,
+                    @NonNull int[] backgroundColors,
+                    @NonNull byte[] fallbackPngBytes,
+                    @NonNull String mimeType,
+                    @Nullable Bitmap previewBitmap) {
+                if (pendingAvatarTest != null) {
+                    String descriptor = EveAnimatedEmojiHelper.encodeAnimatedAvatarDescriptor(documentId, backgroundColors);
+                    uploadTestAvatar(pendingAvatarTest, fallbackPngBytes, mimeType, descriptor);
                 }
             }
 
@@ -440,14 +453,16 @@ public class EveAdminGeneratedTestsFragment extends BaseFragment {
                 .create());
     }
 
-    private void uploadTestAvatar(EveAdminModels.AdminGeneratedTestItem test, byte[] bytes, String mimeType) {
-        if (destroyed || test == null) return;
+    private void uploadTestAvatar(EveAdminModels.AdminGeneratedTestItem test, byte[] bytes, String mimeType, @Nullable String avatarEmojiDescriptor) {
+        if (destroyed || test == null || bytes == null || bytes.length == 0) return;
         EveAdminRepository.ResultCallback<JSONObject> cb = new EveAdminRepository.ResultCallback<JSONObject>() {
             @Override
             public void onSuccess(JSONObject data) {
                 if (destroyed) return;
                 String nextUrl = data != null ? data.optString("avatarUrl", "") : "";
-                applyOptimisticAvatar(test.id, nextUrl, "", -1);
+                String nextEmoji = data != null ? data.optString("avatarEmoji", avatarEmojiDescriptor != null ? avatarEmojiDescriptor : "")
+                        : (avatarEmojiDescriptor != null ? avatarEmojiDescriptor : "");
+                applyOptimisticAvatar(test.id, nextUrl, nextEmoji, -1);
                 repo.invalidateCache();
                 BulletinFactory.of(EveAdminGeneratedTestsFragment.this)
                         .createSimpleBulletin(R.raw.contact_check, "Mock test avatar updated").show();
@@ -462,7 +477,7 @@ public class EveAdminGeneratedTestsFragment extends BaseFragment {
             }
         };
         repo.runWithAdminToken(cb, token -> repo.postSuccess(cb,
-                repo.uploadGeneratedTestAvatarImage(token, test.id, bytes, mimeType)));
+                repo.uploadGeneratedTestAvatarImage(token, test.id, bytes, mimeType, avatarEmojiDescriptor)));
     }
 
     private void removeTestAvatar(EveAdminModels.AdminGeneratedTestItem test) {

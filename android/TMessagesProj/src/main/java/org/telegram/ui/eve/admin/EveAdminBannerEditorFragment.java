@@ -281,7 +281,7 @@ public class EveAdminBannerEditorFragment extends BaseFragment {
                 IconBackgroundColors.GREEN.top, IconBackgroundColors.GREEN.bottom,
                 R.drawable.ic_ab_done,
                 uploading ? "Uploading Banner..." : "Upload & Publish Banner",
-                "Renders at 2.5x exam row height on Student Home",
+                "Renders as a compact 120dp banner on Student Home",
                 null));
         items.add(UItem.asShadow(null));
     }
@@ -425,18 +425,20 @@ public class EveAdminBannerEditorFragment extends BaseFragment {
         BannerPreviewCard(Context context, Theme.ResourcesProvider rp) {
             super(context);
             this.rp = rp;
-            setPadding(dp(12), dp(10), dp(12), dp(10));
+            setPadding(dp(14), dp(10), dp(14), dp(10));
 
             FrameLayout card = new FrameLayout(context);
             card.setClipToOutline(true);
             card.setOutlineProvider(new android.view.ViewOutlineProvider() {
                 @Override
                 public void getOutline(View view, android.graphics.Outline outline) {
-                    outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), dp(14));
+                    outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), dp(18));
                 }
             });
 
             imageView = new BackupImageView(context);
+            imageView.setAspectFit(false);
+            imageView.setRoundRadius(dp(18));
             card.addView(imageView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
 
             videoTexture = new TextureView(context);
@@ -446,10 +448,10 @@ public class EveAdminBannerEditorFragment extends BaseFragment {
             emptyLabel = new TextView(context);
             emptyLabel.setGravity(Gravity.CENTER);
             emptyLabel.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
-            emptyLabel.setText("Preview appears here (2.5× exam row height)");
+            emptyLabel.setText("Preview appears here (Compact Home Banner • 120dp)");
             card.addView(emptyLabel, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
 
-            int targetHeight = Math.round(dp(72) * 2.5f);
+            int targetHeight = dp(120);
             addView(card, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, targetHeight));
             updateColors();
         }
@@ -494,7 +496,7 @@ public class EveAdminBannerEditorFragment extends BaseFragment {
         public void updateColors() {
             int gray = Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, rp);
             emptyLabel.setTextColor(gray);
-            emptyLabel.setBackground(Theme.createRoundRectDrawable(dp(14), Theme.multAlpha(gray, 0.10f)));
+            emptyLabel.setBackground(Theme.createRoundRectDrawable(dp(18), Theme.multAlpha(gray, 0.10f)));
         }
 
         @Override

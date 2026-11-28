@@ -92,6 +92,7 @@ public final class EveBackendClient {
         public final String defaultPublishMode;
         public final String announcementChannelName;
         public final String announcementChannelAvatarUrl;
+        public final String announcementChannelAvatarEmoji;
         public final String officialTelegramChannelUsername;
         public final String officialTelegramSupportUsername;
         public final String aiProvider;
@@ -105,7 +106,7 @@ public final class EveBackendClient {
                 String announcementChannelName,
                 String announcementChannelAvatarUrl) {
             this(maintenanceMode, maintenanceMessage, minSupportedVersionCode, defaultPublishMode,
-                    announcementChannelName, announcementChannelAvatarUrl, "", "", "auto", "");
+                    announcementChannelName, announcementChannelAvatarUrl, "", "", "auto", "", "");
         }
 
         public AppConfigResult(
@@ -119,7 +120,7 @@ public final class EveBackendClient {
                 String officialTelegramSupportUsername) {
             this(maintenanceMode, maintenanceMessage, minSupportedVersionCode, defaultPublishMode,
                     announcementChannelName, announcementChannelAvatarUrl,
-                    officialTelegramChannelUsername, officialTelegramSupportUsername, "auto", "");
+                    officialTelegramChannelUsername, officialTelegramSupportUsername, "auto", "", "");
         }
 
         public AppConfigResult(
@@ -133,6 +134,23 @@ public final class EveBackendClient {
                 String officialTelegramSupportUsername,
                 String aiProvider,
                 String aiModel) {
+            this(maintenanceMode, maintenanceMessage, minSupportedVersionCode, defaultPublishMode,
+                    announcementChannelName, announcementChannelAvatarUrl,
+                    officialTelegramChannelUsername, officialTelegramSupportUsername, aiProvider, aiModel, "");
+        }
+
+        public AppConfigResult(
+                boolean maintenanceMode,
+                String maintenanceMessage,
+                int minSupportedVersionCode,
+                String defaultPublishMode,
+                String announcementChannelName,
+                String announcementChannelAvatarUrl,
+                String officialTelegramChannelUsername,
+                String officialTelegramSupportUsername,
+                String aiProvider,
+                String aiModel,
+                String announcementChannelAvatarEmoji) {
             this.maintenanceMode = maintenanceMode;
             this.maintenanceMessage = maintenanceMessage != null ? maintenanceMessage : "";
             this.minSupportedVersionCode = minSupportedVersionCode;
@@ -140,6 +158,7 @@ public final class EveBackendClient {
             this.announcementChannelName = announcementChannelName != null && !announcementChannelName.trim().isEmpty()
                     ? announcementChannelName.trim() : "Announcements";
             this.announcementChannelAvatarUrl = announcementChannelAvatarUrl != null ? announcementChannelAvatarUrl.trim() : "";
+            this.announcementChannelAvatarEmoji = announcementChannelAvatarEmoji != null ? announcementChannelAvatarEmoji.trim() : "";
             this.officialTelegramChannelUsername = officialTelegramChannelUsername != null ? officialTelegramChannelUsername.trim() : "";
             this.officialTelegramSupportUsername = officialTelegramSupportUsername != null ? officialTelegramSupportUsername.trim() : "";
             String cleanProvider = aiProvider != null ? aiProvider.trim().toLowerCase(java.util.Locale.US) : "auto";
@@ -156,6 +175,7 @@ public final class EveBackendClient {
                 obj.put("defaultPublishMode", defaultPublishMode);
                 obj.put("announcementChannelName", announcementChannelName);
                 obj.put("announcementChannelAvatarUrl", announcementChannelAvatarUrl);
+                obj.put("announcementChannelAvatarEmoji", announcementChannelAvatarEmoji);
                 obj.put("officialTelegramChannelUsername", officialTelegramChannelUsername);
                 obj.put("officialTelegramSupportUsername", officialTelegramSupportUsername);
                 obj.put("aiProvider", aiProvider);
@@ -167,7 +187,7 @@ public final class EveBackendClient {
 
         public static AppConfigResult fromJson(JSONObject data) {
             if (data == null) {
-                return new AppConfigResult(false, "", 1, "paused", "Announcements", "", "", "", "auto", "");
+                return new AppConfigResult(false, "", 1, "paused", "Announcements", "", "", "", "auto", "", "");
             }
             boolean maint = data.has("maintenanceMode")
                     ? data.optBoolean("maintenanceMode", false)
@@ -184,6 +204,8 @@ public final class EveBackendClient {
                     optCleanString(data, "announcement_channel_name", "Announcements"));
             String chAvatar = optCleanString(data, "announcementChannelAvatarUrl",
                     optCleanString(data, "announcement_channel_avatar_url", ""));
+            String chAvatarEmoji = optCleanString(data, "announcementChannelAvatarEmoji",
+                    optCleanString(data, "announcement_channel_avatar_emoji", ""));
             String tgChannel = optCleanString(data, "officialTelegramChannelUsername",
                     optCleanString(data, "official_telegram_channel_username", ""));
             String tgSupport = optCleanString(data, "officialTelegramSupportUsername",
@@ -192,7 +214,7 @@ public final class EveBackendClient {
                     optCleanString(data, "ai_provider", "auto"));
             String aiModel = optCleanString(data, "aiModel",
                     optCleanString(data, "ai_model", ""));
-            return new AppConfigResult(maint, msg, minVer, pub, chName, chAvatar, tgChannel, tgSupport, aiProvider, aiModel);
+            return new AppConfigResult(maint, msg, minVer, pub, chName, chAvatar, tgChannel, tgSupport, aiProvider, aiModel, chAvatarEmoji);
         }
     }
 
@@ -556,6 +578,15 @@ public final class EveBackendClient {
     }
 
     public JSONObject postBinaryRoot(String path, String firebaseIdToken, String contentType, byte[] payloadBytes) throws BackendException {
+        return postBinaryRoot(path, firebaseIdToken, contentType, payloadBytes, null);
+    }
+
+    public JSONObject postBinaryRoot(
+            String path,
+            String firebaseIdToken,
+            String contentType,
+            byte[] payloadBytes,
+            java.util.Map<String, String> extraHeaders) throws BackendException {
         requireToken(firebaseIdToken, path);
         HttpURLConnection conn = null;
         try {
@@ -571,6 +602,13 @@ public final class EveBackendClient {
             conn.setRequestProperty(HEADER_EVE_CLIENT, EVE_CLIENT_VERSION);
             conn.setRequestProperty("Authorization", "Bearer " + firebaseIdToken);
             conn.setRequestProperty("Content-Type", contentType != null ? contentType : "application/octet-stream");
+            if (extraHeaders != null && !extraHeaders.isEmpty()) {
+                for (java.util.Map.Entry<String, String> entry : extraHeaders.entrySet()) {
+                    if (entry.getKey() != null && entry.getValue() != null) {
+                        conn.setRequestProperty(entry.getKey(), entry.getValue());
+                    }
+                }
+            }
             conn.setDoOutput(true);
             byte[] bytes = payloadBytes != null ? payloadBytes : new byte[0];
             conn.setFixedLengthStreamingMode(bytes.length);

@@ -113,6 +113,15 @@ public class ImageUpdater implements NotificationCenter.NotificationCenterDelega
     private boolean forceDarkTheme;
     private boolean showingFromDialog;
     private boolean canceled;
+    private boolean eveLocalAvatarMode;
+
+    public void setEveLocalAvatarMode(boolean value) {
+        eveLocalAvatarMode = value;
+    }
+
+    public boolean isEveLocalAvatarMode() {
+        return eveLocalAvatarMode;
+    }
     private boolean forUser;
 
     private final static int attach_photo = 0;
@@ -618,6 +627,16 @@ public class ImageUpdater implements NotificationCenter.NotificationCenterDelega
                 bitmap = ImageLoader.loadBitmap(info.thumbPath, null, 800, 800, true);
             } else if (info.path != null) {
                 bitmap = ImageLoader.loadBitmap(info.path, null, 800, 800, true);
+                if (info.emojiMarkup != null) {
+                    TLRPC.TL_message message = new TLRPC.TL_message();
+                    message.id = 0;
+                    message.message = "";
+                    message.media = new TLRPC.TL_messageMediaEmpty();
+                    message.action = new TLRPC.TL_messageActionEmpty();
+                    message.dialog_id = 0;
+                    avatarObject = new MessageObject(UserConfig.selectedAccount, message, false, false);
+                    avatarObject.emojiMarkup = info.emojiMarkup;
+                }
             } else if (info.searchImage != null) {
                 if (info.searchImage.photo != null) {
                     TLRPC.PhotoSize photoSize = FileLoader.getClosestPhotoSizeWithSize(info.searchImage.photo.sizes, AndroidUtilities.getPhotoSize());
@@ -917,7 +936,7 @@ public class ImageUpdater implements NotificationCenter.NotificationCenterDelega
                 }
             }
             if (delegate != null) {
-                delegate.didUploadPhoto(null, null, 0, null, bigPhoto, smallPhoto, isVideo, null);
+                delegate.didUploadPhoto(null, null, 0, null, bigPhoto, smallPhoto, isVideo, uploadAfterSelect ? null : vectorMarkup);
             }
         }
     }

@@ -1817,13 +1817,13 @@ public class PremiumPreviewFragment extends BaseFragment implements Notification
             imageFrameLayout.setClipChildren(false);
             setClipChildren(false);
 
-            titleView = new TextView(context);
+            titleView = org.telegram.ui.eve.admin.EveAnimatedEmojiHelper.createEmojiTextView(context);
             titleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 22);
             titleView.setTypeface(AndroidUtilities.bold());
             titleView.setGravity(Gravity.CENTER_HORIZONTAL);
             addView(titleView, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, 0, Gravity.CENTER_HORIZONTAL, 16, type == FEATURES_BUSINESS ? 8 : 20, 16, 0));
 
-            subtitleView = new TextView(context);
+            subtitleView = org.telegram.ui.eve.admin.EveAnimatedEmojiHelper.createEmojiTextView(context);
             subtitleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
             subtitleView.setLineSpacing(dp(2), 1f);
             subtitleView.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -2116,8 +2116,10 @@ public class PremiumPreviewFragment extends BaseFragment implements Notification
                     } else {
                         sub = getString(R.string.EvePremiumSubtitle);
                     }
-                    titleView.setText(title);
-                    subtitleView.setText(AndroidUtilities.replaceTags(sub));
+                    org.telegram.ui.eve.admin.EveAnimatedEmojiHelper.bindText(titleView, title);
+                    CharSequence taggedSub = AndroidUtilities.replaceTags(sub);
+                    subtitleView.setText(org.telegram.ui.eve.admin.EveAnimatedEmojiHelper.decodePreservingSpans(
+                            taggedSub, subtitleView.getPaint() != null ? subtitleView.getPaint().getFontMetricsInt() : null));
                 } else {
                     titleView.setText(getString(forcePremium ? R.string.TelegramPremiumSubscribedTitle : R.string.TelegramPremium));
                     subtitleView.setText(AndroidUtilities.replaceTags(getString(getUserConfig().isPremium() || forcePremium ? R.string.TelegramPremiumSubscribedSubtitle : R.string.TelegramPremiumSubtitle)));
@@ -2190,10 +2192,11 @@ public class PremiumPreviewFragment extends BaseFragment implements Notification
         };
         for (int i = 0; i < benefits.size(); i++) {
             String title = benefits.get(i);
+            CharSequence decodedTitle = org.telegram.ui.eve.admin.EveAnimatedEmojiHelper.decode(title, null);
             premiumFeatures.add(new PremiumFeatureData(
                     i + 1,
                     icons[i % icons.length],
-                    title,
+                    decodedTitle,
                     "Managed by EVE Cloud & EVE Admin Control Center."
             ));
         }

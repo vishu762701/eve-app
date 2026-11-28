@@ -226,14 +226,15 @@ public class EveAdminPollCreateFragment extends BaseFragment {
     }
 
     private void registerExclusivePopupFocus(@NonNull EditTextEmoji target) {
-        if (target.getEditText() == null) return;
-        target.getEditText().setOnFocusChangeListener((v, hasFocus) -> {
-            if (!hasFocus) return;
-            hideOtherPopups(target);
-        });
+        if (rootEmojiContainer instanceof EveAnimatedEmojiHelper.EmojiHostSizeNotifierFrameLayout) {
+            ((EveAnimatedEmojiHelper.EmojiHostSizeNotifierFrameLayout) rootEmojiContainer).registerEditTextEmoji(target);
+        }
     }
 
     private void hideOtherPopups(@Nullable EditTextEmoji except) {
+        if (rootEmojiContainer instanceof EveAnimatedEmojiHelper.EmojiHostSizeNotifierFrameLayout && except == null) {
+            ((EveAnimatedEmojiHelper.EmojiHostSizeNotifierFrameLayout) rootEmojiContainer).hideAllPopups(true);
+        }
         if (questionEditEmoji != null && questionEditEmoji != except && questionEditEmoji.isPopupShowing()) {
             questionEditEmoji.hidePopup(true);
         }

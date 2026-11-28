@@ -957,6 +957,9 @@ examRoutes.post("/:id/avatar", requirePermission("manage_exams"), async (c) => {
       storedLocation
     );
 
+    const headerEmojiRaw = (c.req.header("X-Eve-Avatar-Emoji") || "").trim();
+    const headerEmoji = headerEmojiRaw.length <= 128 ? headerEmojiRaw : "";
+
     const sets: string[] = ["image_url = ?"];
     const binds: Array<string | number | null> = [avatarUrl];
     if (hasAvatarUrl) {
@@ -964,7 +967,8 @@ examRoutes.post("/:id/avatar", requirePermission("manage_exams"), async (c) => {
       binds.push(avatarUrl);
     }
     if (hasAvatarEmoji) {
-      sets.push("avatar_emoji = ''");
+      sets.push("avatar_emoji = ?");
+      binds.push(headerEmoji);
     }
     if (hasAvatarColor) {
       sets.push("avatar_color = NULL");
@@ -977,7 +981,7 @@ examRoutes.post("/:id/avatar", requirePermission("manage_exams"), async (c) => {
       description: `Uploaded ${detected.ext.toUpperCase()} avatar for exam '${existing.exam_name}'`,
       targetType: "exam",
       targetId: id,
-      metadata: { mode: "image", mime: detected.mime },
+      metadata: { mode: headerEmoji ? "animated_emoji" : "image", mime: detected.mime, avatarEmoji: headerEmoji },
     });
 
     try {
@@ -999,7 +1003,7 @@ examRoutes.post("/:id/avatar", requirePermission("manage_exams"), async (c) => {
       success: true,
       data: {
         avatarUrl,
-        avatarEmoji: "",
+        avatarEmoji: headerEmoji,
         avatarColor: null,
       },
     });
@@ -1010,8 +1014,8 @@ examRoutes.post("/:id/avatar", requirePermission("manage_exams"), async (c) => {
     return c.json({ success: false, error: "Exam avatar emoji columns require migration 0033 first" }, 503);
   }
   const emojiRaw = typeof parsedBody?.avatarEmoji === "string" ? parsedBody.avatarEmoji.trim() : "";
-  if (emojiRaw.length > 32) {
-    return c.json({ success: false, error: "avatarEmoji must be 32 characters or fewer" }, 400);
+  if (emojiRaw.length > 128) {
+    return c.json({ success: false, error: "avatarEmoji must be 128 characters or fewer" }, 400);
   }
   let avatarColor: number | null = null;
   if (parsedBody?.avatarColor !== undefined && parsedBody.avatarColor !== null && parsedBody.avatarColor !== "") {

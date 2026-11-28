@@ -188,7 +188,8 @@ public class EveSubExamsFragment extends BaseFragment {
         String q = searchQuery.toLowerCase(Locale.US);
         for (EveExamModels.ExamSummary item : allSubExams) {
             if (item == null || item.isPaused()) continue;
-            if (q.isEmpty() || item.examName.toLowerCase(Locale.US).contains(q)
+            String plainName = org.telegram.ui.eve.admin.EveAnimatedEmojiHelper.stripMarkupToPlainText(item.examName).toLowerCase(Locale.US);
+            if (q.isEmpty() || plainName.contains(q)
                     || item.category.toLowerCase(Locale.US).contains(q)) {
                 filtered.add(item);
             }
@@ -206,8 +207,9 @@ public class EveSubExamsFragment extends BaseFragment {
     private void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
         EveAdminUiChrome.addTopSpace(items);
         if (filtered.isEmpty()) {
+            String plainParent = org.telegram.ui.eve.admin.EveAnimatedEmojiHelper.stripMarkupToPlainText(parentExam.examName);
             items.add(UItem.asShadow(searchQuery.isEmpty()
-                    ? "No active sub-exams under " + parentExam.examName + "."
+                    ? "No active sub-exams under " + plainParent + "."
                     : "No matching sub-exams found."));
             return;
         }
@@ -228,7 +230,7 @@ public class EveSubExamsFragment extends BaseFragment {
         private final Theme.ResourcesProvider rp;
         private final AvatarDrawable avatarDrawable;
         private final BackupImageView avatarView;
-        private final TextView titleView;
+        private final org.telegram.ui.Components.AnimatedEmojiSpan.TextViewEmojis titleView;
         private final TextView subtitleView;
         private final TextView badgeView;
 
@@ -243,7 +245,7 @@ public class EveSubExamsFragment extends BaseFragment {
             LinearLayout col = new LinearLayout(context);
             col.setOrientation(LinearLayout.VERTICAL);
 
-            titleView = new TextView(context);
+            titleView = org.telegram.ui.eve.admin.EveAnimatedEmojiHelper.createEmojiTextView(context);
             titleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16.5f);
             titleView.setTypeface(AndroidUtilities.bold());
             titleView.setSingleLine(true);
@@ -276,7 +278,7 @@ public class EveSubExamsFragment extends BaseFragment {
             EveAdminUiChrome.bindExamAvatar(
                     avatarView, avatarDrawable, sub.id, sub.examName,
                     sub.avatarUrl, sub.avatarEmoji, sub.avatarColor, 52, rp);
-            titleView.setText(sub.examName);
+            org.telegram.ui.eve.admin.EveAnimatedEmojiHelper.bindText(titleView, sub.examName);
             subtitleView.setText(EveExamDialogsMapper.buildExamSubtitle(sub));
             if (sub.liveTestCount > 0) {
                 badgeView.setText(String.valueOf(sub.liveTestCount));

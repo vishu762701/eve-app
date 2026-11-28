@@ -165,7 +165,9 @@ public class EveTestResultFragment extends BaseFragment {
         destroyed = false;
         setHasOwnBackground(true);
 
-        String title = result != null && !result.examName.isEmpty() ? result.examName : "Test Result";
+        String rawTitle = result != null && !result.examName.isEmpty() ? result.examName : "Test Result";
+        CharSequence title = org.telegram.ui.eve.admin.EveAnimatedEmojiHelper.decode(
+                rawTitle, simpleActionBar != null ? simpleActionBar.getTitleFontMetricsInt() : null);
         String sub = result != null
                 ? (LocaleController.getString(R.string.EveScore) + ": " + formatScore(result.score) + " / " + result.total)
                 : null;

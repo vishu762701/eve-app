@@ -144,7 +144,18 @@ public class EveAdminExamDetailFragment extends BaseFragment {
         avatarPicker = new EveTelegramAvatarPicker(this, true, new EveTelegramAvatarPicker.Delegate() {
             @Override
             public void onAvatarCaptured(@NonNull byte[] imageBytes, @NonNull String mimeType, @Nullable Bitmap previewBitmap) {
-                uploadAvatarBytes(imageBytes, mimeType);
+                uploadAvatarBytes(imageBytes, mimeType, null);
+            }
+
+            @Override
+            public void onAnimatedEmojiAvatarCaptured(
+                    long documentId,
+                    @NonNull int[] backgroundColors,
+                    @NonNull byte[] fallbackPngBytes,
+                    @NonNull String mimeType,
+                    @Nullable Bitmap previewBitmap) {
+                String descriptor = EveAnimatedEmojiHelper.encodeAnimatedAvatarDescriptor(documentId, backgroundColors);
+                uploadAvatarBytes(fallbackPngBytes, mimeType, descriptor);
             }
 
             @Override
@@ -258,7 +269,7 @@ public class EveAdminExamDetailFragment extends BaseFragment {
                     }
                 }
                 if (simpleActionBar != null) {
-                    simpleActionBar.setTitle(exam.examName);
+                    simpleActionBar.setTitle(EveAnimatedEmojiHelper.decode(exam.examName, simpleActionBar.getTitleFontMetricsInt()));
                     simpleActionBar.setSubtitle(buildSubtitle());
                 }
                 updateList();
@@ -666,7 +677,7 @@ public class EveAdminExamDetailFragment extends BaseFragment {
             actions.add(this::removeSyllabusNow);
         }
         showDialog(new AlertDialog.Builder(act, getResourceProvider())
-                .setTitle("Syllabus: " + exam.examName)
+                .setTitle("Syllabus: " + EveAnimatedEmojiHelper.stripMarkupToPlainText(exam.examName))
                 .setItems(labels.toArray(new String[0]), (d, idx) -> {
                     if (idx >= 0 && idx < actions.size()) {
                         actions.get(idx).run();
@@ -843,8 +854,8 @@ public class EveAdminExamDetailFragment extends BaseFragment {
         avatarPicker.open(exam.hasCustomAvatar());
     }
 
-    private void uploadAvatarBytes(byte[] bytes, String mimeType) {
-        if (destroyed || exam == null) return;
+    private void uploadAvatarBytes(byte[] bytes, String mimeType, @Nullable String avatarEmojiDescriptor) {
+        if (destroyed || exam == null || bytes == null || bytes.length == 0) return;
         uploadingAvatar = true;
         updateList();
         EveAdminRepository.ResultCallback<JSONObject> cb = new EveAdminRepository.ResultCallback<JSONObject>() {
@@ -853,7 +864,9 @@ public class EveAdminExamDetailFragment extends BaseFragment {
                 if (destroyed) return;
                 uploadingAvatar = false;
                 String nextUrl = data != null ? data.optString("avatarUrl", "") : "";
-                exam = exam.withAvatar(nextUrl, "", -1);
+                String nextEmoji = data != null ? data.optString("avatarEmoji", avatarEmojiDescriptor != null ? avatarEmojiDescriptor : "")
+                        : (avatarEmojiDescriptor != null ? avatarEmojiDescriptor : "");
+                exam = exam.withAvatar(nextUrl, nextEmoji, -1);
                 updateList();
                 BulletinFactory.of(EveAdminExamDetailFragment.this)
                         .createSimpleBulletin(R.raw.contact_check, "Exam photo updated.").show();
@@ -870,7 +883,7 @@ public class EveAdminExamDetailFragment extends BaseFragment {
             }
         };
         repo.runWithAdminToken(cb, token -> {
-            JSONObject res = repo.uploadExamAvatarImage(token, exam.id, bytes, mimeType);
+            JSONObject res = repo.uploadExamAvatarImage(token, exam.id, bytes, mimeType, avatarEmojiDescriptor);
             repo.postSuccess(cb, res);
         });
     }
@@ -906,7 +919,7 @@ public class EveAdminExamDetailFragment extends BaseFragment {
         private final Theme.ResourcesProvider resourcesProvider;
         private final AvatarDrawable avatarDrawable;
         private final BackupImageView avatarView;
-        private final TextView titleView;
+        private final AnimatedEmojiSpan.TextViewEmojis titleView;
         private final TextView actionHintView;
 
         ExamAvatarHeaderView(Context context, Theme.ResourcesProvider resourcesProvider, Runnable onEditClick) {
@@ -924,7 +937,7 @@ public class EveAdminExamDetailFragment extends BaseFragment {
             });
             addView(avatarView, LayoutHelper.createLinear(72, 72, Gravity.CENTER_HORIZONTAL, 0, 0, 0, 10));
 
-            titleView = new TextView(context);
+            titleView = EveAnimatedEmojiHelper.createEmojiTextView(context);
             titleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 19);
             titleView.setTypeface(AndroidUtilities.bold());
             titleView.setGravity(Gravity.CENTER);
@@ -951,7 +964,7 @@ public class EveAdminExamDetailFragment extends BaseFragment {
             EveAdminUiChrome.bindExamAvatar(
                     avatarView, avatarDrawable, exam.id, exam.examName,
                     exam.avatarUrl, exam.avatarEmoji, exam.avatarColor, 72, resourcesProvider);
-            titleView.setText(exam.examName);
+            EveAnimatedEmojiHelper.bindText(titleView, exam.examName);
             updateColors();
         }
 

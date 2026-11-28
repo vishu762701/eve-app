@@ -128,7 +128,18 @@ public class EveAdminBroadcastsFragment extends BaseFragment {
         channelAvatarPicker = new EveTelegramAvatarPicker(this, true, new EveTelegramAvatarPicker.Delegate() {
             @Override
             public void onAvatarCaptured(@NonNull byte[] imageBytes, @NonNull String mimeType, @Nullable Bitmap previewBitmap) {
-                uploadChannelAvatar(imageBytes, mimeType);
+                uploadChannelAvatar(imageBytes, mimeType, null);
+            }
+
+            @Override
+            public void onAnimatedEmojiAvatarCaptured(
+                    long documentId,
+                    @NonNull int[] backgroundColors,
+                    @NonNull byte[] fallbackPngBytes,
+                    @NonNull String mimeType,
+                    @Nullable Bitmap previewBitmap) {
+                String descriptor = EveAnimatedEmojiHelper.encodeAnimatedAvatarDescriptor(documentId, backgroundColors);
+                uploadChannelAvatar(fallbackPngBytes, mimeType, descriptor);
             }
 
             @Override
@@ -304,6 +315,7 @@ public class EveAdminBroadcastsFragment extends BaseFragment {
         String chName = appConfig != null && !TextUtils.isEmpty(appConfig.announcementChannelName)
                 ? appConfig.announcementChannelName : "Announcements";
         String chAvatar = appConfig != null ? appConfig.announcementChannelAvatarUrl : "";
+        String chAvatarEmoji = appConfig != null ? appConfig.announcementChannelAvatarEmoji : "";
         items.add(EveAdminUiChrome.AvatarRowCell.Factory.of(
                 ID_CHANNEL_AVATAR,
                 "channel_identity",
@@ -312,7 +324,7 @@ public class EveAdminBroadcastsFragment extends BaseFragment {
                         chName,
                         "Channel Avatar • Tap to set via Telegram Image Editor",
                         chAvatar,
-                        "",
+                        chAvatarEmoji,
                         4,
                         "Photo",
                         EveAdminUiChrome.AvatarRowCell.BADGE_BLUE)));
@@ -321,7 +333,7 @@ public class EveAdminBroadcastsFragment extends BaseFragment {
                 IconBackgroundColors.BLUE.top, IconBackgroundColors.BLUE.bottom,
                 R.drawable.msg_edit,
                 "Channel Display Name",
-                EveAnimatedEmojiHelper.stripMarkupToPlainText(chName),
+                EveAnimatedEmojiHelper.decode(chName, null),
                 "Edit"));
         items.add(SettingsActivity.SettingCell.Factory.of(
                 ID_STUDENT_QUIZZES,
@@ -454,7 +466,7 @@ public class EveAdminBroadcastsFragment extends BaseFragment {
         showDialog(host.sheet);
     }
 
-    private void uploadChannelAvatar(byte[] bytes, String mimeType) {
+    private void uploadChannelAvatar(byte[] bytes, String mimeType, @Nullable String avatarEmojiDescriptor) {
         if (destroyed) return;
         EveAdminRepository.ResultCallback<EveAdminModels.AppConfigModel> cb =
                 new EveAdminRepository.ResultCallback<EveAdminModels.AppConfigModel>() {
@@ -474,7 +486,7 @@ public class EveAdminBroadcastsFragment extends BaseFragment {
                                 .createErrorBulletin(message != null ? message : "Avatar upload failed.").show();
                     }
                 };
-        repo.runWithAdminToken(cb, token -> repo.postSuccess(cb, repo.uploadAnnouncementChannelAvatar(token, bytes, mimeType)));
+        repo.runWithAdminToken(cb, token -> repo.postSuccess(cb, repo.uploadAnnouncementChannelAvatar(token, bytes, mimeType, avatarEmojiDescriptor)));
     }
 
     private void removeChannelAvatar() {
@@ -514,17 +526,6 @@ public class EveAdminBroadcastsFragment extends BaseFragment {
         EditTextEmoji msgInput = EveAnimatedEmojiHelper.createEditTextEmoji(
                 activity, host.root, this, "Notification message (FCM + EVE Announcements)", "", true, rp);
         host.formColumn.addView(msgInput, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 12));
-
-        if (titleInput.getEditText() != null) {
-            titleInput.getEditText().setOnFocusChangeListener((v, hasFocus) -> {
-                if (hasFocus && msgInput.isPopupShowing()) msgInput.hidePopup(true);
-            });
-        }
-        if (msgInput.getEditText() != null) {
-            msgInput.getEditText().setOnFocusChangeListener((v, hasFocus) -> {
-                if (hasFocus && titleInput.isPopupShowing()) titleInput.hidePopup(true);
-            });
-        }
 
         // Optional Animated Telegram Sticker attachment strip
         final TLRPC.Document[] pickedSticker = new TLRPC.Document[1];
