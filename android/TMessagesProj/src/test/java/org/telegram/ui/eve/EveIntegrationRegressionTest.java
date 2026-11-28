@@ -82,10 +82,10 @@ public class EveIntegrationRegressionTest {
         assertNotNull(DialogsActivity.class);
         assertNotNull(MainTabsActivity.class);
 
-        // Mission 3: Account cleanup without breaking auth/logout
+        // Mission 3: Account cleanup without breaking auth/switcher/logout
         assertFalse(UserInfoActivity.isEveAccountOptionEnabled(UserInfoActivity.ACCOUNT_OPTION_CHANNEL));
         assertFalse(UserInfoActivity.isEveAccountOptionEnabled(UserInfoActivity.ACCOUNT_OPTION_CHAT_AUTOMATION));
-        assertFalse(UserInfoActivity.isEveAccountOptionEnabled(UserInfoActivity.ACCOUNT_OPTION_ADD_ACCOUNT));
+        assertTrue(UserInfoActivity.isEveAccountOptionEnabled(UserInfoActivity.ACCOUNT_OPTION_ADD_ACCOUNT));
         assertTrue(UserInfoActivity.isEveAccountOptionEnabled(UserInfoActivity.ACCOUNT_OPTION_LOGOUT));
 
         // Mission 4: Exam Settings rename & removed sections
