@@ -182,7 +182,7 @@ public class EveAdminGeneratedTestsFragment extends BaseFragment {
                 glassEngine,
                 getResourceProvider(),
                 "Mock Tests",
-                scopedExam != null ? scopedExam.examName : "All exams",
+                EveAnimatedEmojiHelper.decode(scopedExam != null ? scopedExam.examName : "All exams", null),
                 false,
                 this::fillItems,
                 this::onClick,
@@ -426,7 +426,7 @@ public class EveAdminGeneratedTestsFragment extends BaseFragment {
                 "Delete Test"
         };
         showDialog(new AlertDialog.Builder(activity, getResourceProvider())
-                .setTitle(test.title)
+                .setTitle(EveAnimatedEmojiHelper.decode(test.title, null))
                 .setItems(actions, (d, which) -> {
                     switch (which) {
                         case 0:
@@ -557,7 +557,7 @@ public class EveAdminGeneratedTestsFragment extends BaseFragment {
         container.addView(hoursInput, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
 
         showDialog(new AlertDialog.Builder(activity, getResourceProvider())
-                .setTitle("Schedule: " + test.title)
+                .setTitle("Schedule: " + EveAnimatedEmojiHelper.stripMarkupToPlainText(test.title))
                 .setView(container)
                 .setPositiveButton("Schedule", (d, w) -> {
                     int hrs = 0;
@@ -632,7 +632,7 @@ public class EveAdminGeneratedTestsFragment extends BaseFragment {
         if (activity == null) return;
         showDialog(new AlertDialog.Builder(activity, getResourceProvider())
                 .setTitle("Delete Mock Test?")
-                .setMessage("Delete \"" + test.title + "\" permanently? This action cannot be undone.")
+                .setMessage("Delete \"" + EveAnimatedEmojiHelper.stripMarkupToPlainText(test.title) + "\" permanently? This action cannot be undone.")
                 .setPositiveButton(LocaleController.getString(R.string.Delete), (d, w) -> {
                     EveAdminRepository.ResultCallback<String> cb = new EveAdminRepository.ResultCallback<String>() {
                         @Override

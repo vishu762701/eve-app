@@ -83,9 +83,9 @@ test("broadcast limit remains bounded to 100 for positive large values", async (
 test("broadcast creation rejects empty, overlong and non-string data before D1 writes", async () => {
   const valid = { title: "Title", message: "Message", targetCategory: "All Users" };
   for (const bad of [
-    { ...valid, title: "" },
+    { title: "", message: "", stickerDocId: "" },
     { ...valid, title: "x".repeat(121) },
-    { ...valid, message: "" },
+    { ...valid, title: { fake: true } },
     { ...valid, message: "x".repeat(4001) },
     { ...valid, message: { fake: true } },
     { ...valid, targetCategory: "x".repeat(101) },
@@ -94,6 +94,20 @@ test("broadcast creation rejects empty, overlong and non-string data before D1 w
   ]) {
     const res = await requestAsAdmin("POST", "/api/broadcasts", bad);
     assert.equal(res.status, 400, JSON.stringify(bad).slice(0,80));
+  }
+});
+
+test("broadcast creation allows optional empty title, emoji-only and sticker-only messages", async () => {
+  for (const okPayload of [
+    { title: "", message: "Normal chat-style announcement", targetCategory: "All Users" },
+    { message: "🔥💯🚀", targetCategory: "All Users" },
+    { title: "", message: "", stickerDocId: "5370900756396187492", stickerAccessHash: "123", stickerDcId: 5, stickerEmoji: "🔥" }
+  ]) {
+    const res = await requestAsAdmin("POST", "/api/broadcasts", okPayload, () => ({
+      bind: () => ({})
+    }));
+    // requestAsAdmin mocks DB without batch unless overridden; verify validation passed (not 400)
+    assert.notEqual(res.status, 400, JSON.stringify(okPayload));
   }
 });
 

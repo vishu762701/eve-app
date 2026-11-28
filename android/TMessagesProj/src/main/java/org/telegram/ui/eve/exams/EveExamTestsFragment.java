@@ -13,6 +13,7 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import org.json.JSONObject;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.R;
@@ -20,29 +21,36 @@ import org.telegram.ui.ActionBar.ActionBar;
 import org.telegram.ui.ActionBar.ActionBarMenuItem;
 import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.BaseFragment;
-import org.telegram.ui.ActionBar.BottomSheet;
 import org.telegram.ui.ActionBar.SimpleActionBarMenu;
 import org.telegram.ui.ActionBar.SimpleActionBarMenuItem;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.BulletinFactory;
 import org.telegram.ui.Components.FlickerLoadingView;
 import org.telegram.ui.Components.IconBackgroundColors;
+import org.telegram.ui.Components.ItemOptions;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.RecyclerListView;
 import org.telegram.ui.Components.UItem;
 import org.telegram.ui.Components.UniversalAdapter;
 import org.telegram.ui.Components.UniversalRecyclerView;
 import org.telegram.ui.SettingsActivity;
-import org.telegram.ui.eve.admin.EveAnimatedEmojiHelper;
+import org.telegram.ui.eve.admin.EveAdminConfig;
+import org.telegram.ui.eve.admin.EveAdminExamDetailFragment;
+import org.telegram.ui.eve.admin.EveAdminExamPromptFragment;
+import org.telegram.ui.eve.admin.EveAdminModels;
+import org.telegram.ui.eve.admin.EveAdminRepository;
 import org.telegram.ui.eve.admin.EveAdminUiChrome;
+import org.telegram.ui.eve.admin.EveAnimatedEmojiHelper;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -55,11 +63,15 @@ public class EveExamTestsFragment extends BaseFragment {
 
     private static final int MENU_SEARCH = 1;
     private static final int MENU_MORE = 2;
+    private static final int MENU_ADMIN_ADD = 3;
     private static final int SUB_LEADERBOARD = 101;
     private static final int SUB_HISTORY = 102;
     private static final int SUB_ANNOUNCEMENTS = 103;
     private static final int SUB_EXAM_INFO = 104;
     private static final int SUB_DOWNLOAD_SYLLABUS = 105;
+    private static final int SUB_MANAGE_EXAM = 106;
+    private static final int SUB_GENERATE_AI_TEST = 107;
+    private static final int SUB_ASSEMBLE_BANK = 108;
 
     private static final int ID_RETRY = 200;
     private static final int BASE_TEST_ID = 1000;
@@ -67,14 +79,68 @@ public class EveExamTestsFragment extends BaseFragment {
     private final EveExamModels.ExamSummary exam;
     private UniversalRecyclerView listView;
     private SimpleActionBarMenuItem searchItem;
+    private SimpleActionBarMenuItem adminAddItem;
+    @Nullable
+    private EveAdminUiChrome.AvatarHeaderHandle avatarHeader;
     private List<EveExamModels.GeneratedTestSummary> tests = Collections.emptyList();
     private final List<EveExamModels.GeneratedTestSummary> liveTests = new ArrayList<>();
     private final List<EveExamModels.GeneratedTestSummary> filteredTests = new ArrayList<>();
+    private final Map<String, EveExamModels.AttemptResult> latestAttemptsByKey = new HashMap<>();
     private boolean loading = true;
     private boolean destroyed = false;
     private String errorMessage = "";
     private String searchQuery = "";
     private final EveAdminUiChrome.AutoSyncController autoSync = new EveAdminUiChrome.AutoSyncController(this::loadAll);
+
+    public static final class SmartTestRowMeta {
+        public final String subtitle;
+        public final String badge;
+        public final int badgeStyle;
+
+        public SmartTestRowMeta(String subtitle, String badge, int badgeStyle) {
+            this.subtitle = subtitle != null ? subtitle : "";
+            this.badge = badge != null ? badge : "";
+            this.badgeStyle = badgeStyle;
+        }
+    }
+
+    public static SmartTestRowMeta buildSmartTestRowMeta(
+            @NonNull EveExamModels.GeneratedTestSummary test,
+            @Nullable EveExamModels.ExamSummary exam,
+            @Nullable EveExamModels.AttemptResult attempt,
+            long nowMs) {
+        if (!test.isLive()) {
+            int qCount = test.questionCount > 0 ? test.questionCount : (exam != null ? exam.questionCount : 0);
+            String sub = qCount > 0 ? ("Draft • " + qCount + " Qs") : "Draft";
+            return new SmartTestRowMeta(sub, "Draft", EveAdminUiChrome.AvatarRowCell.BADGE_RED);
+        }
+        if (test.availableFromMs > nowMs) {
+            SimpleDateFormat fmt = new SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault());
+            return new SmartTestRowMeta(
+                    "Opens " + fmt.format(new Date(test.availableFromMs)),
+                    "Scheduled",
+                    EveAdminUiChrome.AvatarRowCell.BADGE_NEUTRAL);
+        }
+        if (attempt != null) {
+            String scoreStr = (attempt.score == Math.rint(attempt.score))
+                    ? String.valueOf((long) attempt.score)
+                    : String.format(Locale.US, "%.1f", attempt.score);
+            int pct = attempt.total > 0
+                    ? Math.max(0, (int) Math.round((attempt.score * 100.0) / attempt.total))
+                    : Math.max(0, attempt.getAccuracyPercent());
+            String sub = String.format(Locale.US, "\u2713 Scored %s/%d \u2022 %d%%", scoreStr, attempt.total, pct);
+            return new SmartTestRowMeta(sub, "Retake", EveAdminUiChrome.AvatarRowCell.BADGE_GREEN);
+        }
+        String unattemptedSub = (test.questionCount > 0 && exam != null && exam.questionCount > 0
+                && test.questionCount != exam.questionCount)
+                ? (test.questionCount + " Qs")
+                : "";
+        return new SmartTestRowMeta(unattemptedSub, "Start Test", EveAdminUiChrome.AvatarRowCell.BADGE_BLUE);
+    }
+
+    private boolean isExamAdmin() {
+        return EveAdminUiChrome.hasCachedAdminRight(EveAdminModels.RIGHT_MANAGE_EXAMS);
+    }
 
     public EveExamTestsFragment(EveExamModels.ExamSummary exam) {
         this.exam = exam;
@@ -123,7 +189,7 @@ public class EveExamTestsFragment extends BaseFragment {
         setHasOwnBackground(true);
 
         String title = exam != null && !exam.examName.isEmpty() ? exam.examName : "Exam";
-        String subtitle = buildCompactSubtitle();
+        String subtitle = buildHeaderMetadataSubtitle();
 
         EveAdminUiChrome.Chrome chrome = EveAdminUiChrome.setup(
                 this,
@@ -135,8 +201,10 @@ public class EveExamTestsFragment extends BaseFragment {
                 title,
                 subtitle,
                 false,
+                false,
                 this::fillItems,
                 this::onClick,
+                this::onLongClick,
                 new ActionBar.ActionBarMenuOnItemClick() {
                     @Override
                     public void onItemClick(int id) {
@@ -162,15 +230,54 @@ public class EveExamTestsFragment extends BaseFragment {
                                         exam.syllabusFileName
                                 );
                             }
+                        } else if (id == SUB_MANAGE_EXAM) {
+                            openExamAdminDetail();
+                        } else if (id == SUB_GENERATE_AI_TEST) {
+                            openGenerateAiMockTest();
+                        } else if (id == SUB_ASSEMBLE_BANK) {
+                            assembleTestFromBankNow();
                         }
                     }
                 },
-                null
+                () -> {
+                    if (avatarHeader != null) {
+                        avatarHeader.updateColors();
+                    }
+                }
         );
         listView = chrome.listView;
 
+        boolean examAdmin = isExamAdmin();
         if (simpleActionBar != null) {
+            avatarHeader = EveAdminUiChrome.attachAvatarActionBarHeader(
+                    context,
+                    simpleActionBar,
+                    examAdmin ? 132 : 92,
+                    getResourceProvider());
+            if (avatarHeader != null) {
+                avatarHeader.update(
+                        exam != null ? exam.id : "",
+                        title,
+                        subtitle,
+                        exam != null ? exam.avatarUrl : "",
+                        exam != null ? exam.avatarEmoji : "",
+                        exam != null ? exam.avatarColor : -1);
+                avatarHeader.setOnClickListener(v -> {
+                    if (isExamAdmin()) {
+                        openExamAdminDetail();
+                    } else {
+                        showExamInfoDialog();
+                    }
+                });
+            }
+
             SimpleActionBarMenu menu = simpleActionBar.createMenu();
+            if (examAdmin) {
+                adminAddItem = menu.addItem(MENU_ADMIN_ADD, R.drawable.msg_add, getResourceProvider());
+                adminAddItem.addSubItem(SUB_MANAGE_EXAM, R.drawable.msg_settings, "Manage Exam");
+                adminAddItem.addSubItem(SUB_GENERATE_AI_TEST, R.drawable.msg_add, "Generate AI Mock Test");
+                adminAddItem.addSubItem(SUB_ASSEMBLE_BANK, R.drawable.msg_list, "Assemble from Question Bank");
+            }
             searchItem = menu.addItem(MENU_SEARCH, R.drawable.outline_header_search, getResourceProvider());
             searchItem.setIsSearchField(true)
                     .setActionBarMenuItemSearchListener(new ActionBarMenuItem.ActionBarMenuItemSearchListener() {
@@ -202,6 +309,22 @@ public class EveExamTestsFragment extends BaseFragment {
             }
         }
 
+        hydrateAttemptHistory(EveExamRepository.getInstance().getCachedAttemptHistory());
+        if (EveAdminConfig.isAdminAvailable() && EveAdminRepository.getInstance().getCachedSnapshot() == null) {
+            EveAdminRepository.getInstance().loadDashboardAsync(new EveAdminRepository.ResultCallback<EveAdminModels.DashboardSnapshot>() {
+                @Override
+                public void onSuccess(EveAdminModels.DashboardSnapshot data) {
+                    if (!destroyed) {
+                        loadAll();
+                    }
+                }
+
+                @Override
+                public void onError(String message, int httpStatus) {
+                }
+            });
+        }
+
         fragmentView = chrome.rootView;
         loadAll();
         return chrome.rootView;
@@ -227,36 +350,49 @@ public class EveExamTestsFragment extends BaseFragment {
     }
 
     private void loadAll() {
+        hydrateAttemptHistory(EveExamRepository.getInstance().getCachedAttemptHistory());
+        EveExamRepository.getInstance().loadAttemptHistory((list, err) -> {
+            if (destroyed || list == null) return;
+            hydrateAttemptHistory(list);
+            updateList();
+        });
         loadTests();
     }
 
-    private String buildCompactSubtitle() {
+    private void hydrateAttemptHistory(@Nullable List<EveExamModels.AttemptResult> history) {
+        if (history == null) return;
+        for (EveExamModels.AttemptResult item : history) {
+            if (item == null || TextUtils.isEmpty(item.examId)) continue;
+            EveExamModels.AttemptResult prev = latestAttemptsByKey.get(item.examId);
+            if (prev == null || item.timestampMs >= prev.timestampMs) {
+                latestAttemptsByKey.put(item.examId, item);
+            }
+        }
+    }
+
+    private String buildHeaderMetadataSubtitle() {
         if (exam == null) {
             return "Mock Tests";
         }
-        StringBuilder sb = new StringBuilder();
-        sb.append(exam.category)
-                .append(" • ").append(exam.timeLimitMinutes).append(" min")
-                .append(" • ").append(exam.questionCount).append(" Qs");
-        String neg = exam.negativeMarkingText != null ? exam.negativeMarkingText.trim() : "";
-        if (!neg.isEmpty() && !"0".equals(neg) && !"0.0".equals(neg)) {
-            sb.append(" • -").append(neg);
-        }
-        return sb.toString();
+        return String.format(Locale.US, "%d min \u2022 %d Qs",
+                Math.max(1, exam.timeLimitMinutes),
+                Math.max(1, exam.questionCount));
     }
 
     private void loadTests() {
         if (exam == null) {
             loading = false;
+            updateList();
             return;
         }
+        final boolean adminMode = isExamAdmin();
         if (tests.isEmpty()) {
             List<EveExamModels.GeneratedTestSummary> cached = EveExamRepository.getInstance().getCachedTestsForExam(exam.id);
             if (cached != null && !cached.isEmpty()) {
                 tests = cached;
                 liveTests.clear();
                 for (EveExamModels.GeneratedTestSummary t : tests) {
-                    if (t != null && t.isLive()) {
+                    if (t != null && (adminMode || t.isLive())) {
                         liveTests.add(t);
                     }
                 }
@@ -278,7 +414,7 @@ public class EveExamTestsFragment extends BaseFragment {
             String nextErr = err != null ? err : "";
             List<EveExamModels.GeneratedTestSummary> nextLive = new ArrayList<>();
             for (EveExamModels.GeneratedTestSummary t : nextTests) {
-                if (t != null && t.isLive()) {
+                if (t != null && (adminMode || t.isLive())) {
                     nextLive.add(t);
                 }
             }
@@ -434,18 +570,13 @@ public class EveExamTestsFragment extends BaseFragment {
             return;
         }
 
-        SimpleDateFormat fmt = new SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault());
         long nowMs = System.currentTimeMillis();
-        int durationMins = exam.timeLimitMinutes > 0 ? exam.timeLimitMinutes : 30;
 
         for (int i = 0; i < filteredTests.size(); i++) {
             EveExamModels.GeneratedTestSummary test = filteredTests.get(i);
-            int qCount = test.questionCount > 0 ? test.questionCount : exam.questionCount;
-            boolean isScheduled = test.availableFromMs > nowMs;
-            String subtitle = isScheduled
-                    ? ("Opens " + fmt.format(new Date(test.availableFromMs)))
-                    : (qCount + " Qs • " + durationMins + " min");
-            String badge = isScheduled ? "Scheduled" : LocaleController.getString(R.string.EveStartTest);
+            String attemptKey = EveExamModels.buildAttemptKey(exam.id, test.id);
+            EveExamModels.AttemptResult attempt = latestAttemptsByKey.get(attemptKey);
+            SmartTestRowMeta meta = buildSmartTestRowMeta(test, exam, attempt, nowMs);
 
             items.add(EveAdminUiChrome.AvatarRowCell.Factory.of(
                     BASE_TEST_ID + i,
@@ -453,14 +584,12 @@ public class EveExamTestsFragment extends BaseFragment {
                     new EveAdminUiChrome.AvatarRowCell.Payload(
                             test.id,
                             test.getDisplayTitle(),
-                            subtitle,
+                            meta.subtitle,
                             test.avatarUrl,
                             test.avatarEmoji,
                             test.avatarColor,
-                            badge,
-                            isScheduled
-                                    ? EveAdminUiChrome.AvatarRowCell.BADGE_NEUTRAL
-                                    : EveAdminUiChrome.AvatarRowCell.BADGE_BLUE)));
+                            meta.badge,
+                            meta.badgeStyle)));
         }
     }
 
@@ -473,6 +602,136 @@ public class EveExamTestsFragment extends BaseFragment {
         if (idx >= 0 && idx < filteredTests.size()) {
             openTestLaunchDialog(filteredTests.get(idx));
         }
+    }
+
+    private boolean onLongClick(UItem item, View view, int position, float x, float y) {
+        if (!isExamAdmin() || item == null || item.id < BASE_TEST_ID) {
+            return false;
+        }
+        int idx = item.id - BASE_TEST_ID;
+        if (idx < 0 || idx >= filteredTests.size()) {
+            return false;
+        }
+        EveExamModels.GeneratedTestSummary selected = filteredTests.get(idx);
+        boolean isLive = selected.isLive();
+        ItemOptions options = ItemOptions.makeOptions(this, view);
+        options.add(
+                isLive ? R.drawable.msg_archive : R.drawable.msg_folders,
+                isLive ? "Move to Draft" : "Publish Live",
+                () -> toggleTestStatus(selected, isLive ? "paused" : "live"));
+        options.add(
+                R.drawable.msg_delete,
+                "Delete Test",
+                () -> confirmDeleteTest(selected));
+        options.makeRed(1);
+        options.show();
+        return true;
+    }
+
+    private void openExamAdminDetail() {
+        EveAdminModels.AdminExamItem adminExam = EveAdminUiChrome.resolveAdminExamItem(exam);
+        if (adminExam == null) return;
+        EveAdminRepository.ExamsCatalogData catalog = EveAdminRepository.getInstance().getCachedExamsCatalog();
+        presentFragment(new EveAdminExamDetailFragment(
+                adminExam,
+                catalog != null ? catalog.generatedTests : null,
+                this::loadAll));
+    }
+
+    private void openGenerateAiMockTest() {
+        EveAdminModels.AdminExamItem adminExam = EveAdminUiChrome.resolveAdminExamItem(exam);
+        if (adminExam == null) return;
+        EveAdminRepository.ExamsCatalogData catalog = EveAdminRepository.getInstance().getCachedExamsCatalog();
+        presentFragment(new EveAdminExamPromptFragment(
+                adminExam,
+                catalog != null ? catalog.exams : Collections.singletonList(adminExam),
+                this::loadAll));
+    }
+
+    private void assembleTestFromBankNow() {
+        if (destroyed || exam == null) return;
+        BulletinFactory.of(this).createSimpleBulletin(R.raw.info, "Assembling test from Question Bank...").show();
+        EveAdminRepository repo = EveAdminRepository.getInstance();
+        EveAdminRepository.ResultCallback<JSONObject> cb = new EveAdminRepository.ResultCallback<JSONObject>() {
+            @Override
+            public void onSuccess(JSONObject root) {
+                if (destroyed) return;
+                BulletinFactory.of(EveExamTestsFragment.this)
+                        .createSimpleBulletin(R.raw.contact_check, "Mock test assembled").show();
+                loadAll();
+            }
+
+            @Override
+            public void onError(String message, int httpStatus) {
+                if (destroyed) return;
+                BulletinFactory.of(EveExamTestsFragment.this)
+                        .createErrorBulletin(message != null ? message : "Assemble failed.").show();
+            }
+        };
+        repo.runWithAdminToken(cb, token -> repo.postSuccess(cb,
+                repo.assembleTestFromBank(token, exam.id, exam.questionCount, exam.testNumber)));
+    }
+
+    private void toggleTestStatus(EveExamModels.GeneratedTestSummary selected, String nextStatus) {
+        if (destroyed || selected == null) return;
+        EveAdminRepository repo = EveAdminRepository.getInstance();
+        EveAdminRepository.ResultCallback<String> cb = new EveAdminRepository.ResultCallback<String>() {
+            @Override
+            public void onSuccess(String msg) {
+                if (destroyed) return;
+                repo.invalidateCache();
+                BulletinFactory.of(EveExamTestsFragment.this)
+                        .createSimpleBulletin(R.raw.contact_check, msg).show();
+                loadAll();
+            }
+
+            @Override
+            public void onError(String message, int httpStatus) {
+                if (destroyed) return;
+                BulletinFactory.of(EveExamTestsFragment.this)
+                        .createErrorBulletin(message != null ? message : "Update failed.").show();
+            }
+        };
+        repo.runWithAdminToken(cb, token -> {
+            repo.updateGeneratedTestStatus(token, selected.id, nextStatus);
+            repo.postSuccess(cb, "live".equals(nextStatus) ? "Test published live." : "Test moved to draft.");
+        });
+    }
+
+    private void confirmDeleteTest(EveExamModels.GeneratedTestSummary selected) {
+        Activity activity = getParentActivity();
+        if (activity == null || selected == null) return;
+        String safeTitle = EveAnimatedEmojiHelper.stripMarkupToPlainText(selected.getDisplayTitle());
+        showDialog(new AlertDialog.Builder(activity, getResourceProvider())
+                .setTitle("Delete Mock Test?")
+                .setMessage("Delete \"" + safeTitle + "\" permanently? This action cannot be undone.")
+                .setPositiveButton(LocaleController.getString(R.string.Delete), (d, w) -> {
+                    EveAdminRepository repo = EveAdminRepository.getInstance();
+                    EveAdminRepository.ResultCallback<String> cb = new EveAdminRepository.ResultCallback<String>() {
+                        @Override
+                        public void onSuccess(String msg) {
+                            if (destroyed) return;
+                            repo.invalidateCache();
+                            BulletinFactory.of(EveExamTestsFragment.this)
+                                    .createSimpleBulletin(R.raw.ic_delete, msg).show();
+                            loadAll();
+                        }
+
+                        @Override
+                        public void onError(String message, int httpStatus) {
+                            if (destroyed) return;
+                            BulletinFactory.of(EveExamTestsFragment.this)
+                                    .createErrorBulletin(message != null ? message : "Delete failed.").show();
+                        }
+                    };
+                    repo.runWithAdminToken(cb, token -> {
+                        repo.deleteGeneratedTest(token, selected.id);
+                        repo.postSuccess(cb, "Mock test deleted.");
+                    });
+                })
+                .setNegativeButton(LocaleController.getString(R.string.Cancel), null)
+                .makeRed(AlertDialog.BUTTON_POSITIVE)
+                .create());
     }
 
     private void showExamInfoDialog() {
@@ -511,73 +770,71 @@ public class EveExamTestsFragment extends BaseFragment {
                 ? "No Negative Marking"
                 : ("Negative Marking (-" + neg + ")");
         String metadata = qCount + " Qs • " + mins + " min • " + negMeta;
+        EveExamModels.AttemptResult pastAttempt = latestAttemptsByKey.get(attemptKey);
 
-        BottomSheet sheet = new BottomSheet(activity, false, rp);
-        sheet.setApplyTopPadding(false);
-        sheet.setApplyBottomPadding(false);
-
-        LinearLayout container = new LinearLayout(activity);
-        container.setOrientation(LinearLayout.VERTICAL);
-        container.setPadding(
-                AndroidUtilities.dp(20),
-                AndroidUtilities.dp(20),
-                AndroidUtilities.dp(20),
-                AndroidUtilities.dp(16) + AndroidUtilities.navigationBarHeight
-        );
-        container.setBackgroundColor(Theme.getColor(Theme.key_dialogBackground, rp));
-
-        TextView titleView = EveAnimatedEmojiHelper.createEmojiTextView(activity);
-        EveAnimatedEmojiHelper.bindText(titleView, selected.getDisplayTitle());
-        titleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 19);
-        titleView.setTypeface(AndroidUtilities.bold());
-        titleView.setTextColor(Theme.getColor(Theme.key_dialogTextBlack, rp));
-        titleView.setGravity(Gravity.START);
-        container.addView(titleView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 6));
+        LinearLayout content = new LinearLayout(activity);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(AndroidUtilities.dp(22), AndroidUtilities.dp(4), AndroidUtilities.dp(22), AndroidUtilities.dp(14));
 
         TextView metaView = new TextView(activity);
         metaView.setText(metadata);
         metaView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
         metaView.setTextColor(Theme.getColor(Theme.key_dialogTextGray3, rp));
-        metaView.setGravity(Gravity.START);
-        container.addView(metaView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 18));
+        content.addView(metaView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, pastAttempt != null ? 4 : 16));
 
-        int primaryBg = Theme.getColor(Theme.key_featuredStickers_addButton, rp);
-        int primaryFg = Theme.getColor(Theme.key_featuredStickers_buttonText, rp);
-        int secondaryBg = Theme.getColor(Theme.key_windowBackgroundGray, rp);
-        int secondaryFg = Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, rp);
+        if (pastAttempt != null) {
+            TextView prevView = new TextView(activity);
+            String scoreStr = (pastAttempt.score == Math.rint(pastAttempt.score))
+                    ? String.valueOf((long) pastAttempt.score)
+                    : String.format(Locale.US, "%.1f", pastAttempt.score);
+            int pct = pastAttempt.total > 0
+                    ? Math.max(0, (int) Math.round((pastAttempt.score * 100.0) / pastAttempt.total))
+                    : Math.max(0, pastAttempt.getAccuracyPercent());
+            prevView.setText(String.format(Locale.US, "\u2713 Previous: Scored %s/%d (%d%%)", scoreStr, pastAttempt.total, pct));
+            prevView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
+            prevView.setTypeface(AndroidUtilities.bold());
+            prevView.setTextColor(0xFF27B434);
+            content.addView(prevView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 14));
+        }
+
+        int blue = Theme.getColor(Theme.key_featuredStickers_addButton, rp);
+        int blueFg = Theme.getColor(Theme.key_featuredStickers_buttonText, rp);
+        int blueSecondary = Theme.getColor(Theme.key_windowBackgroundWhiteBlueText, rp);
         int redFg = Theme.getColor(Theme.key_text_RedBold, rp);
+
+        final AlertDialog[] dialogHolder = new AlertDialog[1];
 
         TextView startBtn = new TextView(activity);
         startBtn.setText(LocaleController.getString(R.string.EveStartTest));
         startBtn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15.5f);
         startBtn.setTypeface(AndroidUtilities.bold());
-        startBtn.setTextColor(primaryFg);
+        startBtn.setTextColor(blueFg);
         startBtn.setGravity(Gravity.CENTER);
         startBtn.setBackground(Theme.createSimpleSelectorRoundRectDrawable(
-                AndroidUtilities.dp(12),
-                primaryBg,
-                Theme.multAlpha(primaryBg, 0.85f)));
+                AndroidUtilities.dp(10),
+                blue,
+                Theme.multAlpha(blue, 0.85f)));
         startBtn.setOnClickListener(v -> {
-            sheet.dismiss();
+            if (dialogHolder[0] != null) dialogHolder[0].dismiss();
             presentFragment(new EveTestPlayerFragment(exam, selected));
         });
-        container.addView(startBtn, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48, 0, 0, 0, 10));
+        content.addView(startBtn, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 46, 0, 0, 0, 8));
 
         TextView leaderboardBtn = new TextView(activity);
         leaderboardBtn.setText(LocaleController.getString(R.string.EveLeaderboard));
         leaderboardBtn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
         leaderboardBtn.setTypeface(AndroidUtilities.bold());
-        leaderboardBtn.setTextColor(secondaryFg);
+        leaderboardBtn.setTextColor(blueSecondary);
         leaderboardBtn.setGravity(Gravity.CENTER);
         leaderboardBtn.setBackground(Theme.createSimpleSelectorRoundRectDrawable(
-                AndroidUtilities.dp(12),
-                secondaryBg,
-                Theme.multAlpha(primaryBg, 0.14f)));
+                AndroidUtilities.dp(10),
+                Theme.multAlpha(blueSecondary, 0.11f),
+                Theme.multAlpha(blueSecondary, 0.22f)));
         leaderboardBtn.setOnClickListener(v -> {
-            sheet.dismiss();
+            if (dialogHolder[0] != null) dialogHolder[0].dismiss();
             presentFragment(new EveLeaderboardFragment(attemptKey, selected.getDisplayTitle()));
         });
-        container.addView(leaderboardBtn, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 46, 0, 0, 0, 6));
+        content.addView(leaderboardBtn, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 44, 0, 0, 0, 6));
 
         TextView cancelBtn = new TextView(activity);
         cancelBtn.setText(LocaleController.getString(R.string.Cancel));
@@ -586,13 +843,19 @@ public class EveExamTestsFragment extends BaseFragment {
         cancelBtn.setTextColor(redFg);
         cancelBtn.setGravity(Gravity.CENTER);
         cancelBtn.setBackground(Theme.createSimpleSelectorRoundRectDrawable(
-                AndroidUtilities.dp(12),
+                AndroidUtilities.dp(10),
                 0,
                 Theme.multAlpha(redFg, 0.10f)));
-        cancelBtn.setOnClickListener(v -> sheet.dismiss());
-        container.addView(cancelBtn, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 44));
+        cancelBtn.setOnClickListener(v -> {
+            if (dialogHolder[0] != null) dialogHolder[0].dismiss();
+        });
+        content.addView(cancelBtn, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 42));
 
-        sheet.setCustomView(container);
-        showDialog(sheet);
+        AlertDialog dialog = new AlertDialog.Builder(activity, rp)
+                .setTitle(EveAnimatedEmojiHelper.decode(selected.getDisplayTitle(), null))
+                .setView(content)
+                .create();
+        dialogHolder[0] = dialog;
+        showDialog(dialog);
     }
 }

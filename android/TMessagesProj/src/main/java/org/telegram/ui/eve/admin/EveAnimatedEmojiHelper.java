@@ -686,6 +686,8 @@ public final class EveAnimatedEmojiHelper {
             };
             sheet.setApplyTopPadding(false);
             sheet.setApplyBottomPadding(false);
+            sheet.setCanDismissWithSwipe(false);
+            sheet.setAllowNestedScroll(false);
 
             LinearLayout wrapper = new LinearLayout(context);
             wrapper.setOrientation(LinearLayout.VERTICAL);

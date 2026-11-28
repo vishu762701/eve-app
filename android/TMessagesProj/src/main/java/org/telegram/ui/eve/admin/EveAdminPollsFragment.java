@@ -294,7 +294,7 @@ public class EveAdminPollsFragment extends BaseFragment {
         if (activity == null) return;
         AlertDialog.Builder builder = new AlertDialog.Builder(activity, getResourceProvider());
         builder.setTitle("Delete Poll");
-        builder.setMessage("Delete \"" + poll.question + "\" and all recorded votes?");
+        builder.setMessage("Delete \"" + EveAnimatedEmojiHelper.stripMarkupToPlainText(poll.question) + "\" and all recorded votes?");
         builder.setPositiveButton("Delete", (d, w) -> {
             final List<EveAdminModels.PollItem> previous = new ArrayList<>(polls);
             List<EveAdminModels.PollItem> optimistic = new ArrayList<>(polls.size());

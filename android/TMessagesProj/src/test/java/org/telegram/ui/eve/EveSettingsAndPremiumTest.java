@@ -88,4 +88,33 @@ public class EveSettingsAndPremiumTest {
         assertNotNull(qr);
         assertEquals(128, qr.getWidth());
     }
+
+    @Test
+    public void hiddenAdminItems_areRemovedFromRegularSettingsAndGatedBehindFooterPortal() {
+        assertFalse(SettingsActivity.isEveSettingsItemEnabled(28));
+        assertFalse(SettingsActivity.isEveSettingsItemEnabled(29));
+        assertFalse(SettingsActivity.isEveSettingsItemEnabled(SettingsActivity.EVE_SETTINGS_ITEM_TELEGRAM_CHAT));
+        assertTrue(SettingsActivity.isEveSettingsItemEnabled(SettingsActivity.EVE_SETTINGS_ITEM_PREMIUM));
+
+        int taps = 0;
+        long now = 1000L;
+        for (int i = 0; i < 7; i++) {
+            taps = SettingsActivity.advanceFooterTapCount(taps, now, now + 200L);
+            now += 200L;
+        }
+        assertEquals(7, taps);
+        assertEquals(1, SettingsActivity.advanceFooterTapCount(taps, now, now + 3000L));
+
+        int longPresses = SettingsActivity.advanceFooterLongPressCount(1, 1000L, 2500L);
+        assertEquals(2, longPresses);
+        assertEquals(1, SettingsActivity.advanceFooterLongPressCount(1, 1000L, 6000L));
+
+        assertEquals(
+                java.util.Arrays.asList("EVE Admin Control Center", "EVE Cloud Account", "Telegram Chat & Sync"),
+                org.telegram.ui.eve.admin.EveHiddenAdminPortalFragment.getHiddenPortalItemTitles());
+        assertEquals(
+                "Access denied — Admin or Owner account required",
+                org.telegram.ui.eve.admin.EveHiddenAdminPortalFragment.ACCESS_DENIED_MESSAGE);
+        assertFalse(new org.telegram.ui.eve.admin.EveHiddenAdminPortalFragment().onFragmentCreate());
+    }
 }

@@ -412,5 +412,40 @@ public class EveStudentExamExecutionTest {
         assertEquals("News [tg_emoji:123:📢]", chDialog.name);
         assertEquals(animDesc, chDialog.avatarEmoji);
         assertEquals(0, chDialog.date);
+
+        // 11. EveTestPlayerFragment null-safe title/createView, Smart Mock Test rows & compact Banner height lock
+        assertEquals("Hello - Test 1", EveTestPlayerFragment.resolveSafeTitle(launchExam, launchTest));
+        assertEquals("Mock Test", EveTestPlayerFragment.resolveSafeTitle(null, null));
+        assertTrue(playerFragment.createView(null) == null);
+
+        EveExamTestsFragment.SmartTestRowMeta unattemptedDefault =
+                EveExamTestsFragment.buildSmartTestRowMeta(launchTest, launchExam, null, 2000L);
+        assertEquals("", unattemptedDefault.subtitle);
+        assertEquals("Start Test", unattemptedDefault.badge);
+
+        EveExamModels.GeneratedTestSummary customCountTest = new EveExamModels.GeneratedTestSummary(
+                "gt-custom", "ex-launch", "SSC", "Mini Test 2", "Mini Test 2", 1000L, "live", 15, 0L);
+        EveExamTestsFragment.SmartTestRowMeta unattemptedCustom =
+                EveExamTestsFragment.buildSmartTestRowMeta(customCountTest, launchExam, null, 2000L);
+        assertEquals("15 Qs", unattemptedCustom.subtitle);
+        assertEquals("Start Test", unattemptedCustom.badge);
+
+        EveExamModels.AttemptResult sampleAttempt = new EveExamModels.AttemptResult(
+                "att-1", "ex-launch__gt-1", "SSC", "SSC", "Student",
+                16.5, 20, 17, 2, 1, 5000L, 600, 1, java.util.Collections.emptyList());
+        EveExamTestsFragment.SmartTestRowMeta attemptedMeta =
+                EveExamTestsFragment.buildSmartTestRowMeta(launchTest, launchExam, sampleAttempt, 2000L);
+        assertTrue(attemptedMeta.subtitle.contains("Scored 16.5/20"));
+        assertTrue(attemptedMeta.subtitle.contains("83%"));
+        assertEquals("Retake", attemptedMeta.badge);
+
+        EveExamModels.GeneratedTestSummary draftTest = new EveExamModels.GeneratedTestSummary(
+                "gt-draft", "ex-launch", "SSC", "Draft 3", "Draft 3", 1000L, "paused", 20, 0L);
+        assertEquals("Draft", EveExamTestsFragment.buildSmartTestRowMeta(draftTest, launchExam, null, 2000L).badge);
+
+        assertEquals(EveHomeBannerCarouselView.computeBannerHeightPx() + org.telegram.messenger.AndroidUtilities.dp(12),
+                EveHomeBannerCarouselView.computeTotalHeightPx(1));
+        assertEquals(EveHomeBannerCarouselView.computeBannerHeightPx() + org.telegram.messenger.AndroidUtilities.dp(24),
+                EveHomeBannerCarouselView.computeTotalHeightPx(3));
     }
 }

@@ -2,6 +2,7 @@ package org.telegram.ui.eve.exams;
 
 import static org.telegram.messenger.AndroidUtilities.dp;
 
+import android.app.Activity;
 import android.content.Context;
 import android.text.TextUtils;
 import android.util.TypedValue;
@@ -20,6 +21,7 @@ import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.R;
 import org.telegram.ui.ActionBar.ActionBar;
 import org.telegram.ui.ActionBar.ActionBarMenuItem;
+import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.SimpleActionBarMenu;
 import org.telegram.ui.ActionBar.Theme;
@@ -30,7 +32,12 @@ import org.telegram.ui.Components.RecyclerListView;
 import org.telegram.ui.Components.UItem;
 import org.telegram.ui.Components.UniversalAdapter;
 import org.telegram.ui.Components.UniversalRecyclerView;
+import org.telegram.ui.eve.admin.EveAdminConfig;
+import org.telegram.ui.eve.admin.EveAdminExamDetailFragment;
+import org.telegram.ui.eve.admin.EveAdminModels;
+import org.telegram.ui.eve.admin.EveAdminRepository;
 import org.telegram.ui.eve.admin.EveAdminUiChrome;
+import org.telegram.ui.eve.admin.EveAnimatedEmojiHelper;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -50,6 +57,8 @@ public class EveSubExamsFragment extends BaseFragment {
 
     private final EveExamModels.ExamSummary parentExam;
     private UniversalRecyclerView listView;
+    @Nullable
+    private EveAdminUiChrome.AvatarHeaderHandle avatarHeader;
     private List<EveExamModels.ExamSummary> allSubExams = Collections.emptyList();
     private final List<EveExamModels.ExamSummary> filtered = new ArrayList<>();
     private String searchQuery = "";
@@ -105,6 +114,7 @@ public class EveSubExamsFragment extends BaseFragment {
         allSubExams = EveExamRepository.getInstance().getSubExamsForParent(parentExam.id);
         applyFilter("");
 
+        String metaSubtitle = buildParentMetaSubtitle();
         EveAdminUiChrome.Chrome chrome = EveAdminUiChrome.setup(
                 this,
                 context,
@@ -113,7 +123,7 @@ public class EveSubExamsFragment extends BaseFragment {
                 glassEngine,
                 getResourceProvider(),
                 parentExam.examName,
-                allSubExams.size() + " sub-exams",
+                metaSubtitle,
                 false,
                 this::fillItems,
                 this::onClick,
@@ -125,11 +135,31 @@ public class EveSubExamsFragment extends BaseFragment {
                         }
                     }
                 },
-                null
+                () -> {
+                    if (avatarHeader != null) {
+                        avatarHeader.updateColors();
+                    }
+                }
         );
         listView = chrome.listView;
 
         if (simpleActionBar != null) {
+            avatarHeader = EveAdminUiChrome.attachAvatarActionBarHeader(
+                    context,
+                    simpleActionBar,
+                    58,
+                    getResourceProvider());
+            if (avatarHeader != null) {
+                avatarHeader.update(
+                        parentExam.id,
+                        parentExam.examName,
+                        metaSubtitle,
+                        parentExam.avatarUrl,
+                        parentExam.avatarEmoji,
+                        parentExam.avatarColor);
+                avatarHeader.setOnClickListener(v -> onHeaderClicked());
+            }
+
             SimpleActionBarMenu menu = simpleActionBar.createMenu();
             menu.addItem(MENU_SEARCH, R.drawable.outline_header_search, getResourceProvider())
                     .setIsSearchField(true)
@@ -152,8 +182,57 @@ public class EveSubExamsFragment extends BaseFragment {
                     .setSearchFieldHint("Search sub-exams");
         }
 
+        if (EveAdminConfig.isAdminAvailable() && EveAdminRepository.getInstance().getCachedSnapshot() == null) {
+            EveAdminRepository.getInstance().loadDashboardAsync(new EveAdminRepository.ResultCallback<EveAdminModels.DashboardSnapshot>() {
+                @Override
+                public void onSuccess(EveAdminModels.DashboardSnapshot data) {
+                }
+
+                @Override
+                public void onError(String message, int httpStatus) {
+                }
+            });
+        }
+
         fragmentView = chrome.rootView;
         return chrome.rootView;
+    }
+
+    private String buildParentMetaSubtitle() {
+        return String.format(Locale.US, "%d min \u2022 %d Qs",
+                Math.max(1, parentExam.timeLimitMinutes),
+                Math.max(1, parentExam.questionCount));
+    }
+
+    private void onHeaderClicked() {
+        if (EveAdminUiChrome.hasCachedAdminRight(EveAdminModels.RIGHT_MANAGE_EXAMS)) {
+            EveAdminModels.AdminExamItem adminExam = EveAdminUiChrome.resolveAdminExamItem(parentExam);
+            if (adminExam != null) {
+                EveAdminRepository.ExamsCatalogData catalog = EveAdminRepository.getInstance().getCachedExamsCatalog();
+                presentFragment(new EveAdminExamDetailFragment(
+                        adminExam,
+                        catalog != null ? catalog.generatedTests : null,
+                        this::refreshFromRepo));
+                return;
+            }
+        }
+        Activity activity = getParentActivity();
+        if (activity == null) return;
+        StringBuilder sb = new StringBuilder();
+        sb.append(LocaleController.getString(R.string.EveCategory)).append(": ").append(parentExam.category).append("\n");
+        sb.append(LocaleController.getString(R.string.EveTimeLimit)).append(": ").append(parentExam.timeLimitMinutes).append(" min\n");
+        sb.append(LocaleController.getString(R.string.EveQuestionsPerTest)).append(": ").append(parentExam.questionCount).append("\n");
+        sb.append(LocaleController.getString(R.string.EveNegativeMarking)).append(": ").append(parentExam.negativeMarkingText).append("\n");
+        sb.append("Sub-Exams: ").append(allSubExams.size());
+        AlertDialog.Builder builder = new AlertDialog.Builder(activity, getResourceProvider());
+        builder.setTitle(EveAnimatedEmojiHelper.decode(parentExam.examName, null));
+        builder.setMessage(sb.toString());
+        if (parentExam.hasSyllabus()) {
+            builder.setNeutralButton("Syllabus PDF", (d, w) -> EvePdfHelper.downloadSyllabusPdf(
+                    EveSubExamsFragment.this, parentExam.id, parentExam.examName, parentExam.syllabusUrl, parentExam.syllabusFileName));
+        }
+        builder.setPositiveButton(LocaleController.getString(R.string.OK), null);
+        showDialog(builder.create());
     }
 
     @Override
@@ -194,10 +273,11 @@ public class EveSubExamsFragment extends BaseFragment {
                 filtered.add(item);
             }
         }
-        if (simpleActionBar != null) {
-            simpleActionBar.setSubtitle(q.isEmpty()
-                    ? allSubExams.size() + " sub-exams"
-                    : filtered.size() + " matching");
+        if (avatarHeader != null) {
+            String sub = q.isEmpty() ? buildParentMetaSubtitle() : (filtered.size() + " matching");
+            avatarHeader.update(
+                    parentExam.id, parentExam.examName, sub,
+                    parentExam.avatarUrl, parentExam.avatarEmoji, parentExam.avatarColor);
         }
         if (listView != null && listView.adapter != null) {
             listView.adapter.update(true);

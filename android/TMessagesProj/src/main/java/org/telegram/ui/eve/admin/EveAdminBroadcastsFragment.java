@@ -369,16 +369,23 @@ public class EveAdminBroadcastsFragment extends BaseFragment {
 
         for (int i = 0; i < broadcasts.size(); i++) {
             EveAdminModels.BroadcastItem b = broadcasts.get(i);
-            String preview = b.message;
+            String rawTitle = !TextUtils.isEmpty(b.title)
+                    ? b.title
+                    : (!TextUtils.isEmpty(b.stickerDocId) ? "\u2728 Animated Sticker" : "Announcement");
+            CharSequence decodedTitle = EveAnimatedEmojiHelper.decode(rawTitle, null);
+            String previewRaw = !TextUtils.isEmpty(b.message)
+                    ? b.message
+                    : (!TextUtils.isEmpty(b.stickerEmoji) ? b.stickerEmoji + " Sticker" : "");
             if (!TextUtils.isEmpty(b.sentBy)) {
-                preview = preview + " • " + b.sentBy;
+                previewRaw = previewRaw.isEmpty() ? b.sentBy : (previewRaw + " • " + b.sentBy);
             }
+            CharSequence decodedPreview = EveAnimatedEmojiHelper.decode(previewRaw, null);
             items.add(SettingsActivity.SettingCell.Factory.of(
                     BASE_ITEM_ID + i,
                     IconBackgroundColors.BLUE.top, IconBackgroundColors.BLUE.bottom,
                     R.drawable.msg_send,
-                    b.title,
-                    preview,
+                    decodedTitle,
+                    decodedPreview,
                     EveAdminUiChrome.formatDate(b.sentAt)));
         }
     }
@@ -520,7 +527,7 @@ public class EveAdminBroadcastsFragment extends BaseFragment {
         EveAnimatedEmojiHelper.SheetHost host = new EveAnimatedEmojiHelper.SheetHost(activity, "Send Broadcast Notification", rp);
 
         EditTextEmoji titleInput = EveAnimatedEmojiHelper.createEditTextEmoji(
-                activity, host.root, this, "Broadcast Title", "", false, rp);
+                activity, host.root, this, "Broadcast Title (Optional)", "", false, rp);
         host.formColumn.addView(titleInput, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 10));
 
         EditTextEmoji msgInput = EveAnimatedEmojiHelper.createEditTextEmoji(
@@ -596,8 +603,8 @@ public class EveAdminBroadcastsFragment extends BaseFragment {
         sendBtn.setOnClickListener(v -> {
             String title = EveAnimatedEmojiHelper.encode(titleInput.getText()).trim();
             String msg = EveAnimatedEmojiHelper.encode(msgInput.getText()).trim();
-            if (title.isEmpty() || msg.isEmpty()) {
-                BulletinFactory.of(this).createErrorBulletin("Title and message are required.").show();
+            if (title.isEmpty() && msg.isEmpty() && pickedSticker[0] == null) {
+                BulletinFactory.of(this).createErrorBulletin("Enter a title, message, or sticker.").show();
                 return;
             }
             TLRPC.Document doc = pickedSticker[0];
@@ -653,6 +660,8 @@ public class EveAdminBroadcastsFragment extends BaseFragment {
         BottomSheet pickerSheet = new BottomSheet(activity, false, rp);
         pickerSheet.setApplyTopPadding(false);
         pickerSheet.setApplyBottomPadding(false);
+        pickerSheet.setCanDismissWithSwipe(false);
+        pickerSheet.setAllowNestedScroll(false);
 
         FrameLayout container = new FrameLayout(activity) {
             @Override
@@ -713,11 +722,16 @@ public class EveAdminBroadcastsFragment extends BaseFragment {
     private void showBroadcastDetail(EveAdminModels.BroadcastItem b) {
         Activity activity = getParentActivity();
         if (activity == null) return;
-        String detail = EveAnimatedEmojiHelper.stripMarkupToPlainText(b.message)
+        String safeTitle = EveAnimatedEmojiHelper.stripMarkupToPlainText(b.title);
+        String bodyPlain = EveAnimatedEmojiHelper.stripMarkupToPlainText(b.message);
+        if (TextUtils.isEmpty(bodyPlain) && !TextUtils.isEmpty(b.stickerDocId)) {
+            bodyPlain = (!TextUtils.isEmpty(b.stickerEmoji) ? b.stickerEmoji + " " : "") + "Animated Sticker";
+        }
+        String detail = bodyPlain
                 + "\n\nSent by: " + (!TextUtils.isEmpty(b.sentBy) ? b.sentBy : "Admin")
                 + "\nTime: " + EveAdminUiChrome.formatDateTime(b.sentAt);
         AlertDialog.Builder builder = new AlertDialog.Builder(activity, getResourceProvider());
-        builder.setTitle(EveAnimatedEmojiHelper.stripMarkupToPlainText(b.title));
+        builder.setTitle(!TextUtils.isEmpty(safeTitle) ? safeTitle : "Announcement");
         builder.setMessage(detail);
         builder.setPositiveButton("Close", null);
         builder.setNeutralButton("Delete", (d, w) -> confirmDeleteBroadcast(b));
@@ -727,9 +741,11 @@ public class EveAdminBroadcastsFragment extends BaseFragment {
     private void confirmDeleteBroadcast(EveAdminModels.BroadcastItem b) {
         Activity activity = getParentActivity();
         if (activity == null) return;
+        String safeTitle = EveAnimatedEmojiHelper.stripMarkupToPlainText(b.title);
+        String targetLabel = !TextUtils.isEmpty(safeTitle) ? ("\"" + safeTitle + "\"") : "this announcement";
         AlertDialog.Builder builder = new AlertDialog.Builder(activity, getResourceProvider());
         builder.setTitle("Delete Broadcast");
-        builder.setMessage("Remove \"" + b.title + "\" from EVE Announcements?");
+        builder.setMessage("Remove " + targetLabel + " from EVE Announcements?");
         builder.setPositiveButton("Delete", (d, w) -> {
             EveAdminRepository.ResultCallback<Void> cb = new EveAdminRepository.ResultCallback<Void>() {
                 @Override

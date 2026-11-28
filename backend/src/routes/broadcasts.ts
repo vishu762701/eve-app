@@ -84,17 +84,25 @@ broadcastRoutes.get("/", async (c) => {
 broadcastRoutes.post("/", requirePermission("send_broadcasts"), async (c) => {
   const user = c.get("user");
   const body = await c.req.json().catch(() => ({}));
-  const title = typeof body.title === "string" ? body.title.trim() : "";
+  const rawTitle = body.title;
+  if (rawTitle !== undefined && rawTitle !== null && typeof rawTitle !== "string") {
+    return c.json({ success: false, error: "Invalid broadcast title, message, type or audience" }, 400);
+  }
+  const title = typeof rawTitle === "string" ? rawTitle.trim() : "";
   const rawMessage = body.message ?? body.body;
+  if (rawMessage !== undefined && rawMessage !== null && typeof rawMessage !== "string") {
+    return c.json({ success: false, error: "Invalid broadcast title, message, type or audience" }, 400);
+  }
   const message = typeof rawMessage === "string" ? rawMessage.trim() : "";
   const rawType = body.type ?? "general";
   const rawTarget = body.targetCategory ?? body.target_category ?? "All Users";
-  if (!title || !message || title.length > 120 || message.length > 4000 ||
+  const stickerDocId = typeof body.stickerDocId === "string" ? body.stickerDocId.trim() : "";
+  const hasContent = Boolean(title || message || stickerDocId);
+  if (!hasContent || title.length > 120 || message.length > 4000 ||
       typeof rawType !== "string" || !rawType.trim() || rawType.length > 40 ||
       typeof rawTarget !== "string" || !rawTarget.trim() || rawTarget.length > 100) {
     return c.json({ success: false, error: "Invalid broadcast title, message, type or audience" }, 400);
   }
-  const stickerDocId = typeof body.stickerDocId === "string" ? body.stickerDocId.trim() : "";
   const stickerAccessHash = typeof body.stickerAccessHash === "string" ? body.stickerAccessHash.trim() : "";
   const stickerDcId = body.stickerDcId === undefined || body.stickerDcId === null ? 0 : Number(body.stickerDcId);
   const stickerEmoji = typeof body.stickerEmoji === "string" ? body.stickerEmoji.trim().slice(0, 32) : "";

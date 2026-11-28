@@ -734,5 +734,15 @@ public class EveAdminControlCenterTest {
         assertEquals(1, postVoteQuiz.correctOptionIndex);
         assertEquals(Boolean.FALSE, postVoteQuiz.isCorrect);
         assertEquals("Tokyo is the capital.", postVoteQuiz.explanation);
+
+        // 5. Strict Alphabetical (A -> Z) Admin Dashboard modules with zero duplicates
+        java.util.List<String> moduleTitles = EveAdminControlCenterActivity.getOrderedModuleTitles();
+        assertEquals(10, moduleTitles.size());
+        java.util.List<String> sortedTitles = new java.util.ArrayList<>(moduleTitles);
+        java.util.Collections.sort(sortedTitles, String::compareToIgnoreCase);
+        assertEquals(sortedTitles, moduleTitles);
+        assertEquals(10, new java.util.HashSet<>(moduleTitles).size());
+        assertEquals("Admin Roles", moduleTitles.get(0));
+        assertEquals("Students", moduleTitles.get(moduleTitles.size() - 1));
     }
 }

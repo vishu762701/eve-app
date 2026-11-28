@@ -82,12 +82,25 @@ public class EveHomeBannerCarouselView extends FrameLayout implements Theme.Colo
         return dp(120);
     }
 
+    public static int computeTotalHeightPx(int bannerCount) {
+        int bottomPad = bannerCount > 1 ? dp(18) : dp(6);
+        return computeBannerHeightPx() + dp(6) + bottomPad;
+    }
+
+    @Override
+    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        int targetHeight = computeTotalHeightPx(items.size());
+        super.onMeasure(
+                MeasureSpec.makeMeasureSpec(MeasureSpec.getSize(widthMeasureSpec), MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(targetHeight, MeasureSpec.EXACTLY));
+    }
+
     public EveHomeBannerCarouselView(Context context, @Nullable Theme.ResourcesProvider resourcesProvider) {
         super(context);
         this.resourcesProvider = resourcesProvider;
 
         int bannerHeight = computeBannerHeightPx();
-        setPadding(0, dp(8), 0, dp(6));
+        setPadding(0, dp(6), 0, dp(6));
 
         FrameLayout carouselWrapper = new FrameLayout(context);
 
@@ -140,7 +153,16 @@ public class EveHomeBannerCarouselView extends FrameLayout implements Theme.Colo
         dotsView.setCount(items.size());
         dotsView.setSelectedIndex(currentPage);
         dotsView.setVisibility(items.size() > 1 ? VISIBLE : GONE);
+        int bottomPad = items.size() > 1 ? dp(18) : dp(6);
+        setPadding(0, dp(6), 0, bottomPad);
+        ViewGroup.LayoutParams lp = getLayoutParams();
+        int targetHeight = computeTotalHeightPx(items.size());
+        if (lp != null && lp.height != targetHeight) {
+            lp.height = targetHeight;
+            setLayoutParams(lp);
+        }
         adapter.notifyDataSetChanged();
+        requestLayout();
     }
 
     public void onPauseCarousel() {

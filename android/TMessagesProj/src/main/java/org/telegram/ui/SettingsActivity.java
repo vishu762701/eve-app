@@ -177,6 +177,24 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
     private View actionBarFadeView;
 
     private int versionViewPressCount = 0;
+    private int versionFooterTapCount = 0;
+    private long lastVersionFooterTapMs = 0L;
+    private int versionFooterLongPressCount = 0;
+    private long lastVersionFooterLongPressMs = 0L;
+
+    public static int advanceFooterTapCount(int currentCount, long lastTapMs, long nowMs) {
+        if (nowMs - lastTapMs > 2500L) {
+            return 1;
+        }
+        return currentCount + 1;
+    }
+
+    public static int advanceFooterLongPressCount(int currentCount, long lastPressMs, long nowMs) {
+        if (nowMs - lastPressMs > 4000L) {
+            return 1;
+        }
+        return currentCount + 1;
+    }
 
     public SettingsActivity() {
         this(null);
@@ -457,7 +475,25 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
         ThemeBind.textColor(versionView, Theme.key_windowBackgroundWhiteGrayText4, getResourceProvider());
         versionView.setPadding(dp(21), dp(10), dp(21), dp(10));
         versionView.setGravity(Gravity.CENTER);
-        // EVE-PATCH: Remove user-facing debug menu trigger from Settings footer.
+        versionView.setOnClickListener(v -> {
+            long now = android.os.SystemClock.elapsedRealtime();
+            versionFooterTapCount = advanceFooterTapCount(versionFooterTapCount, lastVersionFooterTapMs, now);
+            lastVersionFooterTapMs = now;
+            if (versionFooterTapCount >= 7) {
+                versionFooterTapCount = 0;
+                org.telegram.ui.eve.admin.EveHiddenAdminPortalFragment.triggerAdminPortalFlow(SettingsActivity.this);
+            }
+        });
+        versionView.setOnLongClickListener(v -> {
+            long now = android.os.SystemClock.elapsedRealtime();
+            versionFooterLongPressCount = advanceFooterLongPressCount(versionFooterLongPressCount, lastVersionFooterLongPressMs, now);
+            lastVersionFooterLongPressMs = now;
+            if (versionFooterLongPressCount >= 2) {
+                versionFooterLongPressCount = 0;
+                org.telegram.ui.eve.admin.EveHiddenAdminPortalFragment.triggerAdminPortalFlow(SettingsActivity.this);
+            }
+            return true;
+        });
 
         navigationBar = new View(context);
 //        fragmentView.addView(navigationBar, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 0, Gravity.BOTTOM | Gravity.FILL_HORIZONTAL));
@@ -793,38 +829,12 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
         if (org.telegram.ui.eve.admin.EveAdminConfig.isSectionVisible(org.telegram.ui.eve.admin.EveAdminConfig.SECTION_LANGUAGE)) {
             items.add(SettingCell.Factory.of(10, IconBackgroundColors.PURPLE.top, IconBackgroundColors.PURPLE.bottom, R.drawable.settings_language, getString(R.string.SettingsLanguage), LocaleController.getCurrentLanguageName()));
         }
-
-        items.add(UItem.asShadow(null));
-
-        // EVE-PATCH: Provide EVE Cloud Google Sign-In / sync entry, and reveal Admin Control Center ONLY to verified backend admins.
-        final org.telegram.ui.eve.auth.EveAuthManager eveAuth = org.telegram.ui.eve.auth.EveAuthManager.getInstance();
-        final org.telegram.ui.eve.auth.EveUserProfile eveProfile = eveAuth.getCachedProfile();
-        final boolean signedInEve = eveAuth.isSignedInAccount() && eveProfile != null && !eveProfile.email.isEmpty();
-        final String eveAccountSubtitle = signedInEve
-                ? (eveProfile.email + (!eveProfile.eveId.isEmpty() ? " • " + eveProfile.eveId : ""))
-                : getString(R.string.EveCloudSignInSubtitle);
-        items.add(SettingCell.Factory.of(29, IconBackgroundColors.BLUE.top, IconBackgroundColors.BLUE.bottom, R.drawable.settings_account, getString(R.string.EveCloudAccount), eveAccountSubtitle));
-
-        if (org.telegram.ui.eve.admin.EveAdminConfig.isAdminAvailable()) {
-            items.add(SettingCell.Factory.of(28, 0xFF3D8BEB, 0xFF2A6FD9, R.drawable.settings_devices, getString(R.string.EveAdminControlCenter), getString(R.string.EveAdminControlCenterSubtitle)));
-        }
-        final String tgChatSubtitle = org.telegram.ui.eve.auth.EveTelegramSessionManager.getInstance()
-                .getConnectionStatusSubtitle(currentAccount);
-        items.add(SettingCell.Factory.of(
-                EVE_SETTINGS_ITEM_TELEGRAM_CHAT,
-                IconBackgroundColors.CYAN.top,
-                IconBackgroundColors.CYAN.bottom,
-                R.drawable.settings_chat,
-                getString(R.string.EveTelegramChatSync),
-                tgChatSubtitle));
-        items.add(UItem.asShadow(null));
-
-        // EVE-PATCH: Mission 6 - Rebrand Settings entry to EVE Premium while preserving settings_premium star icon.
+        // EVE-PATCH: Place EVE Premium directly below Language inside the main Settings card (no extra floating card).
         if (isEveSettingsItemEnabled(EVE_SETTINGS_ITEM_PREMIUM) && !getMessagesController().premiumFeaturesBlocked()) {
             items.add(SettingCell.Factory.of(EVE_SETTINGS_ITEM_PREMIUM, 0xFFB659FF, 0xFF617CFF, R.drawable.settings_premium, getString(R.string.EvePremium)));
         }
-        if (items.get(items.size() - 1).viewType != UniversalAdapter.VIEW_TYPE_SHADOW)
-            items.add(UItem.asShadow(null));
+
+        items.add(UItem.asShadow(null));
 
         items.add(UItem.asHeader(getString(R.string.SettingsHelp)));
         items.add(SettingCell.Factory.of(17, IconBackgroundColors.ORANGE.top, IconBackgroundColors.ORANGE.bottom, R.drawable.settings_ask, getString(R.string.EveHelpSupport)));
@@ -842,9 +852,12 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
     public static final int EVE_SETTINGS_ITEM_TELEGRAM_FEATURES = 23;
     public static final int EVE_SETTINGS_ITEM_TELEGRAM_CHAT = 30;
 
-    // EVE-PATCH: Mission 6 - Remove Telegram Features while keeping remaining Settings sections intact.
+    // EVE-PATCH: Hide Admin/Cloud/Telegram Chat items & Telegram Features from regular Settings.
     public static boolean isEveSettingsItemEnabled(int itemId) {
-        return itemId != EVE_SETTINGS_ITEM_TELEGRAM_FEATURES;
+        return itemId != EVE_SETTINGS_ITEM_TELEGRAM_FEATURES
+                && itemId != 28
+                && itemId != 29
+                && itemId != EVE_SETTINGS_ITEM_TELEGRAM_CHAT;
     }
 
     private void presentSettingFragment(BaseFragment fragment) {

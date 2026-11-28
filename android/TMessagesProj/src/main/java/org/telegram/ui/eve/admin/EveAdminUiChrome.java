@@ -135,12 +135,34 @@ public final class EveAdminUiChrome {
             @Nullable Utilities.Callback5<UItem, View, Integer, Float, Float> onClick,
             @Nullable ActionBar.ActionBarMenuOnItemClick menuClick,
             @Nullable Runnable onUpdateColors) {
+        return setup(
+                fragment, context, simpleActionBar, simpleGlass, glassEngine, resourcesProvider,
+                title, subtitle, useSectionCards, useCardInsetDividers,
+                fillItems, onClick, null, menuClick, onUpdateColors);
+    }
+
+    public static Chrome setup(
+            @NonNull BaseFragment fragment,
+            @NonNull Context context,
+            @Nullable SimpleActionBar simpleActionBar,
+            @Nullable BaseFragmentSimpleGlass simpleGlass,
+            @Nullable GlassEngine glassEngine,
+            @Nullable Theme.ResourcesProvider resourcesProvider,
+            @NonNull CharSequence title,
+            @Nullable CharSequence subtitle,
+            boolean useSectionCards,
+            boolean useCardInsetDividers,
+            @NonNull Utilities.Callback2<ArrayList<UItem>, UniversalAdapter> fillItems,
+            @Nullable Utilities.Callback5<UItem, View, Integer, Float, Float> onClick,
+            @Nullable Utilities.Callback5Return<UItem, View, Integer, Float, Float, Boolean> onLongClick,
+            @Nullable ActionBar.ActionBarMenuOnItemClick menuClick,
+            @Nullable Runnable onUpdateColors) {
 
         final int bgColorKey = useSectionCards ? Theme.key_windowBackgroundGray : Theme.key_windowBackgroundWhite;
         final int horizontalPadTop = useSectionCards ? dp(12) : 0;
 
         final Chrome[] holder = new Chrome[1];
-        final UniversalRecyclerView listView = new UniversalRecyclerView(fragment, fillItems, onClick, null);
+        final UniversalRecyclerView listView = new UniversalRecyclerView(fragment, fillItems, onClick, onLongClick);
         if (useSectionCards) {
             listView.setCaptureSectionsDecoratorAllowed(true);
             if (listView.adapter != null) {
@@ -257,6 +279,166 @@ public final class EveAdminUiChrome {
             params.height = height;
             actionBarFadeView.setLayoutParams(params);
         }
+    }
+
+    /**
+     * Checks whether the current signed-in user has the given admin right based on cached snapshot
+     * or owner/admin session state. Triggers a silent background dashboard sync if needed.
+     */
+    public static boolean hasCachedAdminRight(@Nullable String right) {
+        if (!EveAdminConfig.isAdminAvailable()) {
+            return false;
+        }
+        EveAdminModels.DashboardSnapshot snapshot = EveAdminRepository.getInstance().getCachedSnapshot();
+        if (snapshot != null && snapshot.adminProfile != null) {
+            return EveAdminConfig.hasRight(snapshot.adminProfile, right);
+        }
+        // Server verified this account as an admin/owner in /api/users/sync; until detailed
+        // admin_rights snapshot arrives, trigger a silent sync in callers and default to owner check.
+        return EveAdminConfig.isOwner(org.telegram.ui.eve.auth.EveAuthManager.getInstance().getCachedProfile());
+    }
+
+    @Nullable
+    public static EveAdminModels.AdminExamItem resolveAdminExamItem(@Nullable org.telegram.ui.eve.exams.EveExamModels.ExamSummary exam) {
+        if (exam == null || TextUtils.isEmpty(exam.id)) {
+            return null;
+        }
+        EveAdminRepository.ExamsCatalogData catalog = EveAdminRepository.getInstance().getCachedExamsCatalog();
+        if (catalog != null && catalog.exams != null) {
+            for (EveAdminModels.AdminExamItem item : catalog.exams) {
+                if (item != null && exam.id.equals(item.id)) {
+                    return item;
+                }
+            }
+        }
+        EveAdminModels.DashboardSnapshot snapshot = EveAdminRepository.getInstance().getCachedSnapshot();
+        if (snapshot != null && snapshot.exams != null) {
+            for (EveAdminModels.AdminExamItem item : snapshot.exams) {
+                if (item != null && exam.id.equals(item.id)) {
+                    return item;
+                }
+            }
+        }
+        return new EveAdminModels.AdminExamItem(
+                exam.id, exam.examName, exam.category,
+                exam.timeLimitMinutes, exam.questionCount,
+                exam.testNumber, exam.negativeMarkingText,
+                exam.publishMode, "",
+                exam.parentExamId, exam.syllabusFileName, exam.syllabusUrl,
+                exam.avatarUrl, exam.avatarUrl, exam.avatarEmoji, exam.avatarColor);
+    }
+
+    public static final class AvatarHeaderHandle {
+        public final LinearLayout container;
+        private final BackupImageView avatarView;
+        private final AvatarDrawable avatarDrawable;
+        private final AnimatedEmojiSpan.TextViewEmojis titleView;
+        private final TextView subtitleView;
+        private final Theme.ResourcesProvider rp;
+
+        private AvatarHeaderHandle(
+                LinearLayout container,
+                BackupImageView avatarView,
+                AvatarDrawable avatarDrawable,
+                AnimatedEmojiSpan.TextViewEmojis titleView,
+                TextView subtitleView,
+                Theme.ResourcesProvider rp) {
+            this.container = container;
+            this.avatarView = avatarView;
+            this.avatarDrawable = avatarDrawable;
+            this.titleView = titleView;
+            this.subtitleView = subtitleView;
+            this.rp = rp;
+        }
+
+        public void update(
+                @Nullable String seed,
+                @Nullable String title,
+                @Nullable String subtitle,
+                @Nullable String avatarUrl,
+                @Nullable String avatarEmoji,
+                int avatarColor) {
+            bindExamAvatar(avatarView, avatarDrawable, seed, title, avatarUrl, avatarEmoji, avatarColor, 36, rp);
+            EveAnimatedEmojiHelper.bindText(titleView, title != null ? title : "");
+            if (!TextUtils.isEmpty(subtitle)) {
+                subtitleView.setVisibility(View.VISIBLE);
+                subtitleView.setText(subtitle);
+            } else {
+                subtitleView.setVisibility(View.GONE);
+                subtitleView.setText("");
+            }
+            updateColors();
+        }
+
+        public void updateColors() {
+            titleView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, rp));
+            subtitleView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, rp));
+            container.setBackground(Theme.createSelectorDrawable(
+                    Theme.multAlpha(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, rp), 0.12f), 2));
+        }
+
+        public void setOnClickListener(@Nullable View.OnClickListener listener) {
+            container.setOnClickListener(listener);
+            container.setClickable(listener != null);
+        }
+    }
+
+    /**
+     * Attaches a Telegram Profile/Channel-style circular avatar + decoded title + optional subtitle
+     * directly inside {@link SimpleActionBar} cleanly between the back button and right menu pills.
+     */
+    @Nullable
+    public static AvatarHeaderHandle attachAvatarActionBarHeader(
+            @NonNull Context context,
+            @Nullable SimpleActionBar simpleActionBar,
+            int rightMarginDp,
+            @Nullable Theme.ResourcesProvider rp) {
+        if (simpleActionBar == null) {
+            return null;
+        }
+        simpleActionBar.setTitle(null);
+        simpleActionBar.setSubtitle(null);
+
+        LinearLayout container = new LinearLayout(context);
+        container.setOrientation(LinearLayout.HORIZONTAL);
+        container.setGravity(Gravity.CENTER_VERTICAL);
+        container.setPadding(dp(6), dp(3), dp(8), dp(3));
+
+        AvatarDrawable avatarDrawable = new AvatarDrawable();
+        BackupImageView avatarView = new BackupImageView(context);
+        avatarView.setRoundRadius(dp(18));
+        container.addView(avatarView, LayoutHelper.createLinear(36, 36, Gravity.CENTER_VERTICAL, 0, 0, 10, 0));
+
+        LinearLayout textCol = new LinearLayout(context);
+        textCol.setOrientation(LinearLayout.VERTICAL);
+        textCol.setGravity(Gravity.CENTER_VERTICAL);
+
+        AnimatedEmojiSpan.TextViewEmojis titleView = EveAnimatedEmojiHelper.createEmojiTextView(context);
+        titleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16.5f);
+        titleView.setTypeface(AndroidUtilities.bold());
+        titleView.setSingleLine(true);
+        titleView.setEllipsize(TextUtils.TruncateAt.END);
+        textCol.addView(titleView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+
+        TextView subtitleView = new TextView(context);
+        subtitleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12.5f);
+        subtitleView.setSingleLine(true);
+        subtitleView.setEllipsize(TextUtils.TruncateAt.END);
+        subtitleView.setVisibility(View.GONE);
+        textCol.addView(subtitleView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 1, 0, 0));
+
+        container.addView(textCol, LayoutHelper.createLinear(0, LayoutHelper.WRAP_CONTENT, 1f, Gravity.CENTER_VERTICAL));
+        simpleActionBar.addView(
+                container,
+                LayoutHelper.createFrame(
+                        LayoutHelper.MATCH_PARENT,
+                        44,
+                        Gravity.LEFT | Gravity.TOP,
+                        56, 0, Math.max(12, rightMarginDp), 0));
+
+        AvatarHeaderHandle handle = new AvatarHeaderHandle(container, avatarView, avatarDrawable, titleView, subtitleView, rp);
+        handle.updateColors();
+        return handle;
     }
 
     private static final class EdgeListDividerDecoration extends RecyclerView.ItemDecoration {

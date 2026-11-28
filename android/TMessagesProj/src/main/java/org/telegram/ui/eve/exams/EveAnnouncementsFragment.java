@@ -2,9 +2,12 @@ package org.telegram.ui.eve.exams;
 
 import static org.telegram.messenger.AndroidUtilities.dp;
 
+import android.app.Activity;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
+import android.graphics.PorterDuff;
+import android.graphics.PorterDuffColorFilter;
 import android.graphics.RectF;
 import android.text.TextUtils;
 import android.text.util.Linkify;
@@ -13,39 +16,53 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.recyclerview.widget.RecyclerView;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.DocumentObject;
 import org.telegram.messenger.ImageLocation;
+import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MediaDataController;
 import org.telegram.messenger.R;
 import org.telegram.messenger.UserConfig;
 import org.telegram.tgnet.TLRPC;
 import org.telegram.ui.ActionBar.ActionBar;
+import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.AnimatedEmojiDrawable;
 import org.telegram.ui.Components.BackupImageView;
 import org.telegram.ui.Components.BulletinFactory;
+import org.telegram.ui.Components.EditTextEmoji;
 import org.telegram.ui.Components.FlickerLoadingView;
 import org.telegram.ui.Components.IconBackgroundColors;
+import org.telegram.ui.Components.ItemOptions;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.RecyclerListView;
 import org.telegram.ui.Components.UItem;
 import org.telegram.ui.Components.UniversalAdapter;
 import org.telegram.ui.Components.UniversalRecyclerView;
 import org.telegram.ui.SettingsActivity;
-import org.telegram.ui.eve.admin.EveAnimatedEmojiHelper;
+import org.telegram.ui.eve.admin.EveAdminBroadcastsFragment;
+import org.telegram.ui.eve.admin.EveAdminConfig;
+import org.telegram.ui.eve.admin.EveAdminModels;
+import org.telegram.ui.eve.admin.EveAdminPollCreateFragment;
+import org.telegram.ui.eve.admin.EveAdminRepository;
 import org.telegram.ui.eve.admin.EveAdminUiChrome;
+import org.telegram.ui.eve.admin.EveAnimatedEmojiHelper;
 import org.telegram.ui.eve.auth.EveBackendClient;
 import org.telegram.ui.eve.polls.EvePollModel;
 import org.telegram.ui.eve.polls.EveTelegramPollCardView;
+import org.telegram.utils.glass.BaseFragmentSimpleGlass;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -70,12 +87,32 @@ public class EveAnnouncementsFragment extends BaseFragment {
 
     private final EveExamRepository repo = EveExamRepository.getInstance();
     private UniversalRecyclerView listView;
-    private FrameLayout chatRoot;
+    private EveAnimatedEmojiHelper.EmojiHostSizeNotifierFrameLayout chatRoot;
+    @Nullable
+    private View actionBarFadeViewRef;
+    @Nullable
+    private EveAdminUiChrome.AvatarHeaderHandle avatarHeader;
+    @Nullable
+    private LinearLayout composerBar;
+    @Nullable
+    private View composerDivider;
+    @Nullable
+    private EditTextEmoji composerInput;
+    @Nullable
+    private ImageView quizBtn;
+    @Nullable
+    private ImageView sendBtn;
+    private int topInsetPx = 0;
+    private int bottomInsetPx = 0;
+    private boolean sendingPost = false;
 
     private String channelName = "Announcements";
+    private String channelAvatarUrl = "";
+    private String channelAvatarEmoji = "";
     private List<EveExamModels.BroadcastItem> broadcasts = Collections.emptyList();
     private List<EvePollModel> polls = Collections.emptyList();
     private final List<FeedEntry> feedEntries = new ArrayList<>();
+    private final java.util.Map<Integer, FeedEntry> entryByItemId = new java.util.HashMap<>();
 
     private String votingPollId = "";
     private int votingOptionIdx = -1;
@@ -130,6 +167,26 @@ public class EveAnnouncementsFragment extends BaseFragment {
     }
 
     @Override
+    public boolean onBackPressed(boolean invoked) {
+        if (composerInput != null && composerInput.isPopupShowing()) {
+            if (invoked) {
+                composerInput.hidePopup(true);
+            }
+            return false;
+        }
+        return super.onBackPressed(invoked);
+    }
+
+    private boolean isChannelAdmin() {
+        return EveAdminUiChrome.hasCachedAdminRight(EveAdminModels.RIGHT_SEND_BROADCASTS);
+    }
+
+    private boolean canManageQuizzes() {
+        return EveAdminUiChrome.hasCachedAdminRight(EveAdminModels.RIGHT_MODERATE_FEEDBACK)
+                || isChannelAdmin();
+    }
+
+    @Override
     public View createView(Context context) {
         destroyed = false;
         setHasOwnBackground(true);
@@ -149,6 +206,7 @@ public class EveAnnouncementsFragment extends BaseFragment {
                 false,
                 this::fillItems,
                 this::onClick,
+                this::onLongClick,
                 new ActionBar.ActionBarMenuOnItemClick() {
                     @Override
                     public void onItemClick(int id) {
@@ -161,6 +219,34 @@ public class EveAnnouncementsFragment extends BaseFragment {
         );
         listView = chrome.listView;
         chatRoot = chrome.rootView;
+        actionBarFadeViewRef = chrome.actionBarFadeView;
+
+        avatarHeader = EveAdminUiChrome.attachAvatarActionBarHeader(
+                context,
+                simpleActionBar,
+                16,
+                getResourceProvider());
+
+        if (isChannelAdmin()) {
+            attachChannelComposer(context);
+        }
+
+        if (EveAdminConfig.isAdminAvailable() && EveAdminRepository.getInstance().getCachedSnapshot() == null) {
+            EveAdminRepository.getInstance().loadDashboardAsync(new EveAdminRepository.ResultCallback<EveAdminModels.DashboardSnapshot>() {
+                @Override
+                public void onSuccess(EveAdminModels.DashboardSnapshot data) {
+                    if (!destroyed && composerBar == null && isChannelAdmin() && getParentActivity() != null) {
+                        attachChannelComposer(getParentActivity());
+                        updateHeader();
+                        applyListPaddingForComposer();
+                    }
+                }
+
+                @Override
+                public void onError(String message, int httpStatus) {
+                }
+            });
+        }
 
         updateHeader();
 
@@ -173,6 +259,134 @@ public class EveAnnouncementsFragment extends BaseFragment {
         return chrome.rootView;
     }
 
+    private void attachChannelComposer(@NonNull Context context) {
+        if (chatRoot == null || composerBar != null) {
+            return;
+        }
+        Theme.ResourcesProvider rp = getResourceProvider();
+        composerBar = new LinearLayout(context);
+        composerBar.setOrientation(LinearLayout.VERTICAL);
+
+        composerDivider = new View(context);
+        composerBar.addView(composerDivider, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 1));
+
+        LinearLayout row = new LinearLayout(context);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(8), dp(6), dp(8), dp(6));
+
+        composerInput = EveAnimatedEmojiHelper.createEditTextEmoji(
+                context, chatRoot, this, "Message", "", true, rp);
+        if (composerInput.getEditText() != null) {
+            composerInput.getEditText().setMaxLines(4);
+            composerInput.getEditText().setMinLines(1);
+        }
+        composerInput.setBackground(null);
+        composerInput.setPadding(0, 0, dp(4), 0);
+        row.addView(composerInput, LayoutHelper.createLinear(0, LayoutHelper.WRAP_CONTENT, 1f, Gravity.CENTER_VERTICAL));
+
+        quizBtn = new ImageView(context);
+        quizBtn.setScaleType(ImageView.ScaleType.CENTER);
+        quizBtn.setImageResource(R.drawable.msg_polls);
+        quizBtn.setContentDescription("Create Quiz");
+        quizBtn.setOnClickListener(v -> presentFragment(new EveAdminPollCreateFragment(this::reload)));
+        row.addView(quizBtn, LayoutHelper.createLinear(40, 40, Gravity.CENTER_VERTICAL, 2, 0, 2, 0));
+
+        sendBtn = new ImageView(context);
+        sendBtn.setScaleType(ImageView.ScaleType.CENTER);
+        sendBtn.setImageResource(R.drawable.ic_send);
+        sendBtn.setContentDescription("Send");
+        sendBtn.setOnClickListener(v -> sendComposerPost());
+        row.addView(sendBtn, LayoutHelper.createLinear(38, 38, Gravity.CENTER_VERTICAL, 4, 0, 2, 0));
+
+        composerBar.addView(row, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+        chatRoot.addView(composerBar, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.BOTTOM));
+
+        ViewCompat.setOnApplyWindowInsetsListener(chatRoot, (v, insets) -> {
+            final Insets systemInsets = AndroidUtilities.getDefaultWindowInsets(insets, false);
+            topInsetPx = systemInsets.top;
+            bottomInsetPx = systemInsets.bottom;
+            EveAdminUiChrome.updateActionBarFadeHeight(actionBarFadeViewRef, topInsetPx);
+            if (composerBar != null) {
+                composerBar.setPadding(0, 0, 0, bottomInsetPx);
+            }
+            applyListPaddingForComposer();
+            return WindowInsetsCompat.CONSUMED;
+        });
+
+        applyComposerThemeColors();
+        applyListPaddingForComposer();
+    }
+
+    private void applyListPaddingForComposer() {
+        if (listView == null) return;
+        int extraBottom = composerBar != null ? dp(58) : 0;
+        BaseFragmentSimpleGlass.setListViewParams(listView, topInsetPx, bottomInsetPx + extraBottom, 0, 0);
+    }
+
+    private void applyComposerThemeColors() {
+        Theme.ResourcesProvider rp = getResourceProvider();
+        if (composerBar != null) {
+            composerBar.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite, rp));
+        }
+        if (composerDivider != null) {
+            composerDivider.setBackgroundColor(Theme.getColor(Theme.key_divider, rp));
+        }
+        if (quizBtn != null) {
+            quizBtn.setColorFilter(new PorterDuffColorFilter(
+                    Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, rp), PorterDuff.Mode.MULTIPLY));
+            quizBtn.setBackground(Theme.createSelectorDrawable(
+                    Theme.multAlpha(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, rp), 0.14f), 1));
+        }
+        if (sendBtn != null) {
+            int blue = Theme.getColor(Theme.key_featuredStickers_addButton, rp);
+            int white = Theme.getColor(Theme.key_featuredStickers_buttonText, rp);
+            sendBtn.setBackground(Theme.createSimpleSelectorCircleDrawable(dp(38), blue, Theme.multAlpha(blue, 0.85f)));
+            sendBtn.setColorFilter(new PorterDuffColorFilter(white, PorterDuff.Mode.MULTIPLY));
+        }
+    }
+
+    private void sendComposerPost() {
+        if (sendingPost || composerInput == null) {
+            return;
+        }
+        String encoded = EveAnimatedEmojiHelper.encode(composerInput.getText()).trim();
+        if (encoded.isEmpty()) {
+            BulletinFactory.of(this).createErrorBulletin("Type a message or pick an emoji.").show();
+            return;
+        }
+        sendingPost = true;
+        if (sendBtn != null) sendBtn.setAlpha(0.5f);
+        EveAdminRepository adminRepo = EveAdminRepository.getInstance();
+        EveAdminRepository.ResultCallback<Void> cb = new EveAdminRepository.ResultCallback<Void>() {
+            @Override
+            public void onSuccess(Void data) {
+                sendingPost = false;
+                if (destroyed) return;
+                if (sendBtn != null) sendBtn.setAlpha(1f);
+                if (composerInput != null) {
+                    composerInput.setText("");
+                    composerInput.hidePopup(true);
+                }
+                scrolledInitial = false;
+                reload();
+            }
+
+            @Override
+            public void onError(String message, int httpStatus) {
+                sendingPost = false;
+                if (destroyed) return;
+                if (sendBtn != null) sendBtn.setAlpha(1f);
+                BulletinFactory.of(EveAnnouncementsFragment.this)
+                        .createErrorBulletin(message != null ? message : "Failed to post announcement.").show();
+            }
+        };
+        adminRepo.runWithAdminToken(cb, token -> {
+            adminRepo.sendBroadcast(token, "", encoded, "", "", 0, "");
+            adminRepo.postSuccess(cb, null);
+        });
+    }
+
     private void hydrateCachedChannelData() {
         EveBackendClient.AppConfigResult cfg = repo.getCachedAppConfig();
         EveExamRepository.AnnouncementChannelSummary cachedSum = repo.getCachedAnnouncementChannelSummary();
@@ -180,8 +394,16 @@ public class EveAnnouncementsFragment extends BaseFragment {
             if (!TextUtils.isEmpty(cfg.announcementChannelName)) {
                 channelName = cfg.announcementChannelName;
             }
+            if (!TextUtils.isEmpty(cfg.announcementChannelAvatarUrl)) {
+                channelAvatarUrl = cfg.announcementChannelAvatarUrl;
+            }
+            if (!TextUtils.isEmpty(cfg.announcementChannelAvatarEmoji)) {
+                channelAvatarEmoji = cfg.announcementChannelAvatarEmoji;
+            }
         } else if (cachedSum != null) {
             if (!TextUtils.isEmpty(cachedSum.channelName)) channelName = cachedSum.channelName;
+            if (!TextUtils.isEmpty(cachedSum.channelAvatarUrl)) channelAvatarUrl = cachedSum.channelAvatarUrl;
+            if (!TextUtils.isEmpty(cachedSum.channelAvatarEmoji)) channelAvatarEmoji = cachedSum.channelAvatarEmoji;
         }
         List<EveExamModels.BroadcastItem> bc = repo.getCachedBroadcasts();
         List<EvePollModel> pl = repo.getCachedActivePolls();
@@ -198,17 +420,27 @@ public class EveAnnouncementsFragment extends BaseFragment {
         if (listView != null) {
             listView.setBackgroundColor(bg);
         }
+        if (avatarHeader != null) {
+            avatarHeader.updateColors();
+        }
+        applyComposerThemeColors();
     }
 
     @Override
     public void onResume() {
         super.onResume();
+        if (composerInput != null) {
+            composerInput.onResume();
+        }
         markVisibleAsSeen();
         autoSync.onResume();
     }
 
     @Override
     public void onPause() {
+        if (composerInput != null) {
+            composerInput.onPause();
+        }
         autoSync.onPause();
         super.onPause();
     }
@@ -217,6 +449,10 @@ public class EveAnnouncementsFragment extends BaseFragment {
     public void onFragmentDestroy() {
         destroyed = true;
         autoSync.destroy();
+        if (composerInput != null) {
+            composerInput.onDestroy();
+            composerInput = null;
+        }
         super.onFragmentDestroy();
     }
 
@@ -261,6 +497,8 @@ public class EveAnnouncementsFragment extends BaseFragment {
                 if (!TextUtils.isEmpty(cfg.announcementChannelName)) {
                     channelName = cfg.announcementChannelName;
                 }
+                channelAvatarUrl = cfg.announcementChannelAvatarUrl != null ? cfg.announcementChannelAvatarUrl : "";
+                channelAvatarEmoji = cfg.announcementChannelAvatarEmoji != null ? cfg.announcementChannelAvatarEmoji : "";
             }
             onBatchStepDone.run();
         });
@@ -289,7 +527,20 @@ public class EveAnnouncementsFragment extends BaseFragment {
     }
 
     private void updateHeader() {
-        if (simpleActionBar != null) {
+        if (avatarHeader != null) {
+            avatarHeader.update(
+                    "eve_announcements_channel",
+                    channelName,
+                    null,
+                    channelAvatarUrl,
+                    channelAvatarEmoji,
+                    -1);
+            if (isChannelAdmin()) {
+                avatarHeader.setOnClickListener(v -> presentFragment(new EveAdminBroadcastsFragment()));
+            } else {
+                avatarHeader.setOnClickListener(null);
+            }
+        } else if (simpleActionBar != null) {
             simpleActionBar.setTitle(EveAnimatedEmojiHelper.decode(channelName, null));
             simpleActionBar.setSubtitle(null);
         }
@@ -359,6 +610,7 @@ public class EveAnnouncementsFragment extends BaseFragment {
             return;
         }
 
+        entryByItemId.clear();
         String lastDayKey = "";
         int itemIdCounter = BASE_FEED_ID;
         for (int i = 0; i < feedEntries.size(); i++) {
@@ -368,14 +620,16 @@ public class EveAnnouncementsFragment extends BaseFragment {
                 lastDayKey = dayKey;
                 items.add(ChannelDatePillCell.Factory.of(500 + i, dayKey));
             }
+            int rowId = itemIdCounter++;
+            entryByItemId.put(rowId, entry);
             if (entry.broadcast != null) {
                 items.add(ChannelPostBubbleView.Factory.of(
-                        itemIdCounter++,
+                        rowId,
                         new ChannelPostBubbleView.Payload(channelName, entry.broadcast)));
             } else if (entry.poll != null) {
                 int subIdx = entry.poll.id.equals(votingPollId) ? votingOptionIdx : -1;
                 items.add(EveTelegramPollCardView.Factory.of(
-                        itemIdCounter++,
+                        rowId,
                         new EveTelegramPollCardView.Payload(entry.poll, false, subIdx, this::handlePollVote, null)));
             }
         }
@@ -386,6 +640,132 @@ public class EveAnnouncementsFragment extends BaseFragment {
         if (item.id == ID_RETRY) {
             reload();
         }
+    }
+
+    private boolean onLongClick(UItem item, View view, int position, float x, float y) {
+        if (item == null || item.id < BASE_FEED_ID) {
+            return false;
+        }
+        FeedEntry entry = entryByItemId.get(item.id);
+        if (entry == null) {
+            return false;
+        }
+        if (entry.broadcast != null && isChannelAdmin()) {
+            ItemOptions options = ItemOptions.makeOptions(this, view);
+            options.add(R.drawable.msg_delete, "Delete Post", () -> confirmDeleteBroadcast(entry.broadcast));
+            options.makeRed(0);
+            options.show();
+            return true;
+        }
+        if (entry.poll != null && canManageQuizzes()) {
+            ItemOptions options = ItemOptions.makeOptions(this, view);
+            options.add(
+                    R.drawable.msg_archive,
+                    entry.poll.active ? "Close Quiz" : "Reopen Quiz",
+                    () -> toggleChannelPoll(entry.poll));
+            options.add(
+                    R.drawable.msg_delete,
+                    "Delete Quiz",
+                    () -> confirmDeleteChannelPoll(entry.poll));
+            options.makeRed(1);
+            options.show();
+            return true;
+        }
+        return false;
+    }
+
+    private void confirmDeleteBroadcast(EveExamModels.BroadcastItem b) {
+        Activity activity = getParentActivity();
+        if (activity == null || b == null) return;
+        showDialog(new AlertDialog.Builder(activity, getResourceProvider())
+                .setTitle("Delete Announcement Post")
+                .setMessage("Remove this post from EVE Announcements?")
+                .setPositiveButton(LocaleController.getString(R.string.Delete), (d, w) -> {
+                    EveAdminRepository adminRepo = EveAdminRepository.getInstance();
+                    EveAdminRepository.ResultCallback<Void> cb = new EveAdminRepository.ResultCallback<Void>() {
+                        @Override
+                        public void onSuccess(Void data) {
+                            if (destroyed) return;
+                            BulletinFactory.of(EveAnnouncementsFragment.this)
+                                    .createSimpleBulletin(R.raw.ic_delete, "Post deleted").show();
+                            reload();
+                        }
+
+                        @Override
+                        public void onError(String message, int httpStatus) {
+                            if (destroyed) return;
+                            BulletinFactory.of(EveAnnouncementsFragment.this)
+                                    .createErrorBulletin(message != null ? message : "Delete failed.").show();
+                        }
+                    };
+                    adminRepo.runWithAdminToken(cb, token -> {
+                        adminRepo.deleteBroadcast(token, b.id);
+                        adminRepo.postSuccess(cb, null);
+                    });
+                })
+                .setNegativeButton(LocaleController.getString(R.string.Cancel), null)
+                .makeRed(AlertDialog.BUTTON_POSITIVE)
+                .create());
+    }
+
+    private void toggleChannelPoll(EvePollModel poll) {
+        if (poll == null) return;
+        EveAdminRepository adminRepo = EveAdminRepository.getInstance();
+        boolean targetActive = !poll.active;
+        EveAdminRepository.ResultCallback<Void> cb = new EveAdminRepository.ResultCallback<Void>() {
+            @Override
+            public void onSuccess(Void data) {
+                if (destroyed) return;
+                BulletinFactory.of(EveAnnouncementsFragment.this).createSimpleBulletin(
+                        R.raw.contact_check, targetActive ? "Quiz reopened" : "Quiz closed").show();
+                reload();
+            }
+
+            @Override
+            public void onError(String message, int httpStatus) {
+                if (destroyed) return;
+                BulletinFactory.of(EveAnnouncementsFragment.this)
+                        .createErrorBulletin(message != null ? message : "Status update failed.").show();
+            }
+        };
+        adminRepo.runWithAdminToken(cb, token -> {
+            adminRepo.setPollActive(token, poll.id, targetActive);
+            adminRepo.postSuccess(cb, null);
+        });
+    }
+
+    private void confirmDeleteChannelPoll(EvePollModel poll) {
+        Activity activity = getParentActivity();
+        if (activity == null || poll == null) return;
+        showDialog(new AlertDialog.Builder(activity, getResourceProvider())
+                .setTitle("Delete Quiz")
+                .setMessage("Delete \"" + EveAnimatedEmojiHelper.stripMarkupToPlainText(poll.question) + "\" and all recorded votes?")
+                .setPositiveButton(LocaleController.getString(R.string.Delete), (d, w) -> {
+                    EveAdminRepository adminRepo = EveAdminRepository.getInstance();
+                    EveAdminRepository.ResultCallback<Void> cb = new EveAdminRepository.ResultCallback<Void>() {
+                        @Override
+                        public void onSuccess(Void data) {
+                            if (destroyed) return;
+                            BulletinFactory.of(EveAnnouncementsFragment.this)
+                                    .createSimpleBulletin(R.raw.ic_delete, "Quiz deleted").show();
+                            reload();
+                        }
+
+                        @Override
+                        public void onError(String message, int httpStatus) {
+                            if (destroyed) return;
+                            BulletinFactory.of(EveAnnouncementsFragment.this)
+                                    .createErrorBulletin(message != null ? message : "Delete failed.").show();
+                        }
+                    };
+                    adminRepo.runWithAdminToken(cb, token -> {
+                        adminRepo.deletePoll(token, poll.id);
+                        adminRepo.postSuccess(cb, null);
+                    });
+                })
+                .setNegativeButton(LocaleController.getString(R.string.Cancel), null)
+                .makeRed(AlertDialog.BUTTON_POSITIVE)
+                .create());
     }
 
     private void handlePollVote(EvePollModel poll, int optionIndex) {
@@ -650,7 +1030,13 @@ public class EveAnnouncementsFragment extends BaseFragment {
             } else {
                 titleView.setVisibility(GONE);
             }
-            EveAnimatedEmojiHelper.bindText(bodyView, b.message);
+            if (!TextUtils.isEmpty(b.message)) {
+                bodyView.setVisibility(VISIBLE);
+                EveAnimatedEmojiHelper.bindText(bodyView, b.message);
+            } else {
+                bodyView.setVisibility(GONE);
+                bodyView.setText("");
+            }
             if (b.sentAtMs > 0L) {
                 timeView.setText(new SimpleDateFormat("HH:mm", Locale.getDefault()).format(new Date(b.sentAtMs)));
             } else {

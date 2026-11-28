@@ -109,6 +109,7 @@ public final class EveExamRepository {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService ioExecutor = Executors.newFixedThreadPool(6);
     private final CopyOnWriteArrayList<CatalogListener> listeners = new CopyOnWriteArrayList<>();
+    private final Map<String, EveExamModels.AttemptResult> recentSubmittedAttempts = new java.util.concurrent.ConcurrentHashMap<>();
     private final AtomicBoolean loading = new AtomicBoolean(false);
     private final ConcurrentHashMap<String, String> swrMemoryCache = new ConcurrentHashMap<>();
     private final EveBackendClient backendClient;
@@ -622,6 +623,9 @@ public final class EveExamRepository {
                     category,
                     displayName
             );
+            if (result != null && attemptKey != null && !attemptKey.trim().isEmpty()) {
+                recentSubmittedAttempts.put(attemptKey.trim(), result);
+            }
             postComplete(callback, result, "");
         });
     }
@@ -631,16 +635,60 @@ public final class EveExamRepository {
             JSONObject payload = new JSONObject();
             payload.put("examId", attemptKey);
             backendClient.postJsonRoot("/api/attempts/reset", token, payload);
+            if (attemptKey != null) {
+                recentSubmittedAttempts.remove(attemptKey.trim());
+            }
             postComplete(callback, Boolean.TRUE, "");
         });
+    }
+
+    @NonNull
+    public List<EveExamModels.AttemptResult> getCachedAttemptHistory() {
+        String raw = getSwrJson("attempt_history");
+        List<EveExamModels.AttemptResult> cached = Collections.emptyList();
+        if (!raw.isEmpty()) {
+            try {
+                cached = parseAttemptHistory(new JSONArray(raw));
+            } catch (Throwable ignored) {
+            }
+        }
+        return mergeRecentAttempts(cached);
     }
 
     public void loadAttemptHistory(ApiCallback<List<EveExamModels.AttemptResult>> callback) {
         withFreshToken(callback, token -> {
             JSONObject root = backendClient.getJsonRoot("/api/attempts", token);
-            List<EveExamModels.AttemptResult> list = parseAttemptHistory(root.optJSONArray("data"));
+            JSONArray dataArr = root.optJSONArray("data");
+            if (dataArr != null) {
+                putSwrJson("attempt_history", dataArr.toString());
+            }
+            List<EveExamModels.AttemptResult> list = mergeRecentAttempts(parseAttemptHistory(dataArr));
             postComplete(callback, list, "");
         });
+    }
+
+    @NonNull
+    private List<EveExamModels.AttemptResult> mergeRecentAttempts(@Nullable List<EveExamModels.AttemptResult> base) {
+        if (recentSubmittedAttempts.isEmpty()) {
+            return base != null ? base : Collections.emptyList();
+        }
+        List<EveExamModels.AttemptResult> merged = new ArrayList<>();
+        Set<String> seenKeys = new HashSet<>();
+        for (Map.Entry<String, EveExamModels.AttemptResult> entry : recentSubmittedAttempts.entrySet()) {
+            EveExamModels.AttemptResult r = entry.getValue();
+            if (r != null) {
+                merged.add(r);
+                seenKeys.add(entry.getKey());
+            }
+        }
+        if (base != null) {
+            for (EveExamModels.AttemptResult item : base) {
+                if (item != null && !seenKeys.contains(item.examId)) {
+                    merged.add(item);
+                }
+            }
+        }
+        return merged;
     }
 
     public void loadAttemptById(String attemptId, ApiCallback<EveExamModels.AttemptResult> callback) {

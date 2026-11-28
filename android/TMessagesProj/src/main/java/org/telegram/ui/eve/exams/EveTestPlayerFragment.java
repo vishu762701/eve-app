@@ -166,7 +166,7 @@ public class EveTestPlayerFragment extends BaseFragment {
     private int navBarHeight = 0;
 
     private LinearLayout mainColumn;
-    private View actionBarFadeView;
+    private View actionBarDivider;
     private ProgressBar loadingBar;
     private TextView statusMessageView;
     private LinearLayout errorCard;
@@ -262,10 +262,26 @@ public class EveTestPlayerFragment extends BaseFragment {
         return false;
     }
 
+    @NonNull
+    public static String resolveSafeTitle(
+            @Nullable EveExamModels.ExamSummary exam,
+            @Nullable EveExamModels.GeneratedTestSummary test) {
+        if (test != null && !TextUtils.isEmpty(test.getDisplayTitle())) {
+            return test.getDisplayTitle();
+        }
+        if (exam != null && !TextUtils.isEmpty(exam.examName)) {
+            return exam.examName;
+        }
+        return "Mock Test";
+    }
+
     @Override
     public View createView(Context context) {
         destroyed = false;
         setHasOwnBackground(true);
+        if (context == null) {
+            return null;
+        }
         try {
             return createPlayerViewInternal(context);
         } catch (Throwable err) {
@@ -298,34 +314,36 @@ public class EveTestPlayerFragment extends BaseFragment {
         msg.setGravity(Gravity.CENTER);
         fallback.addView(msg, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 18));
 
-        TextView backBtn = createActionButton(context, "Go Back", true);
+        TextView retryBtn = createActionButton(context, "Retry", true);
+        retryBtn.setOnClickListener(v -> {
+            if (getParentActivity() != null) {
+                try {
+                    View rebuilt = createPlayerViewInternal(getParentActivity());
+                    if (rebuilt != null && getParentLayout() != null) {
+                        presentFragment(new EveTestPlayerFragment(exam, test), true);
+                    }
+                } catch (Throwable t) {
+                    FileLog.e("EveTestPlayerFragment fallback retry failed", t);
+                }
+            }
+        });
+        fallback.addView(retryBtn, LayoutHelper.createLinear(180, 42, 0, 0, 0, 10));
+
+        TextView backBtn = createActionButton(context, "Go Back", false);
         backBtn.setOnClickListener(v -> finishFragment());
-        fallback.addView(backBtn, LayoutHelper.createLinear(160, 42));
+        fallback.addView(backBtn, LayoutHelper.createLinear(180, 42));
         fragmentView = fallback;
         return fallback;
     }
 
     private View createPlayerViewInternal(Context context) {
-        String title = test != null && !TextUtils.isEmpty(test.getDisplayTitle())
-                ? test.getDisplayTitle()
-                : (exam != null && !TextUtils.isEmpty(exam.examName) ? exam.examName : "Mock Test");
+        String title = resolveSafeTitle(exam, test);
         Theme.ResourcesProvider rp = getResourceProvider();
-
-        actionBarFadeView = new View(context);
-        if (getBaseSimpleGlass() != null) {
-            actionBarFadeView.setBackground(getBaseSimpleGlass().createActionBarFadeDrawable(actionBarFadeView));
-        }
 
         SizeNotifierFrameLayout rootFrame = new SizeNotifierFrameLayout(context) {
             @Override
             protected void dispatchDraw(Canvas canvas) {
                 super.dispatchDraw(canvas);
-                if (glassEngine != null && getWidth() > 0 && getHeight() > 0 && getParentActivity() != null) {
-                    try {
-                        glassEngine.invalidate();
-                    } catch (Throwable ignored) {
-                    }
-                }
                 if (navBarHeight > 0) {
                     AndroidUtilities.drawNavigationBarProtection(
                             canvas, this, Theme.getColor(Theme.key_windowBackgroundWhite, rp), navBarHeight);
@@ -337,6 +355,7 @@ public class EveTestPlayerFragment extends BaseFragment {
                 super.updateColors();
                 setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundGray, rp));
                 if (simpleActionBar != null) {
+                    simpleActionBar.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite, rp));
                     simpleActionBar.updateColors();
                 }
                 applyThemeColors();
@@ -533,11 +552,19 @@ public class EveTestPlayerFragment extends BaseFragment {
         });
         footerBar.addView(nextBtn, LayoutHelper.createLinear(0, 40, 1.15f, 3, 0, 3, 0));
 
-        rootFrame.addView(actionBarFadeView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 0, Gravity.TOP));
+        actionBarDivider = new View(context);
+        mainColumn.addView(actionBarDivider, 0, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 1));
+
         if (simpleActionBar != null) {
             simpleActionBar.setBackButtonImage(R.drawable.ic_ab_back);
-            simpleActionBar.setTitle(EveAnimatedEmojiHelper.decode(title, simpleActionBar.getTitleFontMetricsInt()));
-            simpleActionBar.setBackground(null);
+            CharSequence decodedTitle;
+            try {
+                decodedTitle = EveAnimatedEmojiHelper.decode(title, simpleActionBar.getTitleFontMetricsInt());
+            } catch (Throwable ignored) {
+                decodedTitle = EveAnimatedEmojiHelper.stripMarkupToPlainText(title);
+            }
+            simpleActionBar.setTitle(decodedTitle);
+            simpleActionBar.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite, rp));
             simpleActionBar.setActionBarMenuOnItemClick(new ActionBar.ActionBarMenuOnItemClick() {
                 @Override
                 public void onItemClick(int id) {
@@ -564,22 +591,14 @@ public class EveTestPlayerFragment extends BaseFragment {
             rootFrame.addView(simpleActionBar, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.FILL_HORIZONTAL | Gravity.TOP));
         }
 
-        EveAdminUiChrome.updateActionBarFadeHeight(actionBarFadeView, AndroidUtilities.statusBarHeight);
         mainColumn.setPadding(0, AndroidUtilities.statusBarHeight + ActionBar.getCurrentActionBarHeight(), 0, 0);
         ViewCompat.setOnApplyWindowInsetsListener(rootFrame, (v, insets) -> {
             final Insets sys = AndroidUtilities.getDefaultWindowInsets(insets, false);
             navBarHeight = sys.bottom;
-            EveAdminUiChrome.updateActionBarFadeHeight(actionBarFadeView, sys.top);
             mainColumn.setPadding(0, sys.top + ActionBar.getCurrentActionBarHeight(), 0, sys.bottom);
             return WindowInsetsCompat.CONSUMED;
         });
 
-        if (getBaseSimpleGlass() != null && simpleActionBar != null) {
-            try {
-                getBaseSimpleGlass().setViews(rootFrame, simpleActionBar, rp);
-            } catch (Throwable ignored) {
-            }
-        }
         applyThemeColors();
         fragmentView = rootFrame;
         startTestSession();
@@ -595,6 +614,8 @@ public class EveTestPlayerFragment extends BaseFragment {
         int grayText = Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, rp);
         int accent = Theme.getColor(Theme.key_featuredStickers_addButton, rp);
 
+        if (simpleActionBar != null) simpleActionBar.setBackgroundColor(white);
+        if (actionBarDivider != null) actionBarDivider.setBackgroundColor(divider);
         if (statusHeaderStrip != null) statusHeaderStrip.setBackgroundColor(white);
         if (statusStripText != null) statusStripText.setTextColor(grayText);
         if (statusDivider != null) statusDivider.setBackgroundColor(divider);
@@ -633,14 +654,19 @@ public class EveTestPlayerFragment extends BaseFragment {
             }
         }
 
-        GradientDrawable reportBg = new GradientDrawable();
-        reportBg.setCornerRadius(dp(8));
-        reportBg.setColor(gray);
-        reportBtn.setBackground(reportBg);
-        reportBtn.setColorFilter(new PorterDuffColorFilter(grayText, PorterDuff.Mode.MULTIPLY));
+        if (reportBtn != null) {
+            GradientDrawable reportBg = new GradientDrawable();
+            reportBg.setCornerRadius(dp(8));
+            reportBg.setColor(gray);
+            reportBtn.setBackground(reportBg);
+            reportBtn.setColorFilter(new PorterDuffColorFilter(grayText, PorterDuff.Mode.MULTIPLY));
+        }
 
         if (bookmarkBtn != null) {
-            bookmarkBtn.setBackground(reportBg);
+            GradientDrawable bookmarkBg = new GradientDrawable();
+            bookmarkBg.setCornerRadius(dp(8));
+            bookmarkBg.setColor(gray);
+            bookmarkBtn.setBackground(bookmarkBg);
         }
 
         if (errorCard != null) {
@@ -649,10 +675,10 @@ public class EveTestPlayerFragment extends BaseFragment {
             errBg.setColor(white);
             errBg.setStroke(Math.max(1, dp(0.6f)), Theme.multAlpha(divider, 0.8f));
             errorCard.setBackground(errBg);
-            errorTitleView.setTextColor(black);
-            errorBodyView.setTextColor(grayText);
-            styleActionButton(errorRetryBtn, true, false);
-            styleActionButton(errorBackBtn, false, false);
+            if (errorTitleView != null) errorTitleView.setTextColor(black);
+            if (errorBodyView != null) errorBodyView.setTextColor(grayText);
+            if (errorRetryBtn != null) styleActionButton(errorRetryBtn, true, false);
+            if (errorBackBtn != null) styleActionButton(errorBackBtn, false, false);
         }
 
         if (circularTimerView != null) {
