@@ -24,6 +24,8 @@ import org.telegram.ui.eve.auth.EveLocalDiskCache;
 import org.telegram.ui.eve.exams.EveAnnouncementsFragment;
 import org.telegram.ui.eve.exams.EveExamModels;
 import org.telegram.ui.eve.exams.EveExamRepository;
+import org.telegram.ui.eve.exams.EveExamTestsFragment;
+import org.telegram.ui.eve.exams.EveHomeBannerCarouselView;
 import org.telegram.ui.eve.exams.EveLeaderboardFragment;
 import org.telegram.ui.eve.exams.EveResultHistoryFragment;
 import org.telegram.ui.eve.exams.EveTestPlayerFragment;
