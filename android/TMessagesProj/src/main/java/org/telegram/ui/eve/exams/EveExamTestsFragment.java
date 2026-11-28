@@ -622,8 +622,8 @@ public class EveExamTestsFragment extends BaseFragment {
         options.add(
                 R.drawable.msg_delete,
                 "Delete Test",
+                true,
                 () -> confirmDeleteTest(selected));
-        options.makeRed(1);
         options.show();
         return true;
     }

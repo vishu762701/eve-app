@@ -218,7 +218,7 @@ public class EveAnnouncementsFragment extends BaseFragment {
                 this::applyChatTheme
         );
         listView = chrome.listView;
-        chatRoot = chrome.rootView;
+        chatRoot = (EveAnimatedEmojiHelper.EmojiHostSizeNotifierFrameLayout) chrome.rootView;
         actionBarFadeViewRef = chrome.actionBarFadeView;
 
         avatarHeader = EveAdminUiChrome.attachAvatarActionBarHeader(
@@ -287,7 +287,7 @@ public class EveAnnouncementsFragment extends BaseFragment {
 
         quizBtn = new ImageView(context);
         quizBtn.setScaleType(ImageView.ScaleType.CENTER);
-        quizBtn.setImageResource(R.drawable.msg_polls);
+        quizBtn.setImageResource(R.drawable.msg_stats);
         quizBtn.setContentDescription("Create Quiz");
         quizBtn.setOnClickListener(v -> presentFragment(new EveAdminPollCreateFragment(this::reload)));
         row.addView(quizBtn, LayoutHelper.createLinear(40, 40, Gravity.CENTER_VERTICAL, 2, 0, 2, 0));
@@ -652,8 +652,7 @@ public class EveAnnouncementsFragment extends BaseFragment {
         }
         if (entry.broadcast != null && isChannelAdmin()) {
             ItemOptions options = ItemOptions.makeOptions(this, view);
-            options.add(R.drawable.msg_delete, "Delete Post", () -> confirmDeleteBroadcast(entry.broadcast));
-            options.makeRed(0);
+            options.add(R.drawable.msg_delete, "Delete Post", true, () -> confirmDeleteBroadcast(entry.broadcast));
             options.show();
             return true;
         }
@@ -666,8 +665,8 @@ public class EveAnnouncementsFragment extends BaseFragment {
             options.add(
                     R.drawable.msg_delete,
                     "Delete Quiz",
+                    true,
                     () -> confirmDeleteChannelPoll(entry.poll));
-            options.makeRed(1);
             options.show();
             return true;
         }

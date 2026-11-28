@@ -17,6 +17,7 @@ import android.view.View;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.R;
 import org.telegram.ui.ActionBar.ActionBar;
 import org.telegram.ui.ActionBar.AlertDialog;
@@ -204,7 +205,7 @@ public class EveHiddenAdminPortalFragment extends BaseFragment {
                 0xFF3D8BEB, 0xFF2A6FD9,
                 R.drawable.settings_devices,
                 "EVE Admin Control Center",
-                getString(R.string.EveAdminControlCenterSubtitle)));
+                LocaleController.getString(R.string.EveAdminControlCenterSubtitle)));
 
         EveAuthManager auth = EveAuthManager.getInstance();
         EveUserProfile profile = auth.getCachedProfile();
@@ -283,10 +284,10 @@ public class EveHiddenAdminPortalFragment extends BaseFragment {
                         BulletinFactory.of(EveHiddenAdminPortalFragment.this).createErrorBulletin(message).show();
                     }
                 }))
-                .setNeutralButton(getString(R.string.LogOut), (d, w) -> auth.signOut(activity, () -> {
+                .setNeutralButton(LocaleController.getString(R.string.LogOut), (d, w) -> auth.signOut(activity, () -> {
                     presentFragment(new EveSignInFragment(), true);
                 }))
-                .setNegativeButton(getString(R.string.Cancel), null)
+                .setNegativeButton(LocaleController.getString(R.string.Cancel), null)
                 .create());
     }
 
@@ -325,7 +326,7 @@ public class EveHiddenAdminPortalFragment extends BaseFragment {
                             .createSimpleBulletin(R.raw.info, "Telegram Chat disconnected. EVE Exams remain active.")
                             .show();
                 }))
-                .setNegativeButton(getString(R.string.Cancel), null)
+                .setNegativeButton(LocaleController.getString(R.string.Cancel), null)
                 .create());
     }
 }
