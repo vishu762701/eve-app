@@ -976,7 +976,7 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
         }
     }
 
-    private static class InfoCell extends LinearLayout implements Theme.Colorable {
+    public static class InfoCell extends LinearLayout implements Theme.Colorable {
 
         private final Theme.ResourcesProvider resourcesProvider;
 
