@@ -470,7 +470,7 @@ public final class EveAdminUiChrome {
             int thumbType = sizeDp >= 56 ? VectorAvatarThumbDrawable.TYPE_PROFILE : VectorAvatarThumbDrawable.TYPE_SMALL;
             VectorAvatarThumbDrawable vectorDrawable = new VectorAvatarThumbDrawable(animMarkup, true, thumbType);
             vectorDrawable.setRoundRadius(dp(sizeDp / 2f));
-            avatarView.setImage(null, "50_50", vectorDrawable, null, 0);
+            avatarView.setImage(null, "50_50", vectorDrawable, null);
             return;
         }
 

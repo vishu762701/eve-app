@@ -252,12 +252,6 @@ public class EveTestPlayerFragment extends BaseFragment {
         return false;
     }
 
-    @Nullable
-    @Override
-    protected ScrollView getScrollViewForSimpleGlass() {
-        return questionScrollView;
-    }
-
     @Override
     public boolean isSupportEdgeToEdge() {
         return true;
@@ -583,7 +577,6 @@ public class EveTestPlayerFragment extends BaseFragment {
         if (getBaseSimpleGlass() != null && simpleActionBar != null) {
             try {
                 getBaseSimpleGlass().setViews(rootFrame, simpleActionBar, rp);
-                simpleActionBar.setupGlass(getBaseSimpleGlass());
             } catch (Throwable ignored) {
             }
         }
