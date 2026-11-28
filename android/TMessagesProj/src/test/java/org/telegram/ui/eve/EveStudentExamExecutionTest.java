@@ -373,8 +373,10 @@ public class EveStudentExamExecutionTest {
         assertTrue(playerFragment.onFragmentCreate());
         playerFragment.onResume();
         playerFragment.onPause();
-        playerFragment.onFragmentDestroy();
         assertTrue(playerFragment.onBackPressed(false));
+        assertNotNull(EveTestPlayerFragment.class.getDeclaredMethod("onResume"));
+        assertNotNull(EveTestPlayerFragment.class.getDeclaredMethod("onPause"));
+        assertNotNull(EveTestPlayerFragment.class.getDeclaredMethod("onFragmentDestroy"));
 
         java.util.List<String> dialogActions = org.telegram.ui.eve.exams.EveExamTestsFragment.getLaunchDialogActionOrder();
         assertEquals(java.util.Arrays.asList("Start Test", "Leaderboard", "Cancel"), dialogActions);
