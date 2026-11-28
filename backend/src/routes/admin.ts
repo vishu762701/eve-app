@@ -729,6 +729,8 @@ adminRoutes.get("/users", requirePermission("manage_users"), async (c) => {
     const hasTableInfo = availableColumns.size > 0;
     const hasDisabled = !hasTableInfo || availableColumns.has("disabled");
     const hasUsername = availableColumns.has("username");
+    const hasTelegramUsername = availableColumns.has("telegram_username");
+    const hasTelegramUserId = availableColumns.has("telegram_user_id");
     const hasPhone = availableColumns.has("phone");
     const hasBio = availableColumns.has("bio");
     const photoColumn = availableColumns.has("photo_url")
@@ -744,6 +746,14 @@ adminRoutes.get("/users", requirePermission("manage_users"), async (c) => {
     if (q && hasUsername) {
       searchClauses.push("LOWER(COALESCE(users.username, '')) LIKE ? ESCAPE '!'");
       params.push(`%${qNoAt}%`);
+    }
+    if (q && hasTelegramUsername) {
+      searchClauses.push("LOWER(COALESCE(users.telegram_username, '')) LIKE ? ESCAPE '!'");
+      params.push(`%${qNoAt}%`);
+    }
+    if (q && hasPhone) {
+      searchClauses.push("LOWER(COALESCE(users.phone, '')) LIKE ? ESCAPE '!'");
+      params.push(`%${q}%`);
     }
     const whereClauses: string[] = [];
     if (q) {
@@ -816,6 +826,8 @@ adminRoutes.get("/users", requirePermission("manage_users"), async (c) => {
       ];
       if (includeDisabled) selectCols.push("COALESCE(users.disabled, 0) AS disabled");
       if (hasUsername) selectCols.push("COALESCE(users.username, '') AS username");
+      if (hasTelegramUsername) selectCols.push("COALESCE(users.telegram_username, '') AS telegram_username");
+      if (hasTelegramUserId) selectCols.push("COALESCE(users.telegram_user_id, '') AS telegram_user_id");
       if (hasPhone) selectCols.push("COALESCE(users.phone, '') AS phone");
       if (hasBio) selectCols.push("COALESCE(users.bio, '') AS bio");
       if (photoColumn) selectCols.push(`COALESCE(users.${photoColumn}, '') AS photo_url`);
@@ -852,7 +864,10 @@ adminRoutes.get("/users", requirePermission("manage_users"), async (c) => {
         isOnline: lastAct >= onlineCutoff,
       };
       if (includeProfileExtras) {
-        if (hasUsername) item.username = u.username || "";
+        if (hasUsername || hasTelegramUsername) {
+          item.username = (hasTelegramUsername && u.telegram_username) ? u.telegram_username : (u.username || "");
+        }
+        if (hasTelegramUserId && u.telegram_user_id) item.telegramUserId = u.telegram_user_id;
         if (hasPhone) item.phone = u.phone || "";
         if (hasBio) item.bio = u.bio || "";
         item.photoUrl = photoColumn ? (u.photo_url || "") : "";
@@ -895,6 +910,8 @@ adminRoutes.get("/users/:id", requirePermission("manage_users"), async (c) => {
     const hasTableInfo = availableColumns.size > 0;
     const hasDisabled = !hasTableInfo || availableColumns.has("disabled");
     const hasUsername = availableColumns.has("username");
+    const hasTelegramUsername = availableColumns.has("telegram_username");
+    const hasTelegramUserId = availableColumns.has("telegram_user_id");
     const hasPhone = availableColumns.has("phone");
     const hasBio = availableColumns.has("bio");
     const photoColumn = availableColumns.has("photo_url")
@@ -913,6 +930,8 @@ adminRoutes.get("/users/:id", requirePermission("manage_users"), async (c) => {
     ];
     if (hasDisabled) selectCols.push("COALESCE(disabled, 0) AS disabled");
     if (hasUsername) selectCols.push("COALESCE(username, '') AS username");
+    if (hasTelegramUsername) selectCols.push("COALESCE(telegram_username, '') AS telegram_username");
+    if (hasTelegramUserId) selectCols.push("COALESCE(telegram_user_id, '') AS telegram_user_id");
     if (hasPhone) selectCols.push("COALESCE(phone, '') AS phone");
     if (hasBio) selectCols.push("COALESCE(bio, '') AS bio");
     if (photoColumn) selectCols.push(`COALESCE(${photoColumn}, '') AS photo_url`);
@@ -936,7 +955,8 @@ adminRoutes.get("/users/:id", requirePermission("manage_users"), async (c) => {
         createdAt: u.created_at || 0,
         lastActive: u.last_active || 0,
         disabled: Boolean(u.disabled),
-        username: hasUsername ? (u.username || "") : "",
+        username: (hasTelegramUsername && u.telegram_username) ? u.telegram_username : (hasUsername ? (u.username || "") : ""),
+        ...(hasTelegramUserId && u.telegram_user_id ? { telegramUserId: u.telegram_user_id } : {}),
         phone: hasPhone ? (u.phone || "") : "",
         bio: hasBio ? (u.bio || "") : "",
         photoUrl: photoColumn ? (u.photo_url || "") : "",

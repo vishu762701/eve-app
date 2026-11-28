@@ -27,8 +27,8 @@ function buildApp(d1, user) {
   return app;
 }
 
-test("POST /api/users/sync persists and returns telegramUserId and telegramUsername when migration is applied", async () => {
-  const { d1 } = isolatedD1();
+test("POST /api/users/sync persists and returns unified Telegram identity (telegramUserId, phone, username, displayName, bio) when migration is applied", async () => {
+  const { d1, sqlite } = isolatedD1();
   const app = buildApp(d1, {
     uid: "stu-tg-1",
     email: "student.tg@example.com",
@@ -41,17 +41,29 @@ test("POST /api/users/sync persists and returns telegramUserId and telegramUsern
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      displayName: "Aarav",
+      displayName: "Aarav Sharma",
       telegramUserId: "9996628429",
-      telegramUsername: "@aarav_test",
+      username: "@aarav_test",
+      phone: "917627018989",
+      bio: "UPSC CSE 2027 aspirant",
     }),
   });
   assert.equal(syncRes.status, 200);
   const syncJson = await syncRes.json();
   assert.equal(syncJson.success, true);
   assert.ok(syncJson.data.eveId.startsWith("EV-"));
+  assert.equal(syncJson.data.displayName, "Aarav Sharma");
   assert.equal(syncJson.data.telegramUserId, "9996628429");
   assert.equal(syncJson.data.telegramUsername, "aarav_test");
+  assert.equal(syncJson.data.username, "aarav_test");
+  assert.equal(syncJson.data.phone, "+917627018989");
+  assert.equal(syncJson.data.bio, "UPSC CSE 2027 aspirant");
+
+  // Verify lookup indexes created by migration 0038 exist
+  const indexRows = sqlite.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'users'").all();
+  const indexNames = new Set(indexRows.map((r) => r.name));
+  assert.equal(indexNames.has("idx_users_phone"), true);
+  assert.equal(indexNames.has("idx_users_telegram_user_id"), true);
 
   // Subsequent sync without telegram fields preserves linked Telegram identity
   const secondRes = await app.request("http://localhost/api/users/sync", {
@@ -63,14 +75,23 @@ test("POST /api/users/sync persists and returns telegramUserId and telegramUsern
   const secondJson = await secondRes.json();
   assert.equal(secondJson.data.telegramUserId, "9996628429");
   assert.equal(secondJson.data.telegramUsername, "aarav_test");
+  assert.equal(secondJson.data.phone, "+917627018989");
+  assert.equal(secondJson.data.bio, "UPSC CSE 2027 aspirant");
 
-  // Invalid telegramUserId is rejected with 400
+  // Invalid telegramUserId or phone is rejected with 400
   const badRes = await app.request("http://localhost/api/users/sync", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ displayName: "Aarav", telegramUserId: "bad id with spaces!" }),
   });
   assert.equal(badRes.status, 400);
+
+  const badPhoneRes = await app.request("http://localhost/api/users/sync", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ displayName: "Aarav", phone: "123" }),
+  });
+  assert.equal(badPhoneRes.status, 400);
 });
 
 test("POST /api/users/sync succeeds defensively on legacy users table before migration 0036", async () => {

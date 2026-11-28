@@ -24,6 +24,7 @@ import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Cells.TextCheckCell;
 import org.telegram.ui.Components.BulletinFactory;
+import org.telegram.ui.Components.EditTextBoldCursor;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.UItem;
 import org.telegram.ui.Components.UniversalAdapter;
@@ -583,11 +584,12 @@ public class EveAdminPackManagerFragment extends BaseFragment {
     }
 
     private static EditText makeInput(Context ctx, String hint) {
-        EditText et = new EditText(ctx);
+        EditTextBoldCursor et = new EditTextBoldCursor(ctx);
         et.setHint(hint);
         et.setSingleLine(true);
         et.setTextColor(Theme.getColor(Theme.key_dialogTextBlack));
         et.setHintTextColor(Theme.getColor(Theme.key_dialogTextHint));
+        et.setCursorColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText));
         return et;
     }
 

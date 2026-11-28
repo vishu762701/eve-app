@@ -21,6 +21,8 @@ import java.io.File;
 public final class EveAdminConfig {
 
     private static final String PREFS_NAME = "eve_debug_admin_config";
+    private static final String KEY_PORTAL_UNLOCKED = "eve_admin_portal_unlocked";
+    private static final String KEY_PORTAL_UNLOCKED_ACCOUNT = "eve_admin_portal_unlocked_account";
 
     public static final String SECTION_ACCOUNT = "section_account";
     public static final String SECTION_CHAT_SETTINGS = "section_chat_settings";
@@ -82,6 +84,80 @@ public final class EveAdminConfig {
 
     public static boolean hasEvePremiumAccess() {
         return isAdminAvailable() || isOwner(EveAuthManager.getInstance().getCachedProfile());
+    }
+
+    private static String normalizePortalAccountKey(EveUserProfile profile) {
+        if (profile == null) {
+            return "";
+        }
+        String key = profile.email != null ? profile.email.trim().toLowerCase(java.util.Locale.US) : "";
+        if (!key.isEmpty()) {
+            return key;
+        }
+        return profile.uid != null ? profile.uid.trim() : "";
+    }
+
+    public static boolean isAdminPortalUnlockedForAccount(
+            EveUserProfile profile,
+            boolean unlockedFlag,
+            String scopedAccountKey) {
+        if (!unlockedFlag || !isServerAdminProfile(profile)) {
+            return false;
+        }
+        String expected = normalizePortalAccountKey(profile);
+        String actual = scopedAccountKey != null ? scopedAccountKey.trim().toLowerCase(java.util.Locale.US) : "";
+        return !expected.isEmpty() && expected.equals(actual);
+    }
+
+    public static boolean isAdminPortalUnlocked() {
+        try {
+            EveAuthManager auth = EveAuthManager.getInstance();
+            if (!auth.isSignedInAccount()) {
+                return false;
+            }
+            EveUserProfile profile = auth.getCachedProfile();
+            SharedPreferences p = prefs();
+            if (p == null) {
+                return false;
+            }
+            boolean unlocked = p.getBoolean(KEY_PORTAL_UNLOCKED, false);
+            String scopedAccount = p.getString(KEY_PORTAL_UNLOCKED_ACCOUNT, "");
+            return isAdminPortalUnlockedForAccount(profile, unlocked, scopedAccount);
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    public static void markAdminPortalUnlocked(EveUserProfile profile) {
+        if (!isServerAdminProfile(profile)) {
+            clearAdminPortalUnlocked();
+            return;
+        }
+        String accountKey = normalizePortalAccountKey(profile);
+        if (accountKey.isEmpty()) {
+            clearAdminPortalUnlocked();
+            return;
+        }
+        SharedPreferences p = prefs();
+        if (p != null) {
+            p.edit()
+                    .putBoolean(KEY_PORTAL_UNLOCKED, true)
+                    .putString(KEY_PORTAL_UNLOCKED_ACCOUNT, accountKey)
+                    .apply();
+        }
+    }
+
+    public static void clearAdminPortalUnlocked() {
+        try {
+            SharedPreferences p = prefs();
+            if (p != null) {
+                p.edit()
+                        .remove(KEY_PORTAL_UNLOCKED)
+                        .remove(KEY_PORTAL_UNLOCKED_ACCOUNT)
+                        .apply();
+            }
+        } catch (Throwable ignored) {
+        }
     }
 
     private static SharedPreferences prefs() {

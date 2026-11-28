@@ -8,7 +8,7 @@ import { Hono } from "hono";
 import { parseAndValidateQuestions } from "../ai/generator";
 import { ALL_ADMIN_RIGHTS, AdminRight, HARDCODED_ADMIN_EMAILS, isOwnerEmail } from "../auth";
 import { renderMiniAppHtml } from "../miniapp/template";
-import { deletionInfo, deleteUnused } from "../services/deletion";
+import { cascadeDeleteRecord, deletionInfo } from "../services/deletion";
 import {
   assembleTestFromBank,
   GenerationBusyError,
@@ -521,20 +521,13 @@ telegramMiniAppApi.delete("/exams/:id", async (c) => {
   const user = c.get("user");
   const id = c.req.param("id");
   const db = c.env.DB;
-  const existing = await db.prepare("SELECT * FROM exams WHERE id = ?").bind(id).first<ExamRow>();
-  if (!existing) return c.json({ success: false, error: "Exam not found" }, 404);
-
-  const info = await deletionInfo(db, id, "exam");
-  if (!info.canDelete) {
-    return c.json({ success: false, error: info.message || "Exam has dependent attempts/tests and cannot be removed" }, 409);
-  }
-  const ok = await deleteUnused(db, id, "exam", user);
-  if (!ok) return c.json({ success: false, error: "Exam could not be deleted" }, 409);
+  const res = await cascadeDeleteRecord(db, id, "exam", user);
+  if (!res.deleted) return c.json({ success: false, error: "Exam not found" }, 404);
 
   await purgeEdgeCache(c, ["/api/exams", "/api/generated-tests"]);
-  const oldAvatar = extractStorageAvatarKey(String(existing.avatar_url || existing.image_url || ""), "exam-avatars/");
-  if (oldAvatar) {
-    try { await new AssetStorage(c.env).deleteFiles([oldAvatar]); } catch {}
+  const toDelete = [...res.avatarKeys, ...res.syllabusPaths];
+  if (toDelete.length > 0) {
+    try { await new AssetStorage(c.env).deleteFiles(toDelete); } catch {}
   }
   return c.json({ success: true });
 });
@@ -748,8 +741,11 @@ telegramMiniAppApi.put("/tests/:id/status", async (c) => {
 telegramMiniAppApi.delete("/tests/:id", async (c) => {
   const user = c.get("user");
   const id = c.req.param("id");
-  const ok = await deleteUnused(c.env.DB, id, "test", user);
-  if (!ok) return c.json({ success: false, error: "Test cannot be deleted (attempted or missing)" }, 409);
+  const res = await cascadeDeleteRecord(c.env.DB, id, "test", user);
+  if (!res.deleted) return c.json({ success: false, error: "Test not found" }, 404);
+  if (res.avatarKeys.length > 0) {
+    try { await new AssetStorage(c.env).deleteFiles(res.avatarKeys); } catch {}
+  }
   await purgeEdgeCache(c, ["/api/generated-tests", "/api/exams"]);
   return c.json({ success: true });
 });

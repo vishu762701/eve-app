@@ -109,6 +109,36 @@ public class EveSettingsAndPremiumTest {
         assertEquals(2, longPresses);
         assertEquals(1, SettingsActivity.advanceFooterLongPressCount(1, 1000L, 6000L));
 
+        assertFalse(SettingsActivity.shouldOpenAdminPortalOnFooterTap(false, 1));
+        assertFalse(SettingsActivity.shouldOpenAdminPortalOnFooterTap(false, 7));
+        assertTrue(SettingsActivity.shouldOpenAdminPortalOnFooterTap(true, 1));
+
+        org.telegram.ui.eve.auth.EveUserProfile adminProfile = new org.telegram.ui.eve.auth.EveUserProfile(
+                "adm-1", "EV-ADM01", "Admin", "admin@example.com", "", "google.com",
+                true, org.telegram.ui.eve.auth.EveUserProfile.STATUS_ACTIVE, true, "admin_tg",
+                "General", "", 1L, 1L, 1L, true);
+        org.telegram.ui.eve.auth.EveUserProfile studentProfile = new org.telegram.ui.eve.auth.EveUserProfile(
+                "stu-1", "EV-STU01", "Student", "student@example.com", "", "google.com",
+                true, org.telegram.ui.eve.auth.EveUserProfile.STATUS_ACTIVE, false, "stu_tg",
+                "General", "", 1L, 1L, 1L, true);
+        assertTrue(org.telegram.ui.eve.admin.EveAdminConfig.isAdminPortalUnlockedForAccount(
+                adminProfile, true, "ADMIN@example.com"));
+        assertFalse(org.telegram.ui.eve.admin.EveAdminConfig.isAdminPortalUnlockedForAccount(
+                adminProfile, false, "admin@example.com"));
+        assertFalse(org.telegram.ui.eve.admin.EveAdminConfig.isAdminPortalUnlockedForAccount(
+                adminProfile, true, "other@example.com"));
+        assertFalse(org.telegram.ui.eve.admin.EveAdminConfig.isAdminPortalUnlockedForAccount(
+                studentProfile, true, "student@example.com"));
+
+        String withHandle = SettingsActivity.formatTelegramHeaderSubtitle("+917627018989", "@Any9ue");
+        assertTrue(withHandle.contains("76270"));
+        assertTrue(withHandle.endsWith("@Any9ue"));
+        assertFalse(withHandle.contains("@gmail.com"));
+        assertFalse(withHandle.contains("EV-"));
+        String phoneOnly = SettingsActivity.formatTelegramHeaderSubtitle("+917627018989", "");
+        assertFalse(phoneOnly.contains("@"));
+        assertFalse(phoneOnly.contains("\u2022"));
+
         assertEquals(
                 java.util.Arrays.asList("EVE Admin Control Center", "EVE Cloud Account", "Telegram Chat & Sync"),
                 org.telegram.ui.eve.admin.EveHiddenAdminPortalFragment.getHiddenPortalItemTitles());

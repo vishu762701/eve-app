@@ -1,22 +1,14 @@
 package org.telegram.ui.eve.exams;
 
-import static org.telegram.messenger.AndroidUtilities.dp;
-
 import android.app.Activity;
 import android.content.Context;
 import android.text.TextUtils;
-import android.util.TypedValue;
-import android.view.Gravity;
 import android.view.View;
 import android.widget.EditText;
-import android.widget.FrameLayout;
-import android.widget.LinearLayout;
-import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.R;
 import org.telegram.ui.ActionBar.ActionBar;
@@ -24,10 +16,6 @@ import org.telegram.ui.ActionBar.ActionBarMenuItem;
 import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.SimpleActionBarMenu;
-import org.telegram.ui.ActionBar.Theme;
-import org.telegram.ui.Components.AvatarDrawable;
-import org.telegram.ui.Components.BackupImageView;
-import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.RecyclerListView;
 import org.telegram.ui.Components.UItem;
 import org.telegram.ui.Components.UniversalAdapter;
@@ -41,14 +29,13 @@ import org.telegram.ui.eve.admin.EveAnimatedEmojiHelper;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Objects;
 
 /**
- * Edge-to-Edge Sub-Exams directory matching Home Exams style with circular photo/GIF/emoji
- * avatars, test counts, and seamless drill-down into {@link EveExamTestsFragment}.
+ * Edge-to-Edge Sub-Exams directory matching Telegram Chats style via {@link EveExamChatRowCell}
+ * (circular 54dp avatars, 16sp bold AnimatedEmojiSpan titles, muted metadata subtitles,
+ * right-aligned counter pill badges, and DialogCell-aligned inset hairline dividers).
  */
 public class EveSubExamsFragment extends BaseFragment {
 
@@ -114,7 +101,6 @@ public class EveSubExamsFragment extends BaseFragment {
         allSubExams = EveExamRepository.getInstance().getSubExamsForParent(parentExam.id);
         applyFilter("");
 
-        String metaSubtitle = buildParentMetaSubtitle();
         EveAdminUiChrome.Chrome chrome = EveAdminUiChrome.setup(
                 this,
                 context,
@@ -123,7 +109,8 @@ public class EveSubExamsFragment extends BaseFragment {
                 glassEngine,
                 getResourceProvider(),
                 parentExam.examName,
-                metaSubtitle,
+                buildParentMetaSubtitle(),
+                false,
                 false,
                 this::fillItems,
                 this::onClick,
@@ -147,13 +134,13 @@ public class EveSubExamsFragment extends BaseFragment {
             avatarHeader = EveAdminUiChrome.attachAvatarActionBarHeader(
                     context,
                     simpleActionBar,
-                    58,
+                    56,
                     getResourceProvider());
             if (avatarHeader != null) {
                 avatarHeader.update(
                         parentExam.id,
                         parentExam.examName,
-                        metaSubtitle,
+                        buildParentMetaSubtitle(),
                         parentExam.avatarUrl,
                         parentExam.avatarEmoji,
                         parentExam.avatarColor);
@@ -267,7 +254,7 @@ public class EveSubExamsFragment extends BaseFragment {
         String q = searchQuery.toLowerCase(Locale.US);
         for (EveExamModels.ExamSummary item : allSubExams) {
             if (item == null || item.isPaused()) continue;
-            String plainName = org.telegram.ui.eve.admin.EveAnimatedEmojiHelper.stripMarkupToPlainText(item.examName).toLowerCase(Locale.US);
+            String plainName = EveAnimatedEmojiHelper.stripMarkupToPlainText(item.examName).toLowerCase(Locale.US);
             if (q.isEmpty() || plainName.contains(q)
                     || item.category.toLowerCase(Locale.US).contains(q)) {
                 filtered.add(item);
@@ -287,14 +274,27 @@ public class EveSubExamsFragment extends BaseFragment {
     private void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
         EveAdminUiChrome.addTopSpace(items);
         if (filtered.isEmpty()) {
-            String plainParent = org.telegram.ui.eve.admin.EveAnimatedEmojiHelper.stripMarkupToPlainText(parentExam.examName);
+            String plainParent = EveAnimatedEmojiHelper.stripMarkupToPlainText(parentExam.examName);
             items.add(UItem.asShadow(searchQuery.isEmpty()
                     ? "No active sub-exams under " + plainParent + "."
                     : "No matching sub-exams found."));
             return;
         }
         for (int i = 0; i < filtered.size(); i++) {
-            items.add(SubExamRowCell.Factory.of(BASE_SUB_ID + i, filtered.get(i)));
+            EveExamModels.ExamSummary sub = filtered.get(i);
+            String badge = sub.liveTestCount > 0 ? String.valueOf(sub.liveTestCount) : "";
+            items.add(EveExamChatRowCell.Factory.of(
+                    BASE_SUB_ID + i,
+                    sub,
+                    new EveExamChatRowCell.Payload(
+                            sub.id,
+                            sub.examName,
+                            EveExamDialogsMapper.buildExamSubtitle(sub),
+                            sub.avatarUrl,
+                            sub.avatarEmoji,
+                            sub.avatarColor,
+                            badge,
+                            EveExamChatRowCell.BADGE_SOLID_COUNTER)));
         }
     }
 
@@ -302,140 +302,6 @@ public class EveSubExamsFragment extends BaseFragment {
         int idx = item.id - BASE_SUB_ID;
         if (idx >= 0 && idx < filtered.size()) {
             presentFragment(new EveExamTestsFragment(filtered.get(idx)));
-        }
-    }
-
-    private static final class SubExamRowCell extends FrameLayout implements Theme.Colorable {
-
-        private final Theme.ResourcesProvider rp;
-        private final AvatarDrawable avatarDrawable;
-        private final BackupImageView avatarView;
-        private final org.telegram.ui.Components.AnimatedEmojiSpan.TextViewEmojis titleView;
-        private final TextView subtitleView;
-        private final TextView badgeView;
-
-        SubExamRowCell(Context context, Theme.ResourcesProvider rp) {
-            super(context);
-            this.rp = rp;
-
-            avatarDrawable = new AvatarDrawable();
-            avatarView = new BackupImageView(context);
-            avatarView.setRoundRadius(dp(26));
-
-            LinearLayout col = new LinearLayout(context);
-            col.setOrientation(LinearLayout.VERTICAL);
-
-            titleView = org.telegram.ui.eve.admin.EveAnimatedEmojiHelper.createEmojiTextView(context);
-            titleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16.5f);
-            titleView.setTypeface(AndroidUtilities.bold());
-            titleView.setSingleLine(true);
-            titleView.setEllipsize(TextUtils.TruncateAt.END);
-            col.addView(titleView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
-
-            subtitleView = new TextView(context);
-            subtitleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13.5f);
-            subtitleView.setSingleLine(true);
-            subtitleView.setEllipsize(TextUtils.TruncateAt.END);
-            col.addView(subtitleView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 3, 0, 0));
-
-            badgeView = new TextView(context);
-            badgeView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12);
-            badgeView.setTypeface(AndroidUtilities.bold());
-            badgeView.setPadding(dp(9), dp(3), dp(9), dp(3));
-
-            LinearLayout row = new LinearLayout(context);
-            row.setOrientation(LinearLayout.HORIZONTAL);
-            row.setGravity(Gravity.CENTER_VERTICAL);
-            row.addView(avatarView, LayoutHelper.createLinear(52, 52, Gravity.CENTER_VERTICAL, 14, 0, 12, 0));
-            row.addView(col, LayoutHelper.createLinear(0, LayoutHelper.WRAP_CONTENT, 1f, Gravity.CENTER_VERTICAL, 0, 0, 8, 0));
-            row.addView(badgeView, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_VERTICAL, 0, 0, 14, 0));
-
-            addView(row, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_VERTICAL, 0, 10, 0, 10));
-            updateColors();
-        }
-
-        void bind(EveExamModels.ExamSummary sub) {
-            EveAdminUiChrome.bindExamAvatar(
-                    avatarView, avatarDrawable, sub.id, sub.examName,
-                    sub.avatarUrl, sub.avatarEmoji, sub.avatarColor, 52, rp);
-            org.telegram.ui.eve.admin.EveAnimatedEmojiHelper.bindText(titleView, sub.examName);
-            subtitleView.setText(EveExamDialogsMapper.buildExamSubtitle(sub));
-            if (sub.liveTestCount > 0) {
-                badgeView.setText(String.valueOf(sub.liveTestCount));
-                badgeView.setVisibility(VISIBLE);
-            } else {
-                badgeView.setVisibility(GONE);
-            }
-            updateColors();
-        }
-
-        @Override
-        public void updateColors() {
-            titleView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, rp));
-            subtitleView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, rp));
-            int blue = Theme.getColor(Theme.key_windowBackgroundWhiteBlueText, rp);
-            badgeView.setTextColor(0xFFFFFFFF);
-            badgeView.setBackground(Theme.createRoundRectDrawable(dp(12), blue));
-        }
-
-        @Override
-        public void addColorKeys(HashSet<Integer> colors) {
-            colors.add(Theme.key_windowBackgroundWhiteBlackText);
-            colors.add(Theme.key_windowBackgroundWhiteGrayText);
-            colors.add(Theme.key_windowBackgroundWhiteBlueText);
-        }
-
-        @Override
-        protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-            super.onMeasure(
-                    MeasureSpec.makeMeasureSpec(MeasureSpec.getSize(widthMeasureSpec), MeasureSpec.EXACTLY),
-                    MeasureSpec.makeMeasureSpec(dp(72), MeasureSpec.EXACTLY));
-        }
-
-        static final class Factory extends UItem.UItemFactory<SubExamRowCell> {
-            static { setup(new Factory()); }
-
-            @Override
-            public SubExamRowCell createView(Context context, RecyclerListView listView, int currentAccount, int classGuid, Theme.ResourcesProvider resourcesProvider) {
-                return new SubExamRowCell(context, resourcesProvider);
-            }
-
-            @Override
-            public void bindView(View view, UItem item, boolean divider, UniversalAdapter adapter, UniversalRecyclerView listView) {
-                if (item.object instanceof EveExamModels.ExamSummary) {
-                    ((SubExamRowCell) view).bind((EveExamModels.ExamSummary) item.object);
-                }
-            }
-
-            @Override
-            public boolean equals(UItem a, UItem b) {
-                if (a.object instanceof EveExamModels.ExamSummary && b.object instanceof EveExamModels.ExamSummary) {
-                    return TextUtils.equals(((EveExamModels.ExamSummary) a.object).id,
-                            ((EveExamModels.ExamSummary) b.object).id);
-                }
-                return a.id == b.id;
-            }
-
-            @Override
-            public boolean contentsEquals(UItem a, UItem b) {
-                if (a.object instanceof EveExamModels.ExamSummary && b.object instanceof EveExamModels.ExamSummary) {
-                    EveExamModels.ExamSummary ea = (EveExamModels.ExamSummary) a.object;
-                    EveExamModels.ExamSummary eb = (EveExamModels.ExamSummary) b.object;
-                    return ea.liveTestCount == eb.liveTestCount
-                            && Objects.equals(ea.examName, eb.examName)
-                            && Objects.equals(ea.avatarUrl, eb.avatarUrl)
-                            && Objects.equals(ea.avatarEmoji, eb.avatarEmoji)
-                            && ea.avatarColor == eb.avatarColor;
-                }
-                return Objects.equals(a.object, b.object);
-            }
-
-            static UItem of(int id, EveExamModels.ExamSummary sub) {
-                UItem item = UItem.ofFactory(Factory.class);
-                item.id = id;
-                item.object = sub;
-                return item;
-            }
         }
     }
 }

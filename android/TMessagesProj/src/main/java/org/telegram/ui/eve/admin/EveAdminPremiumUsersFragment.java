@@ -6,7 +6,6 @@ import android.text.InputType;
 import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.View;
-import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -21,6 +20,7 @@ import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.SimpleActionBarMenu;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.BulletinFactory;
+import org.telegram.ui.Components.EditTextBoldCursor;
 import org.telegram.ui.Components.FlickerLoadingView;
 import org.telegram.ui.Components.IconBackgroundColors;
 import org.telegram.ui.Components.LayoutHelper;
@@ -345,12 +345,13 @@ public class EveAdminPremiumUsersFragment extends BaseFragment {
         hint.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, rp));
         layout.addView(hint, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 8));
 
-        EditText daysInput = new EditText(activity);
+        EditTextBoldCursor daysInput = new EditTextBoldCursor(activity);
         daysInput.setInputType(InputType.TYPE_CLASS_NUMBER);
         daysInput.setText("30");
         daysInput.setSelection(daysInput.getText().length());
         daysInput.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, rp));
         daysInput.setHintTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteHintText, rp));
+        daysInput.setCursorColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText, rp));
         layout.addView(daysInput, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
 
         AlertDialog.Builder builder = new AlertDialog.Builder(activity, rp);

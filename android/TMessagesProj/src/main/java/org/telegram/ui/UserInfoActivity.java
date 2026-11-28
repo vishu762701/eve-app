@@ -14,7 +14,6 @@ import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
-import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -306,16 +305,27 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
     public static final int ACCOUNT_OPTION_ADD_ACCOUNT = BUTTON_ADD_ACCOUNT;
     public static final int ACCOUNT_OPTION_LOGOUT = BUTTON_LOGOUT;
 
-    // EVE-PATCH: Mission 3 - Hide Personal channel, Chat Automation, and Add Account from Account screen.
+    // EVE-PATCH: Keep Personal channel and Chat Automation hidden while restoring native Add Account / Switcher.
     public static boolean isEveAccountOptionEnabled(int buttonId) {
-        return buttonId != BUTTON_CHANNEL
-                && buttonId != BUTTON_AI
-                && buttonId != BUTTON_ADD_ACCOUNT;
+        return buttonId != BUTTON_CHANNEL && buttonId != BUTTON_AI;
     }
 
     private final ArrayList<Integer> accountNumbers = new ArrayList<>();
     private void updateAccounts() {
         accountNumbers.clear();
+        for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
+            UserConfig uc = UserConfig.getInstance(a);
+            if (uc.isClientActivated()
+                    && a != currentAccount
+                    && org.telegram.ui.eve.auth.EveTelegramSessionManager.getInstance().isRealMtprotoSession(a)) {
+                accountNumbers.add(a);
+            }
+        }
+        Collections.sort(accountNumbers, (o1, o2) -> {
+            long l1 = UserConfig.getInstance(o1).loginTime;
+            long l2 = UserConfig.getInstance(o2).loginTime;
+            return Long.compare(l1, l2);
+        });
     }
 
     @Keep
@@ -356,14 +366,20 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
         items.add(UItem.asCustom(bioEdit));
         items.add(UItem.asShadow(bioInfo));
 
-        final long effectiveId = org.telegram.ui.eve.auth.EveAuthManager.getInstance().ensureLocalUiUser(currentAccount);
+        final boolean realMtproto = org.telegram.ui.eve.auth.EveTelegramSessionManager.getInstance().isRealMtprotoSession(currentAccount);
+        final long effectiveId = realMtproto
+                ? getUserConfig().getClientUserId()
+                : org.telegram.ui.eve.auth.EveAuthManager.getInstance().ensureLocalUiUser(currentAccount);
         TLRPC.User user = effectiveId != 0 ? getMessagesController().getUser(effectiveId) : null;
+        if (user == null && realMtproto) {
+            user = getUserConfig().getCurrentUser();
+        }
         items.add(UItem.asHeader(getString(R.string.EditAccountInfoHeader)));
         numberRow = items.size();
         org.telegram.ui.eve.auth.EveUserProfile eveCached = org.telegram.ui.eve.auth.EveAuthManager.getInstance().getCachedProfile();
-        String evePhone = eveCached != null && !TextUtils.isEmpty(eveCached.phone)
-                ? eveCached.phone
-                : (user != null ? user.phone : "");
+        String evePhone = (user != null && !TextUtils.isEmpty(user.phone))
+                ? user.phone
+                : (!realMtproto && eveCached != null ? eveCached.phone : "");
         if (!TextUtils.isEmpty(evePhone)) {
             String phoneLabel = evePhone.startsWith("+") ? evePhone : PhoneFormat.getInstance().format("+" + evePhone);
             items.add(SettingsActivity.SettingCell.Factory.of(INFO_PHONE, IconBackgroundColors.GREEN.top, IconBackgroundColors.GREEN.bottom, R.drawable.settings_calls, phoneLabel, getString(R.string.Phone)));
@@ -414,10 +430,21 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
         if (hadLocation) {
             items.add(SettingsActivity.SettingCell.Factory.of(BUTTON_LOCATION, IconBackgroundColors.RED.top, IconBackgroundColors.RED.bottom, R.drawable.filled_location, getString(R.string.EditProfileLocation)));
         }
-        // EVE-PATCH: Mission 3 - Personal channel (BUTTON_CHANNEL), Chat Automation (BUTTON_AI),
-        // and Add Account (BUTTON_ADD_ACCOUNT + Telegram Premium upsell shadow) entries are hidden.
-        if (!accountNumbers.isEmpty()) {
+        boolean hasFreeSlot = false;
+        for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
+            UserConfig uc = UserConfig.getInstance(a);
+            if (!uc.isClientActivated()
+                    || !org.telegram.ui.eve.auth.EveTelegramSessionManager.getInstance().isRealMtprotoSession(a)) {
+                hasFreeSlot = true;
+                break;
+            }
+        }
+        if (hasFreeSlot || !accountNumbers.isEmpty()) {
             items.add(UItem.asHeader(getString(R.string.SettingsAccounts)));
+            if (hasFreeSlot) {
+                addAccountRow = items.size();
+                items.add(InfoCell.Factory.of(BUTTON_ADD_ACCOUNT, R.drawable.outline_add_account, getString(R.string.AddAccount), null, 0).accent());
+            }
             for (int i = 0; i < accountNumbers.size(); ++i) {
                 items.add(SettingsActivity.AccountCell.Factory.of(i, accountNumbers.get(i)));
             }
@@ -480,16 +507,45 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
         } else if (item.id == BUTTON_LOCATION) {
             
 
+        } else if (item.id == BUTTON_ADD_ACCOUNT) {
+            Integer availableAccount = null;
+            for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
+                UserConfig uc = UserConfig.getInstance(a);
+                if (!uc.isClientActivated()
+                        || !org.telegram.ui.eve.auth.EveTelegramSessionManager.getInstance().isRealMtprotoSession(a)) {
+                    availableAccount = a;
+                    break;
+                }
+            }
+            if (availableAccount != null) {
+                try {
+                    ConnectionsManager cm = ConnectionsManager.getInstance(availableAccount);
+                    if (cm != null && cm.isTestBackend()) {
+                        cm.switchBackend(false);
+                    }
+                    UserConfig uc = UserConfig.getInstance(availableAccount);
+                    if (uc.isClientActivated()
+                            && !org.telegram.ui.eve.auth.EveTelegramSessionManager.getInstance().isRealMtprotoSession(availableAccount)) {
+                        uc.clearConfig();
+                    }
+                } catch (Throwable ignored) {
+                }
+                presentFragment(new LoginActivity(availableAccount));
+            } else {
+                BulletinFactory.of(this).createSimpleBulletin(R.raw.info, "Maximum Telegram accounts already added.").show();
+            }
         } else if (item.id == INFO_PHONE) {
-            showEveFieldEditDialog(getString(R.string.Phone), "phone",
-                    org.telegram.ui.eve.auth.EveAuthManager.getInstance().getCachedProfile() != null
-                            ? org.telegram.ui.eve.auth.EveAuthManager.getInstance().getCachedProfile().phone : "",
-                    "+91 9876543210");
+            if (org.telegram.ui.eve.auth.EveTelegramSessionManager.getInstance().isRealMtprotoSession(currentAccount)) {
+                presentFragment(new ActionIntroActivity(ActionIntroActivity.ACTION_TYPE_CHANGE_PHONE_NUMBER));
+            } else {
+                org.telegram.ui.eve.auth.EveTelegramSessionManager.getInstance().launchTelegramLogin(this);
+            }
         } else if (item.id == INFO_USERNAME) {
-            showEveFieldEditDialog(getString(R.string.Username), "username",
-                    org.telegram.ui.eve.auth.EveAuthManager.getInstance().getCachedProfile() != null
-                            ? org.telegram.ui.eve.auth.EveAuthManager.getInstance().getCachedProfile().username : "",
-                    "student_handle");
+            if (org.telegram.ui.eve.auth.EveTelegramSessionManager.getInstance().isRealMtprotoSession(currentAccount)) {
+                presentFragment(new ChangeUsernameActivity());
+            } else {
+                org.telegram.ui.eve.auth.EveTelegramSessionManager.getInstance().launchTelegramLogin(this);
+            }
         } else if (item.id == INFO_CATEGORY) {
             showExamCategoryPicker(this, () -> {
                 if (listView != null && listView.adapter != null) {
@@ -578,51 +634,6 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
                 .create();
         dialogHolder[0] = dialog;
         fragment.showDialog(dialog);
-    }
-
-    private void showEveFieldEditDialog(String title, String fieldKey, String currentVal, String hint) {
-        if (getContext() == null) return;
-        final EditText input = new EditText(getContext());
-        input.setSingleLine(true);
-        input.setText(currentVal != null ? currentVal : "");
-        input.setHint(hint);
-        input.setTextColor(getThemedColor(Theme.key_dialogTextBlack));
-        input.setHintTextColor(getThemedColor(Theme.key_dialogTextHint));
-        LinearLayout container = new LinearLayout(getContext());
-        container.setPadding(dp(24), dp(8), dp(24), dp(8));
-        container.addView(input, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
-        showDialog(new AlertDialog.Builder(getContext(), resourceProvider)
-                .setTitle(title)
-                .setView(container)
-                .setPositiveButton(getString(R.string.Save), (d, w) -> {
-                    String newValue = input.getText().toString().trim();
-                    if ("username".equals(fieldKey) && newValue.startsWith("@")) {
-                        newValue = newValue.substring(1).trim();
-                    }
-                    try {
-                        JSONObject updates = new JSONObject();
-                        updates.put(fieldKey, newValue);
-                        org.telegram.ui.eve.auth.EveAuthManager.getInstance().updateEveProfileFields(updates, new org.telegram.ui.eve.auth.EveAuthManager.SimpleCallback() {
-                            @Override
-                            public void onSuccess(String message) {
-                                valueSet = false;
-                                setValue();
-                                if (listView != null && listView.adapter != null) {
-                                    listView.adapter.update(true);
-                                }
-                                BulletinFactory.of(UserInfoActivity.this).createSimpleBulletin(R.raw.contact_check, message).show();
-                            }
-
-                            @Override
-                            public void onError(String message) {
-                                BulletinFactory.of(UserInfoActivity.this).createErrorBulletin(message).show();
-                            }
-                        });
-                    } catch (Throwable ignored) {
-                    }
-                })
-                .setNegativeButton(getString(R.string.Cancel), null)
-                .create());
     }
 
     @Override
@@ -749,7 +760,7 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
         }
 
         doneButton.setLoading(true, true);
-        if (true) {
+        if (!org.telegram.ui.eve.auth.EveTelegramSessionManager.getInstance().isRealMtprotoSession(currentAccount)) {
             if (!hasChanges()) {
                 wasSaved = true;
                 doneButton.setLoading(false, true);
@@ -908,6 +919,7 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
                     wasSaved = true;
                     requestsReceived[0]++;
                     if (requestsReceived[0] == requests.size()) {
+                        org.telegram.ui.eve.auth.EveAuthManager.getInstance().refreshSessionSilentlyIfSignedIn();
                         finishFragment();
                     }
                 }

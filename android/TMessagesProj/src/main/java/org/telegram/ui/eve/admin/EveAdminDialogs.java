@@ -21,6 +21,7 @@ import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Cells.TextCheckCell;
 import org.telegram.ui.Components.BulletinFactory;
+import org.telegram.ui.Components.EditTextBoldCursor;
 import org.telegram.ui.Components.EditTextEmoji;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.eve.premium.EvePremiumRepository;
@@ -80,11 +81,12 @@ public final class EveAdminDialogs {
         LinearLayout chipsRow = new LinearLayout(activity);
         chipsRow.setOrientation(LinearLayout.HORIZONTAL);
         chipsRow.setPadding(0, AndroidUtilities.dp(4), 0, AndroidUtilities.dp(6));
-        EditText customNegInput = new EditText(activity);
+        EditTextBoldCursor customNegInput = new EditTextBoldCursor(activity);
         customNegInput.setInputType(InputType.TYPE_CLASS_TEXT);
         customNegInput.setHint("Enter custom negative mark (e.g. 1/4)");
         customNegInput.setTextColor(Theme.getColor(Theme.key_dialogTextBlack, rp));
         customNegInput.setHintTextColor(Theme.getColor(Theme.key_dialogTextHint, rp));
+        customNegInput.setCursorColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText, rp));
         boolean isPresetInitial = "0".equals(initialNeg) || "0.25".equals(initialNeg) || "1/3".equals(initialNeg) || "0.5".equals(initialNeg);
         customNegInput.setText(isPresetInitial ? "" : initialNeg);
         customNegInput.setVisibility(isPresetInitial ? android.view.View.GONE : android.view.View.VISIBLE);
@@ -419,7 +421,7 @@ public final class EveAdminDialogs {
                 "Publish (Set LIVE)",
                 "Schedule Release (Hours From Now)",
                 "Move to DRAFT / Paused",
-                "Delete Unused Test"
+                "Delete Test"
         };
         new AlertDialog.Builder(activity)
                 .setTitle(test.title)
@@ -476,7 +478,7 @@ public final class EveAdminDialogs {
                             repo.postSuccess(cb, "Test paused / moved out of live feed.");
                         } else {
                             repo.deleteGeneratedTest(token, test.id);
-                            repo.postSuccess(cb, "Unused test deleted.");
+                            repo.postSuccess(cb, "Mock test deleted.");
                         }
                     });
                 })
@@ -1289,11 +1291,12 @@ public final class EveAdminDialogs {
     private static EditText addField(Context ctx, LinearLayout parent, String label, String initial, int inputType, Theme.ResourcesProvider rp) {
         addFieldLabel(ctx, parent, label, rp);
 
-        EditText et = new EditText(ctx);
+        EditTextBoldCursor et = new EditTextBoldCursor(ctx);
         et.setInputType(inputType);
         et.setText(initial != null ? initial : "");
         et.setTextColor(Theme.getColor(Theme.key_dialogTextBlack, rp));
         et.setHintTextColor(Theme.getColor(Theme.key_dialogTextHint, rp));
+        et.setCursorColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText, rp));
         parent.addView(et);
         return et;
     }

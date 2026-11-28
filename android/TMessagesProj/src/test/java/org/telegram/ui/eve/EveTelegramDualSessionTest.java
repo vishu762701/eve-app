@@ -133,6 +133,20 @@ public class EveTelegramDualSessionTest {
         assertEquals("9996628429", sent.getString("telegramUserId"));
         assertEquals("aarav_test", sent.getString("telegramUsername"));
 
+        // Unified MTProto identity overload syncs phone, username, displayName, and bio together
+        EveAuthCoordinator.SyncOutcome unifiedOutcome = EveAuthCoordinator.executeCloudSync(
+                client, base, "firebase-jwt",
+                "9996628429", "@aarav_tg", "+917627018989", "Aarav Sharma", "Target UPSC");
+        assertEquals(EveAuthCoordinator.SyncState.CLOUD_SYNCHRONIZED, unifiedOutcome.state);
+        JSONObject unifiedSent = new JSONObject(capturedSyncBody.get());
+        assertEquals("Aarav Sharma", unifiedSent.getString("displayName"));
+        assertEquals("9996628429", unifiedSent.getString("telegramUserId"));
+        assertEquals("aarav_tg", unifiedSent.getString("username"));
+        assertEquals("+917627018989", unifiedSent.getString("phone"));
+        assertEquals("Target UPSC", unifiedSent.getString("bio"));
+        assertEquals("+917627018989", unifiedOutcome.profile.phone);
+        assertEquals("aarav_tg", unifiedOutcome.profile.username);
+
         // Without Telegram session, sync remains clean and omits telegram fields
         EveAuthCoordinator.SyncOutcome plainOutcome = EveAuthCoordinator.executeCloudSync(
                 client, base, "firebase-jwt");
@@ -140,6 +154,7 @@ public class EveTelegramDualSessionTest {
         JSONObject plainSent = new JSONObject(capturedSyncBody.get());
         assertFalse(plainSent.has("telegramUserId"));
         assertFalse(plainSent.has("telegramUsername"));
+        assertFalse(plainSent.has("phone"));
     }
 
     @Test

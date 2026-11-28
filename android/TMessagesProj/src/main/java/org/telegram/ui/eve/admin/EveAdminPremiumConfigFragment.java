@@ -10,7 +10,6 @@ import android.text.InputType;
 import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
-import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -25,6 +24,7 @@ import org.telegram.ui.ActionBar.SimpleActionBarMenu;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Cells.TextCheckCell;
 import org.telegram.ui.Components.BulletinFactory;
+import org.telegram.ui.Components.EditTextBoldCursor;
 import org.telegram.ui.Components.FlickerLoadingView;
 import org.telegram.ui.Components.IconBackgroundColors;
 import org.telegram.ui.Components.LayoutHelper;
@@ -464,7 +464,7 @@ public class EveAdminPremiumConfigFragment extends BaseFragment {
         layout.setOrientation(LinearLayout.VERTICAL);
         layout.setPadding(dp(24), dp(12), dp(24), dp(8));
 
-        EditText input = new EditText(activity);
+        EditTextBoldCursor input = new EditTextBoldCursor(activity);
         input.setInputType(inputType);
         if (multiline) {
             input.setSingleLine(false);
@@ -475,6 +475,7 @@ public class EveAdminPremiumConfigFragment extends BaseFragment {
         input.setSelection(input.getText().length());
         input.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, rp));
         input.setHintTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteHintText, rp));
+        input.setCursorColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText, rp));
         layout.addView(input, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
 
         AlertDialog.Builder builder = new AlertDialog.Builder(activity, rp);

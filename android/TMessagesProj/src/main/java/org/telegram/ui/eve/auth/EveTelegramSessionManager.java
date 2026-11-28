@@ -168,7 +168,46 @@ public final class EveTelegramSessionManager {
             return null;
         }
         String username = UserObject.getPublicUsername(user);
-        return !TextUtils.isEmpty(username) ? username.trim() : null;
+        return !TextUtils.isEmpty(username) ? username.trim() : "";
+    }
+
+    @Nullable
+    public String getLinkedTelegramPhone(int account) {
+        if (!isRealMtprotoSession(account)) {
+            return null;
+        }
+        TLRPC.User user = UserConfig.getInstance(account).getCurrentUser();
+        if (user == null || TextUtils.isEmpty(user.phone)) {
+            return null;
+        }
+        String digits = user.phone.trim();
+        return digits.startsWith("+") ? digits : ("+" + digits);
+    }
+
+    @Nullable
+    public String getLinkedTelegramDisplayName(int account) {
+        if (!isRealMtprotoSession(account)) {
+            return null;
+        }
+        TLRPC.User user = UserConfig.getInstance(account).getCurrentUser();
+        if (user == null) {
+            return null;
+        }
+        String name = UserObject.getUserName(user);
+        return !TextUtils.isEmpty(name) ? name.trim() : null;
+    }
+
+    @Nullable
+    public String getLinkedTelegramBio(int account) {
+        if (!isRealMtprotoSession(account)) {
+            return null;
+        }
+        TLRPC.User user = UserConfig.getInstance(account).getCurrentUser();
+        if (user == null) {
+            return null;
+        }
+        TLRPC.UserFull full = MessagesController.getInstance(account).getUserFull(user.id);
+        return full != null && full.about != null ? full.about.trim() : null;
     }
 
     /**
@@ -294,7 +333,7 @@ public final class EveTelegramSessionManager {
         if (target.isEmpty()) {
             return false;
         }
-        MessagesController.getInstance(account).openByUserName(target, host, 0);
+        MessagesController.getInstance(account).openByUserName(target, host, 1);
         return true;
     }
 
@@ -320,7 +359,7 @@ public final class EveTelegramSessionManager {
         if (target.isEmpty()) {
             return false;
         }
-        MessagesController.getInstance(account).openByUserName(target, host, 0);
+        MessagesController.getInstance(account).openByUserName(target, host, 1);
         return true;
     }
 }

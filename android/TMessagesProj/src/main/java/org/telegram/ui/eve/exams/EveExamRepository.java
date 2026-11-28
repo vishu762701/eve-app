@@ -1057,6 +1057,18 @@ public final class EveExamRepository {
         return cachedAppConfig;
     }
 
+    public void updateCachedAppConfig(@Nullable JSONObject rawConfigJson) {
+        if (rawConfigJson == null) {
+            return;
+        }
+        try {
+            EveBackendClient.AppConfigResult parsed = EveBackendClient.AppConfigResult.fromJson(rawConfigJson);
+            cachedAppConfig = parsed;
+            putSwrJson("app_config", parsed.toJson().toString());
+        } catch (Throwable ignored) {
+        }
+    }
+
     public void fetchAppConfig(ApiCallback<EveBackendClient.AppConfigResult> callback) {
         ioExecutor.execute(() -> {
             try {

@@ -477,6 +477,7 @@ public final class EveAdminUiChrome {
                     || view instanceof TextInfoPrivacyCell
                     || view instanceof FlickerLoadingView
                     || view instanceof UniversalAdapter.SpaceView
+                    || view instanceof org.telegram.ui.eve.exams.EveExamChatRowCell
                     || Integer.valueOf(RecyclerListView.TAG_NOT_SECTION).equals(view.getTag())
                     || view.getHeight() <= dp(20);
         }

@@ -1,4 +1,4 @@
-import { deletionInfo, deleteUnused } from '../services/deletion';
+import { cascadeDeleteRecord, deletionInfo } from '../services/deletion';
 // ============================================================================
 // AI Generated Tests Management Routes
 // ============================================================================
@@ -410,13 +410,14 @@ generatedTestRoutes.delete("/:id", requirePermission("manage_generated_tests"), 
   const user = c.get("user");
   const id = c.req.param("id") || "";
   const db = c.env.DB;
-  if (!await db.prepare("SELECT id FROM generated_tests WHERE id = ?").bind(id).first()) return c.json({ success: false, error: "Record not found" }, 404);
-  const dependencies = await deletionInfo(db, id, 'test');
-  if (!dependencies.canDelete) return c.json({ success: false, error: dependencies.message, code: dependencies.code, dependencies, requestId: c.res.headers.get('X-Request-ID') }, 409);
 
-  if (!await deleteUnused(db, id, 'test', user)) {
-    const current = await deletionInfo(db, id, 'test');
-    return c.json({ success: false, error: current.message || 'Record changed. Refresh before retrying.', code: current.code || 'DELETE_RECORD_CHANGED', dependencies: current, requestId: c.res.headers.get('X-Request-ID') }, 409);
+  const res = await cascadeDeleteRecord(db, id, "test", user);
+  if (!res.deleted) {
+    return c.json({ success: false, error: "Record not found" }, 404);
+  }
+
+  if (res.avatarKeys.length > 0) {
+    try { await new AssetStorage(c.env).deleteFiles(res.avatarKeys); } catch {}
   }
 
   await purgeEdgeCache(c, ["/api/generated-tests", "/api/exams"]);

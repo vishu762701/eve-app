@@ -5,7 +5,7 @@
 
 import { Hono } from "hono";
 import { parseAndValidateQuestions } from "../ai/generator";
-import { deleteUnused } from "../services/deletion";
+import { cascadeDeleteRecord } from "../services/deletion";
 import {
   assembleTestFromBank,
   GenerationBusyError,
@@ -434,8 +434,11 @@ telegramWebhookRoutes.post("/", async (c) => {
       }
     } else if (data.startsWith("cb:delete_test:")) {
       const testId = data.slice("cb:delete_test:".length).trim();
-      const deleted = await deleteUnused(db, testId, "test", actor).catch(() => false);
-      if (deleted) {
+      const delRes = await cascadeDeleteRecord(db, testId, "test", actor).catch(() => ({ deleted: false, avatarKeys: [] as string[], syllabusPaths: [] as string[] }));
+      if (delRes.deleted) {
+        if (delRes.avatarKeys.length > 0) {
+          try { await new AssetStorage(c.env).deleteFiles(delRes.avatarKeys); } catch {}
+        }
         await purgeEdgeCache(c, ["/api/generated-tests", "/api/exams"]);
         await editOrReplyMessage(
           c.env,
@@ -445,7 +448,7 @@ telegramWebhookRoutes.post("/", async (c) => {
         );
         alertText = "Test deleted";
       } else {
-        alertText = "Cannot delete (already attempted or missing)";
+        alertText = "Test not found";
       }
     } else if (data.startsWith("cb:delete_banner:")) {
       const bannerId = data.slice("cb:delete_banner:".length).trim();

@@ -1865,8 +1865,11 @@ public final class EveAdminRepository {
         }
         JSONObject root = client.putJsonRoot("/api/admin/config", token, payload);
         JSONObject data = root.optJSONObject("data");
-        if (data != null) putSwrJson("app_config", data.toString());
         invalidateConfigCaches();
+        if (data != null) {
+            putSwrJson("app_config", data.toString());
+            org.telegram.ui.eve.exams.EveExamRepository.getInstance().updateCachedAppConfig(data);
+        }
         return EveAdminModels.AppConfigModel.fromJson(data);
     }
 

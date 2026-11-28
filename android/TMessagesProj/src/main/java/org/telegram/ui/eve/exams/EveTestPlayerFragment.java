@@ -24,7 +24,6 @@ import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
@@ -1211,10 +1210,11 @@ public class EveTestPlayerFragment extends BaseFragment {
         );
         box.addView(reasonGroup);
 
-        EditText commentInput = new EditText(activity);
+        org.telegram.ui.Components.EditTextBoldCursor commentInput = new org.telegram.ui.Components.EditTextBoldCursor(activity);
         commentInput.setHint("Optional details (up to 500 chars)");
         commentInput.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, rp));
         commentInput.setHintTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteHintText, rp));
+        commentInput.setCursorColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText, rp));
         box.addView(commentInput, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 8, 0, 0));
 
         ScrollView scroll = new ScrollView(activity);

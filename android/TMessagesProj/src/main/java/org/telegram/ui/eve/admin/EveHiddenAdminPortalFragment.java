@@ -78,9 +78,11 @@ public class EveHiddenAdminPortalFragment extends BaseFragment {
         }
         EveAuthManager auth = EveAuthManager.getInstance();
         if (auth.isSignedInAccount() && EveAdminConfig.isAdminAvailable()) {
+            EveAdminConfig.markAdminPortalUnlocked(auth.getCachedProfile());
             hostFragment.presentFragment(new EveHiddenAdminPortalFragment());
             return;
         }
+        EveAdminConfig.clearAdminPortalUnlocked();
 
         Theme.ResourcesProvider rp = hostFragment.getResourceProvider();
         String currentEmail = auth.getCachedProfile() != null ? auth.getCachedProfile().email : "";
@@ -102,10 +104,12 @@ public class EveHiddenAdminPortalFragment extends BaseFragment {
             @Override
             public void onSuccess(@NonNull EveUserProfile synced, @NonNull EveAuthCoordinator.SyncOutcome syncOutcome) {
                 if (EveAdminConfig.isServerAdminProfile(synced) || EveAdminConfig.isAdminAvailable()) {
+                    EveAdminConfig.markAdminPortalUnlocked(synced);
                     BulletinFactory.of(hostFragment)
                             .createSimpleBulletin(R.raw.contact_check, "Admin verified: " + synced.email).show();
                     hostFragment.presentFragment(new EveHiddenAdminPortalFragment());
                 } else {
+                    EveAdminConfig.clearAdminPortalUnlocked();
                     BulletinFactory.of(hostFragment)
                             .createErrorBulletin(ACCESS_DENIED_MESSAGE).show();
                 }
@@ -113,6 +117,7 @@ public class EveHiddenAdminPortalFragment extends BaseFragment {
 
             @Override
             public void onError(@NonNull String message, boolean accountDisabled) {
+                EveAdminConfig.clearAdminPortalUnlocked();
                 BulletinFactory.of(hostFragment)
                         .createErrorBulletin(!TextUtils.isEmpty(message) ? message : ACCESS_DENIED_MESSAGE).show();
             }
@@ -121,7 +126,12 @@ public class EveHiddenAdminPortalFragment extends BaseFragment {
 
     @Override
     public boolean onFragmentCreate() {
-        return EveAdminConfig.isAdminAvailable() && super.onFragmentCreate();
+        if (!EveAdminConfig.isAdminAvailable()) {
+            EveAdminConfig.clearAdminPortalUnlocked();
+            return false;
+        }
+        EveAdminConfig.markAdminPortalUnlocked(EveAuthManager.getInstance().getCachedProfile());
+        return super.onFragmentCreate();
     }
 
     @Override
@@ -184,6 +194,7 @@ public class EveHiddenAdminPortalFragment extends BaseFragment {
     public void onResume() {
         super.onResume();
         if (!EveAdminConfig.isAdminAvailable()) {
+            EveAdminConfig.clearAdminPortalUnlocked();
             finishFragment();
             return;
         }
@@ -269,11 +280,13 @@ public class EveHiddenAdminPortalFragment extends BaseFragment {
                     @Override
                     public void onSuccess(@NonNull EveUserProfile synced, @NonNull EveAuthCoordinator.SyncOutcome syncOutcome) {
                         if (!EveAdminConfig.isServerAdminProfile(synced)) {
+                            EveAdminConfig.clearAdminPortalUnlocked();
                             BulletinFactory.of(EveHiddenAdminPortalFragment.this)
                                     .createErrorBulletin(ACCESS_DENIED_MESSAGE).show();
                             finishFragment();
                             return;
                         }
+                        EveAdminConfig.markAdminPortalUnlocked(synced);
                         BulletinFactory.of(EveHiddenAdminPortalFragment.this)
                                 .createSimpleBulletin(R.raw.info, "Admin session updated: " + synced.email).show();
                         updateList();

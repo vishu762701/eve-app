@@ -4468,11 +4468,19 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             } else if (position == languageRow) {
                 presentFragment(new LanguageSelectActivity());
             } else if (position == setUsernameRow) {
-                presentFragment(new UserInfoActivity());
+                if (org.telegram.ui.eve.auth.EveTelegramSessionManager.getInstance().isRealMtprotoSession(currentAccount)) {
+                    presentFragment(new ChangeUsernameActivity());
+                } else {
+                    org.telegram.ui.eve.auth.EveTelegramSessionManager.getInstance().launchTelegramLogin(this);
+                }
             } else if (position == bioRow) {
                 presentFragment(new UserInfoActivity());
             } else if (position == numberRow) {
-                presentFragment(new UserInfoActivity());
+                if (org.telegram.ui.eve.auth.EveTelegramSessionManager.getInstance().isRealMtprotoSession(currentAccount)) {
+                    presentFragment(new ActionIntroActivity(ActionIntroActivity.ACTION_TYPE_CHANGE_PHONE_NUMBER));
+                } else {
+                    org.telegram.ui.eve.auth.EveTelegramSessionManager.getInstance().launchTelegramLogin(this);
+                }
             } else if (position == setAvatarRow) {
                 onWriteButtonClick();
             } else if (position == premiumRow) {
@@ -13352,9 +13360,12 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                             detailCell.setTextAndValue(location.address, LocaleController.getString(R.string.AttachLocation), false);
                         }
                     } else if (position == numberRow) {
+                        TLRPC.User tgUser = UserConfig.getInstance(currentAccount).getCurrentUser();
                         org.telegram.ui.eve.auth.EveUserProfile eveCached = org.telegram.ui.eve.auth.EveAuthManager.getInstance().getCachedProfile();
                         String value;
-                        if (eveCached != null && !TextUtils.isEmpty(eveCached.phone)) {
+                        if (tgUser != null && !TextUtils.isEmpty(tgUser.phone)) {
+                            value = tgUser.phone.startsWith("+") ? tgUser.phone : PhoneFormat.getInstance().format("+" + tgUser.phone);
+                        } else if (eveCached != null && !TextUtils.isEmpty(eveCached.phone)) {
                             value = eveCached.phone.startsWith("+") ? eveCached.phone : PhoneFormat.getInstance().format("+" + eveCached.phone);
                         } else {
                             value = LocaleController.getString(R.string.NumberUnknown);
@@ -15979,7 +15990,11 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             });
         } else if (position == usernameRow) {
             itemOptions.add(R.drawable.msg_edit, getString(R.string.ProfileUsernameEdit), () -> {
-                presentFragment(new UserInfoActivity());
+                if (org.telegram.ui.eve.auth.EveTelegramSessionManager.getInstance().isRealMtprotoSession(currentAccount)) {
+                    presentFragment(new ChangeUsernameActivity());
+                } else {
+                    org.telegram.ui.eve.auth.EveTelegramSessionManager.getInstance().launchTelegramLogin(this);
+                }
             });
         } else if (position == channelInfoRow || position == userInfoRow || position == bioRow) {
             itemOptions.add(R.drawable.msg_edit, getString(R.string.ProfileEditBio), () -> {
@@ -15987,7 +16002,11 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             });
         } else if (position == phoneRow) {
             itemOptions.add(R.drawable.menu_storage_path, getString(R.string.ProfilePhoneEdit), () -> {
-                presentFragment(new UserInfoActivity());
+                if (org.telegram.ui.eve.auth.EveTelegramSessionManager.getInstance().isRealMtprotoSession(currentAccount)) {
+                    presentFragment(new ActionIntroActivity(ActionIntroActivity.ACTION_TYPE_CHANGE_PHONE_NUMBER));
+                } else {
+                    org.telegram.ui.eve.auth.EveTelegramSessionManager.getInstance().launchTelegramLogin(this);
+                }
             });
         } else if (position == birthdayRow) {
             itemOptions.add(R.drawable.msg_edit, getString(R.string.ProfileBirthdayChange), () -> {

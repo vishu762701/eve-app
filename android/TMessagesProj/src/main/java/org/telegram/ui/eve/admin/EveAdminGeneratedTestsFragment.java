@@ -9,7 +9,6 @@ import android.graphics.Bitmap;
 import android.text.InputType;
 import android.text.TextUtils;
 import android.view.View;
-import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -26,6 +25,7 @@ import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.SimpleActionBarMenu;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.BulletinFactory;
+import org.telegram.ui.Components.EditTextBoldCursor;
 import org.telegram.ui.Components.FlickerLoadingView;
 import org.telegram.ui.Components.IconBackgroundColors;
 import org.telegram.ui.Components.LayoutHelper;
@@ -549,11 +549,12 @@ public class EveAdminGeneratedTestsFragment extends BaseFragment {
         label.setTextColor(Theme.getColor(Theme.key_dialogTextGray3, getResourceProvider()));
         container.addView(label, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 6));
 
-        EditText hoursInput = new EditText(activity);
+        EditTextBoldCursor hoursInput = new EditTextBoldCursor(activity);
         hoursInput.setInputType(InputType.TYPE_CLASS_NUMBER);
         hoursInput.setText("0");
         hoursInput.setTextColor(Theme.getColor(Theme.key_dialogTextBlack, getResourceProvider()));
         hoursInput.setHintTextColor(Theme.getColor(Theme.key_dialogTextHint, getResourceProvider()));
+        hoursInput.setCursorColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText, getResourceProvider()));
         container.addView(hoursInput, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
 
         showDialog(new AlertDialog.Builder(activity, getResourceProvider())
@@ -630,9 +631,13 @@ public class EveAdminGeneratedTestsFragment extends BaseFragment {
     private void confirmDeleteTest(EveAdminModels.AdminGeneratedTestItem test) {
         Activity activity = getParentActivity();
         if (activity == null) return;
+        String safeTitle = EveAnimatedEmojiHelper.stripMarkupToPlainText(test.title);
+        boolean live = test.isLive();
+        String msg = (live ? "\u26A0 Warning: This mock test is currently LIVE for students.\n\n" : "")
+                + "Delete \"" + safeTitle + "\" along with its sessions and student attempts permanently? This action cannot be undone.";
         showDialog(new AlertDialog.Builder(activity, getResourceProvider())
-                .setTitle("Delete Mock Test?")
-                .setMessage("Delete \"" + EveAnimatedEmojiHelper.stripMarkupToPlainText(test.title) + "\" permanently? This action cannot be undone.")
+                .setTitle(live ? "Delete Live Mock Test?" : "Delete Mock Test?")
+                .setMessage(msg)
                 .setPositiveButton(LocaleController.getString(R.string.Delete), (d, w) -> {
                     EveAdminRepository.ResultCallback<String> cb = new EveAdminRepository.ResultCallback<String>() {
                         @Override

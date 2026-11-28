@@ -113,6 +113,20 @@ public final class EveAuthCoordinator {
             String firebaseIdToken,
             String telegramUserId,
             String telegramUsername) {
+        return executeCloudSync(
+                backendClient, baseProfile, firebaseIdToken,
+                telegramUserId, telegramUsername, null, null, null);
+    }
+
+    public static SyncOutcome executeCloudSync(
+            EveBackendClient backendClient,
+            EveUserProfile baseProfile,
+            String firebaseIdToken,
+            String telegramUserId,
+            String telegramUsername,
+            String telegramPhone,
+            String telegramDisplayName,
+            String telegramBio) {
         if (baseProfile == null) {
             return new SyncOutcome(
                     SyncState.AUTH_EXPIRED, null, 401, "/api/users/sync", "NO_LOCAL_PROFILE",
@@ -125,15 +139,27 @@ public final class EveAuthCoordinator {
         }
 
         try {
+            String effectiveDisplayName = (telegramDisplayName != null && !telegramDisplayName.trim().isEmpty())
+                    ? telegramDisplayName.trim()
+                    : baseProfile.displayName;
+            String usernameParam = (telegramUserId != null && !telegramUserId.trim().isEmpty())
+                    ? (telegramUsername != null ? telegramUsername : "")
+                    : null;
             EveBackendClient.SyncResponse syncResp = backendClient.syncUserProfile(
-                    firebaseIdToken, baseProfile.displayName, telegramUserId, telegramUsername);
+                    firebaseIdToken,
+                    effectiveDisplayName,
+                    telegramUserId,
+                    telegramUsername,
+                    telegramPhone,
+                    usernameParam,
+                    telegramBio);
             String resolvedEveId = syncResp.eveId;
-            String resolvedName = baseProfile.displayName;
-            String resolvedUsername = baseProfile.username;
+            String resolvedName = !syncResp.displayName.isEmpty() ? syncResp.displayName : effectiveDisplayName;
+            String resolvedUsername = !syncResp.username.isEmpty() ? syncResp.username : baseProfile.username;
             String resolvedCategory = baseProfile.category;
-            String resolvedBio = baseProfile.bio;
+            String resolvedBio = !syncResp.bio.isEmpty() ? syncResp.bio : baseProfile.bio;
             String resolvedDob = baseProfile.dob;
-            String resolvedPhone = baseProfile.phone;
+            String resolvedPhone = !syncResp.phone.isEmpty() ? syncResp.phone : baseProfile.phone;
             boolean resolvedIsAdmin = baseProfile.isAdmin;
 
             try {
@@ -154,6 +180,21 @@ public final class EveAuthCoordinator {
                     throw enrichmentErr;
                 }
                 // Best-effort enrichment; keep confirmed EVE ID from /api/users/sync.
+            }
+
+            if (telegramUserId != null && !telegramUserId.trim().isEmpty()) {
+                if (telegramUsername != null) {
+                    resolvedUsername = telegramUsername.trim().replaceFirst("^@+", "");
+                }
+                if (telegramPhone != null && !telegramPhone.trim().isEmpty()) {
+                    resolvedPhone = telegramPhone.trim();
+                }
+                if (telegramDisplayName != null && !telegramDisplayName.trim().isEmpty()) {
+                    resolvedName = telegramDisplayName.trim();
+                }
+                if (telegramBio != null) {
+                    resolvedBio = telegramBio.trim();
+                }
             }
 
             try {

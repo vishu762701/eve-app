@@ -361,9 +361,32 @@ public final class EveBackendClient {
 
     public static final class SyncResponse {
         public final String eveId;
+        public final String telegramUserId;
+        public final String telegramUsername;
+        public final String phone;
+        public final String username;
+        public final String displayName;
+        public final String bio;
 
         public SyncResponse(String eveId) {
-            this.eveId = eveId;
+            this(eveId, "", "", "", "", "", "");
+        }
+
+        public SyncResponse(
+                String eveId,
+                String telegramUserId,
+                String telegramUsername,
+                String phone,
+                String username,
+                String displayName,
+                String bio) {
+            this.eveId = eveId != null ? eveId : "";
+            this.telegramUserId = telegramUserId != null ? telegramUserId : "";
+            this.telegramUsername = telegramUsername != null ? telegramUsername : "";
+            this.phone = phone != null ? phone : "";
+            this.username = username != null ? username : "";
+            this.displayName = displayName != null ? displayName : "";
+            this.bio = bio != null ? bio : "";
         }
     }
 
@@ -457,6 +480,17 @@ public final class EveBackendClient {
             String displayName,
             String telegramUserId,
             String telegramUsername) throws BackendException {
+        return syncUserProfile(firebaseIdToken, displayName, telegramUserId, telegramUsername, null, null, null);
+    }
+
+    public SyncResponse syncUserProfile(
+            String firebaseIdToken,
+            String displayName,
+            String telegramUserId,
+            String telegramUsername,
+            String phone,
+            String username,
+            String bio) throws BackendException {
         requireToken(firebaseIdToken, "/api/users/sync");
         String safeName = (displayName != null && !displayName.trim().isEmpty()) ? displayName.trim() : "Student";
         if (safeName.length() > 100) {
@@ -468,8 +502,20 @@ public final class EveBackendClient {
             if (telegramUserId != null && !telegramUserId.trim().isEmpty()) {
                 payload.put("telegramUserId", telegramUserId.trim());
             }
-            if (telegramUsername != null && !telegramUsername.trim().isEmpty()) {
-                payload.put("telegramUsername", telegramUsername.trim().replaceFirst("^@+", ""));
+            if (telegramUsername != null) {
+                String cleanTg = telegramUsername.trim().replaceFirst("^@+", "");
+                if (!cleanTg.isEmpty()) {
+                    payload.put("telegramUsername", cleanTg);
+                }
+            }
+            if (username != null) {
+                payload.put("username", username.trim().replaceFirst("^@+", ""));
+            }
+            if (phone != null && !phone.trim().isEmpty()) {
+                payload.put("phone", phone.trim());
+            }
+            if (bio != null) {
+                payload.put("bio", bio.trim());
             }
         } catch (JSONException e) {
             throw new BackendException(0, "/api/users/sync", "SERIALIZE_ERROR", ErrorKind.CLIENT_BAD_REQUEST,
@@ -481,7 +527,15 @@ public final class EveBackendClient {
             throw new BackendException(200, "/api/users/sync", "MISSING_EVE_ID", ErrorKind.INVALID_RESPONSE,
                     "EVE Cloud did not return a confirmed EVE ID.");
         }
-        return new SyncResponse(eveId);
+        return new SyncResponse(
+                eveId,
+                optCleanString(data, "telegramUserId", ""),
+                optCleanString(data, "telegramUsername", ""),
+                optCleanString(data, "phone", ""),
+                optCleanString(data, "username", ""),
+                optCleanString(data, "displayName", safeName),
+                optCleanString(data, "bio", "")
+        );
     }
 
     public ProfileResponse fetchUserProfile(String firebaseIdToken) throws BackendException {

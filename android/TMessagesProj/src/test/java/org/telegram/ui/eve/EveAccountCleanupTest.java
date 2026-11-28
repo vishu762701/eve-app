@@ -43,7 +43,7 @@ public class EveAccountCleanupTest {
     public void removedAccountOptions_areDisabledWhileCoreOptionsRemainEnabled() {
         assertFalse(UserInfoActivity.isEveAccountOptionEnabled(UserInfoActivity.ACCOUNT_OPTION_CHANNEL));
         assertFalse(UserInfoActivity.isEveAccountOptionEnabled(UserInfoActivity.ACCOUNT_OPTION_CHAT_AUTOMATION));
-        assertFalse(UserInfoActivity.isEveAccountOptionEnabled(UserInfoActivity.ACCOUNT_OPTION_ADD_ACCOUNT));
+        assertTrue(UserInfoActivity.isEveAccountOptionEnabled(UserInfoActivity.ACCOUNT_OPTION_ADD_ACCOUNT));
 
         assertTrue(UserInfoActivity.isEveAccountOptionEnabled(UserInfoActivity.ACCOUNT_OPTION_PHONE));
         assertTrue(UserInfoActivity.isEveAccountOptionEnabled(UserInfoActivity.ACCOUNT_OPTION_USERNAME));

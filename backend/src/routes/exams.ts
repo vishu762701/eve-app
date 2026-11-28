@@ -1,5 +1,5 @@
 import { cleanupMedia } from '../services/mediaCleanup';
-import { deletionInfo, deleteUnused } from '../services/deletion';
+import { cascadeDeleteRecord, deletionInfo } from '../services/deletion';
 // ============================================================================
 // Exam Management Routes
 // ============================================================================
@@ -660,25 +660,25 @@ examRoutes.delete("/:id", requirePermission("manage_exams"), async (c) => {
   const id = c.req.param("id") || "";
   const db = c.env.DB;
 
-  if (!await db.prepare("SELECT id FROM exams WHERE id = ?").bind(id).first()) return c.json({ success: false, error: "Record not found" }, 404);
-  const dependencies = await deletionInfo(db, id, 'exam');
-  if (!dependencies.canDelete) return c.json({ success: false, error: dependencies.message, code: dependencies.code, dependencies, requestId: c.res.headers.get('X-Request-ID') }, 409);
-
-  const exam = await db.prepare("SELECT * FROM exams WHERE id = ?").bind(id).first<ExamRow>();
-  if (!await deleteUnused(db, id, 'exam', user)) {
-    const current = await deletionInfo(db, id, 'exam');
-    return c.json({ success: false, error: current.message || 'Record changed. Refresh before retrying.', code: current.code || 'DELETE_RECORD_CHANGED', dependencies: current, requestId: c.res.headers.get('X-Request-ID') }, 409);
+  const res = await cascadeDeleteRecord(db, id, "exam", user);
+  if (!res.deleted) {
+    return c.json({ success: false, error: "Record not found" }, 404);
   }
 
-  const avatarKey = extractExamAvatarKey(String(exam?.avatar_url || exam?.image_url || ""));
-  if (avatarKey) {
-    try { await new AssetStorage(c.env).deleteFiles([avatarKey]); } catch {}
+  if (res.avatarKeys.length > 0) {
+    try { await new AssetStorage(c.env).deleteFiles(res.avatarKeys); } catch {}
   }
 
-  const path = extractSyllabusStorageRef(String(exam?.syllabus_url || ""));
+  let allSyllabusClean = true;
+  const reqId = c.res.headers.get("X-Request-ID");
+  for (const path of res.syllabusPaths) {
+    if (!await cleanupMedia(c.env, path, reqId)) {
+      allSyllabusClean = false;
+    }
+  }
   await purgeEdgeCache(c, ["/api/exams", "/api/generated-tests"]);
-  if (path && !await cleanupMedia(c.env, path, c.res.headers.get('X-Request-ID'))) {
-    return c.json({ success: true, message: 'Exam deleted. Media cleanup was not completed; check System Monitor.' });
+  if (!allSyllabusClean) {
+    return c.json({ success: true, message: "Exam deleted. Media cleanup was not completed; check System Monitor." });
   }
 
   return c.json({ success: true });

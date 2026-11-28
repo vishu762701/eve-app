@@ -196,6 +196,39 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
         return currentCount + 1;
     }
 
+    public static boolean shouldOpenAdminPortalOnFooterTap(boolean portalUnlocked, int tapCount) {
+        return portalUnlocked && tapCount >= 1;
+    }
+
+    public static String formatTelegramHeaderSubtitle(@Nullable String rawPhone, @Nullable String rawUsername) {
+        StringBuilder sb = new StringBuilder();
+        if (!TextUtils.isEmpty(rawPhone)) {
+            String trimmed = rawPhone.trim();
+            String digits = trimmed.replaceAll("[^0-9]", "");
+            String formatted = "";
+            if (!digits.isEmpty()) {
+                try {
+                    formatted = PhoneFormat.getInstance().format("+" + digits);
+                } catch (Throwable ignored) {
+                }
+                if (TextUtils.isEmpty(formatted)) {
+                    formatted = "+" + digits;
+                }
+            }
+            if (!formatted.isEmpty()) {
+                sb.append(formatted);
+            }
+        }
+        String cleanUser = rawUsername != null ? rawUsername.trim().replaceFirst("^@+", "") : "";
+        if (!cleanUser.isEmpty()) {
+            if (sb.length() > 0) {
+                sb.append(" \u2022 ");
+            }
+            sb.append("@").append(cleanUser);
+        }
+        return sb.toString();
+    }
+
     public SettingsActivity() {
         this(null);
     }
@@ -222,6 +255,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
         observersGroup = NotificationCenter.getGlobalInstance()
             .createObserversGroup(this)
             .add(NotificationCenter.updateInterfaces)
+            .add(NotificationCenter.mainUserInfoChanged)
             .add(NotificationCenter.starBalanceUpdated)
             .add(NotificationCenter.newSuggestionsAvailable);
         org.telegram.ui.eve.auth.EveAuthManager.getInstance().addSessionListener(eveSessionListener);
@@ -476,15 +510,23 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
         versionView.setPadding(dp(21), dp(10), dp(21), dp(10));
         versionView.setGravity(Gravity.CENTER);
         versionView.setOnClickListener(v -> {
+            if (!org.telegram.ui.eve.admin.EveAdminConfig.isAdminPortalUnlocked()) {
+                return;
+            }
             long now = android.os.SystemClock.elapsedRealtime();
             versionFooterTapCount = advanceFooterTapCount(versionFooterTapCount, lastVersionFooterTapMs, now);
             lastVersionFooterTapMs = now;
-            if (versionFooterTapCount >= 7) {
+            if (shouldOpenAdminPortalOnFooterTap(true, versionFooterTapCount)) {
                 versionFooterTapCount = 0;
                 org.telegram.ui.eve.admin.EveHiddenAdminPortalFragment.triggerAdminPortalFlow(SettingsActivity.this);
             }
         });
         versionView.setOnLongClickListener(v -> {
+            if (org.telegram.ui.eve.admin.EveAdminConfig.isAdminPortalUnlocked()) {
+                versionFooterLongPressCount = 0;
+                org.telegram.ui.eve.admin.EveHiddenAdminPortalFragment.triggerAdminPortalFlow(SettingsActivity.this);
+                return true;
+            }
             long now = android.os.SystemClock.elapsedRealtime();
             versionFooterLongPressCount = advanceFooterLongPressCount(versionFooterLongPressCount, lastVersionFooterLongPressMs, now);
             lastVersionFooterLongPressMs = now;
@@ -524,9 +566,9 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
 
     @Override
     public void didReceivedNotification(int id, int account, Object... args) {
-        if (id == NotificationCenter.starBalanceUpdated) {
+        if (id == NotificationCenter.starBalanceUpdated || id == NotificationCenter.mainUserInfoChanged) {
             setInfo();
-            if (listView != null) {
+            if (listView != null && listView.adapter != null) {
                 listView.adapter.update(true);
             }
         } else if (id == NotificationCenter.updateInterfaces) {
@@ -559,21 +601,15 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
             displayTitle = eveProfile.displayName;
         }
         titleView.setText(displayTitle != null ? displayTitle : getString(R.string.AppName));
-        final StringBuilder sb = new StringBuilder();
-        if (eveProfile != null && !eveProfile.email.isEmpty()) {
-            sb.append(eveProfile.email);
-            if (!eveProfile.eveId.isEmpty()) {
-                sb.append(" • ").append(eveProfile.eveId);
-            }
-        } else if (user != null && !TextUtils.isEmpty(user.phone)) {
-            sb.append(PhoneFormat.getInstance().format("+" + user.phone));
+        String rawPhone = (user != null && !TextUtils.isEmpty(user.phone))
+                ? user.phone
+                : (eveProfile != null ? eveProfile.phone : "");
+        String username = UserObject.getPublicUsername(user);
+        if (TextUtils.isEmpty(username) && eveProfile != null
+                && !org.telegram.ui.eve.auth.EveTelegramSessionManager.getInstance().isRealMtprotoSession(currentAccount)) {
+            username = eveProfile.username;
         }
-        final String username = UserObject.getPublicUsername(user);
-        if (username != null) {
-            if (sb.length() > 0) sb.append(" • ");
-            sb.append("@").append(username);
-        }
-        subtitleView.setText(sb);
+        subtitleView.setText(formatTelegramHeaderSubtitle(rawPhone, username));
 
         versionView.setText(getVersionName());
     }
@@ -646,6 +682,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
     @Override
     public void onResume() {
         super.onResume();
+        setInfo();
         if (listView.adapter != null) {
             listView.adapter.update(false);
         }
@@ -761,6 +798,22 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
         items.add(UItem.asCustomShadow(topView, 200 - 12));
 
         accountNumbers.clear();
+        int freeAccountSlot = -1;
+        for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
+            UserConfig uc = UserConfig.getInstance(a);
+            boolean isRealTg = uc.isClientActivated()
+                    && org.telegram.ui.eve.auth.EveTelegramSessionManager.getInstance().isRealMtprotoSession(a);
+            if (isRealTg) {
+                if (a != currentAccount) {
+                    accountNumbers.add(a);
+                }
+            } else if (freeAccountSlot < 0) {
+                freeAccountSlot = a;
+            }
+        }
+        Collections.sort(accountNumbers, (o1, o2) -> Long.compare(
+                UserConfig.getInstance(o1).loginTime,
+                UserConfig.getInstance(o2).loginTime));
 
         final Set<String> suggestions = getMessagesController().pendingSuggestions;
         if (suggestions.contains("PREMIUM_GRACE")) {
@@ -791,8 +844,16 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
             items.add(UItem.asShadow(null));
         }
 
-        if (accountNumbers.size() > 0) {
+        if (!accountNumbers.isEmpty() || freeAccountSlot >= 0) {
             items.add(UItem.asHeader(getString(R.string.SettingsAccounts)));
+            if (freeAccountSlot >= 0) {
+                items.add(UserInfoActivity.InfoCell.Factory.of(
+                        EVE_SETTINGS_ITEM_ADD_ACCOUNT,
+                        R.drawable.outline_add_account,
+                        getString(R.string.AddAccount),
+                        null,
+                        0).accent());
+            }
             for (int i = 0; i < accountNumbers.size(); ++i) {
                 items.add(AccountCell.Factory.of(i, accountNumbers.get(i)));
             }
@@ -851,6 +912,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
     public static final int EVE_SETTINGS_ITEM_PREMIUM = 11;
     public static final int EVE_SETTINGS_ITEM_TELEGRAM_FEATURES = 23;
     public static final int EVE_SETTINGS_ITEM_TELEGRAM_CHAT = 30;
+    public static final int EVE_SETTINGS_ITEM_ADD_ACCOUNT = 31;
 
     // EVE-PATCH: Hide Admin/Cloud/Telegram Chat items & Telegram Features from regular Settings.
     public static boolean isEveSettingsItemEnabled(int itemId) {
@@ -989,6 +1051,35 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
             }
             case EVE_SETTINGS_ITEM_TELEGRAM_CHAT: {
                 handleEveTelegramChatClick();
+                break;
+            }
+            case EVE_SETTINGS_ITEM_ADD_ACCOUNT: {
+                Integer availableAccount = null;
+                for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
+                    UserConfig uc = UserConfig.getInstance(a);
+                    if (!uc.isClientActivated()
+                            || !org.telegram.ui.eve.auth.EveTelegramSessionManager.getInstance().isRealMtprotoSession(a)) {
+                        availableAccount = a;
+                        break;
+                    }
+                }
+                if (availableAccount != null) {
+                    try {
+                        ConnectionsManager cm = ConnectionsManager.getInstance(availableAccount);
+                        if (cm != null && cm.isTestBackend()) {
+                            cm.switchBackend(false);
+                        }
+                        UserConfig uc = UserConfig.getInstance(availableAccount);
+                        if (uc.isClientActivated()
+                                && !org.telegram.ui.eve.auth.EveTelegramSessionManager.getInstance().isRealMtprotoSession(availableAccount)) {
+                            uc.clearConfig();
+                        }
+                    } catch (Throwable ignored) {
+                    }
+                    presentSettingFragment(new LoginActivity(availableAccount));
+                } else {
+                    BulletinFactory.of(this).createSimpleBulletin(R.raw.info, "Maximum Telegram accounts already added.").show();
+                }
                 break;
             }
             case 27: {

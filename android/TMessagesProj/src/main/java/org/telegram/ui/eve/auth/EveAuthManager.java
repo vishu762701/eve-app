@@ -651,10 +651,15 @@ public final class EveAuthManager {
                     }
                     ioExecutor.execute(() -> {
                         EveTelegramSessionManager tgSession = EveTelegramSessionManager.getInstance();
-                        String tgUserId = tgSession.getLinkedTelegramUserId(UserConfig.selectedAccount);
-                        String tgUsername = tgSession.getLinkedTelegramUsername(UserConfig.selectedAccount);
+                        int account = UserConfig.selectedAccount;
+                        String tgUserId = tgSession.getLinkedTelegramUserId(account);
+                        String tgUsername = tgSession.getLinkedTelegramUsername(account);
+                        String tgPhone = tgSession.getLinkedTelegramPhone(account);
+                        String tgDisplayName = tgSession.getLinkedTelegramDisplayName(account);
+                        String tgBio = tgSession.getLinkedTelegramBio(account);
                         EveAuthCoordinator.SyncOutcome outcome = EveAuthCoordinator.executeCloudSync(
-                                backendClient, workingProfile, idToken, tgUserId, tgUsername);
+                                backendClient, workingProfile, idToken,
+                                tgUserId, tgUsername, tgPhone, tgDisplayName, tgBio);
                         if (outcome.state == EveAuthCoordinator.SyncState.AUTH_EXPIRED && allowRetryOn401) {
                             // One retry with another forced refresh in case of clock skew / key rotation.
                             runFreshTokenSync(user, overrideDisplayName, false, callback);
@@ -698,6 +703,7 @@ public final class EveAuthManager {
                 + " code=" + outcome.errorCode);
 
         if (outcome.shouldSignOut) {
+            org.telegram.ui.eve.admin.EveAdminConfig.clearAdminPortalUnlocked();
             unregisterConnectivityRetry();
             signOut(ApplicationLoader.applicationContext, () ->
                     postError(callback, outcome.message, outcome.state == EveAuthCoordinator.SyncState.ACCOUNT_DISABLED));
@@ -705,8 +711,14 @@ public final class EveAuthManager {
         }
 
         if (outcome.profile != null) {
+            if (!org.telegram.ui.eve.admin.EveAdminConfig.isServerAdminProfile(outcome.profile)) {
+                org.telegram.ui.eve.admin.EveAdminConfig.clearAdminPortalUnlocked();
+            }
             saveCachedProfile(outcome.profile);
             ensureLocalUiUser(UserConfig.selectedAccount);
+        } else if (outcome.state == EveAuthCoordinator.SyncState.AUTH_EXPIRED
+                || outcome.state == EveAuthCoordinator.SyncState.ACCOUNT_DISABLED) {
+            org.telegram.ui.eve.admin.EveAdminConfig.clearAdminPortalUnlocked();
         }
 
         if (outcome.shouldQueueOfflineRetry) {
@@ -780,6 +792,7 @@ public final class EveAuthManager {
 
     public void signOut(@Nullable Context context, @Nullable Runnable onComplete) {
         ensureInitialized();
+        org.telegram.ui.eve.admin.EveAdminConfig.clearAdminPortalUnlocked();
         unregisterConnectivityRetry();
         pendingLinkCredential = null;
         pendingLinkEmail = null;

@@ -804,26 +804,45 @@ public class EveAdminExamDetailFragment extends BaseFragment {
         EveAdminRepository.ResultCallback<JSONObject> cb = new EveAdminRepository.ResultCallback<JSONObject>() {
             @Override
             public void onSuccess(JSONObject data) {
-                Activity act = getParentActivity();
-                if (act == null) return;
-                int attempts = data != null ? data.optInt("attemptCount", 0) : 0;
-                int tests = data != null ? data.optInt("testCount", 0) : 0;
-                int questions = data != null ? data.optInt("questionCount", 0) : 0;
-                showDialog(new AlertDialog.Builder(act, getResourceProvider())
-                        .setTitle("Delete " + exam.examName + "?")
-                        .setMessage("Linked questions: " + questions + "\nGenerated tests: " + tests + "\nStudent attempts: " + attempts + "\n\nThis action is audited and permanent.")
-                        .setPositiveButton("Delete", (d, w) -> executeDeleteExam())
-                        .setNegativeButton(LocaleController.getString(R.string.Cancel), null)
-                        .makeRed(AlertDialog.BUTTON_POSITIVE)
-                        .create());
+                showDeleteExamConfirmDialog(
+                        data != null ? data.optInt("attemptCount", 0) : 0,
+                        data != null ? data.optInt("testCount", 0) : 0,
+                        data != null ? data.optInt("questionCount", 0) : 0,
+                        data != null ? data.optInt("subExams", 0) : 0,
+                        data != null ? data.optBoolean("isLive", !exam.isPaused() && !exam.isArchived()) : (!exam.isPaused() && !exam.isArchived()));
             }
 
             @Override
             public void onError(String message, int httpStatus) {
-                BulletinFactory.of(EveAdminExamDetailFragment.this).createErrorBulletin(message).show();
+                showDeleteExamConfirmDialog(0, 0, 0, childSubExams != null ? childSubExams.size() : 0,
+                        !exam.isPaused() && !exam.isArchived());
             }
         };
         repo.runWithAdminToken(cb, token -> repo.postSuccess(cb, repo.fetchExamDeletionInfo(token, exam.id)));
+    }
+
+    private void showDeleteExamConfirmDialog(int attempts, int tests, int questions, int subExams, boolean isLive) {
+        Activity act = getParentActivity();
+        if (act == null || destroyed) return;
+        String safeName = EveAnimatedEmojiHelper.stripMarkupToPlainText(exam.examName);
+        StringBuilder msg = new StringBuilder();
+        if (isLive) {
+            msg.append("\u26A0 Warning: This exam is currently LIVE for students.\n\n");
+        }
+        if (subExams > 0) {
+            msg.append("Sub-exams: ").append(subExams).append("\n");
+        }
+        msg.append("Linked questions: ").append(questions)
+                .append("\nGenerated tests: ").append(tests)
+                .append("\nStudent attempts: ").append(attempts)
+                .append("\n\nAll linked sub-exams, tests, questions, attempts, and media will be permanently cascade-deleted.");
+        showDialog(new AlertDialog.Builder(act, getResourceProvider())
+                .setTitle(isLive ? ("Delete Live " + safeName + "?") : ("Delete " + safeName + "?"))
+                .setMessage(msg.toString())
+                .setPositiveButton("Delete", (d, w) -> executeDeleteExam())
+                .setNegativeButton(LocaleController.getString(R.string.Cancel), null)
+                .makeRed(AlertDialog.BUTTON_POSITIVE)
+                .create());
     }
 
     private void executeDeleteExam() {

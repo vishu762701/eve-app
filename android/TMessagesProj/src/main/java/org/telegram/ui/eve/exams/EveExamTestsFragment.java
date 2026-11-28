@@ -563,7 +563,6 @@ public class EveExamTestsFragment extends BaseFragment {
         }
 
         if (filteredTests.isEmpty()) {
-            items.add(UItem.asHeader(LocaleController.getString(R.string.EveExamTests)));
             items.add(UItem.asShadow(searchQuery.isEmpty()
                     ? "No published mock tests available yet for this exam."
                     : "No matching mock tests found."));
@@ -578,10 +577,10 @@ public class EveExamTestsFragment extends BaseFragment {
             EveExamModels.AttemptResult attempt = latestAttemptsByKey.get(attemptKey);
             SmartTestRowMeta meta = buildSmartTestRowMeta(test, exam, attempt, nowMs);
 
-            items.add(EveAdminUiChrome.AvatarRowCell.Factory.of(
+            items.add(EveExamChatRowCell.Factory.of(
                     BASE_TEST_ID + i,
                     test,
-                    new EveAdminUiChrome.AvatarRowCell.Payload(
+                    new EveExamChatRowCell.Payload(
                             test.id,
                             test.getDisplayTitle(),
                             meta.subtitle,
@@ -702,9 +701,12 @@ public class EveExamTestsFragment extends BaseFragment {
         Activity activity = getParentActivity();
         if (activity == null || selected == null) return;
         String safeTitle = EveAnimatedEmojiHelper.stripMarkupToPlainText(selected.getDisplayTitle());
+        String liveWarning = selected.isLive()
+                ? "\u26A0 Warning: This mock test is currently LIVE for students.\n\n"
+                : "";
         showDialog(new AlertDialog.Builder(activity, getResourceProvider())
-                .setTitle("Delete Mock Test?")
-                .setMessage("Delete \"" + safeTitle + "\" permanently? This action cannot be undone.")
+                .setTitle(selected.isLive() ? "Delete Live Mock Test?" : "Delete Mock Test?")
+                .setMessage(liveWarning + "Delete \"" + safeTitle + "\" along with its sessions and student attempts permanently? This action cannot be undone.")
                 .setPositiveButton(LocaleController.getString(R.string.Delete), (d, w) -> {
                     EveAdminRepository repo = EveAdminRepository.getInstance();
                     EveAdminRepository.ResultCallback<String> cb = new EveAdminRepository.ResultCallback<String>() {

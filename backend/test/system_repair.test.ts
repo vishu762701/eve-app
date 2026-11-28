@@ -346,14 +346,30 @@ test('active snapshot resumes even when current test JSON is malformed', async (
 test('parser rejects structured objects used as question text', () => assert.throws(() => parseAndValidateQuestions(JSON.stringify([{ ...q(), questionText: { invalid: true } }]))));
 
 
-test('test deletion preserves active student sessions and raw answer aliases stay private', async () => {
-  const db = new LocalD1(); seed(db); const student = harness(db); const admin = harness(db, true);
-  db.sqlite.prepare('UPDATE generated_tests SET questions_json = ?').run(JSON.stringify(Array.from({ length: 3 }, (_, i) => ({ ...q(i), answer: 'B' }))));
-  const detail = (await (await student('/api/generated-tests/test')).json()).data;
-  assert.equal(detail.questions[0].answer, '');
-  await student('/api/attempts/start', { examId: 'exam__test' });
-  assert.equal((await admin('/api/generated-tests/test', undefined, 'DELETE')).status, 409);
-  assert.equal(db.count('generated_tests'), 1);
+test('live test cascade deletion cleans up active student sessions and media while raw answer aliases stay private', async () => {
+  const original = globalThis.fetch;
+  const deletedMessages: string[] = [];
+  globalThis.fetch = async (_input, init) => {
+    if (init?.body) deletedMessages.push(String(init.body));
+    return Response.json({ ok: true, result: true });
+  };
+  try {
+    const db = new LocalD1(); seed(db, 3, 'live');
+    db.sqlite.prepare("UPDATE generated_tests SET avatar_url = '/api/generated-tests/test/avatar?k=tg%3A555%3ABQAC_t' WHERE id = 'test'").run();
+    const student = harness(db);
+    const admin = harness(db, true, { TELEGRAM_BOT_TOKEN: 'test-bot-token', TELEGRAM_MEDIA_CHANNEL_ID: '-1001234567890' });
+    db.sqlite.prepare('UPDATE generated_tests SET questions_json = ?').run(JSON.stringify(Array.from({ length: 3 }, (_, i) => ({ ...q(i), answer: 'B' }))));
+    const detail = (await (await student('/api/generated-tests/test')).json()).data;
+    assert.equal(detail.questions[0].answer, '');
+    await student('/api/attempts/start', { examId: 'exam__test' });
+    assert.equal((await student('/api/generated-tests/test', undefined, 'DELETE')).status, 403);
+    assert.equal((await admin('/api/generated-tests/test', undefined, 'DELETE')).status, 200);
+    assert.equal(db.count('generated_tests'), 0);
+    assert.equal(db.count('attempt_sessions'), 0);
+    assert.ok(deletedMessages.some((b) => b.includes('555')));
+  } finally {
+    globalThis.fetch = original;
+  }
 });
 test('question management persists validated canonical answer aliases and rejects invalid payloads', async () => {
   const db = new LocalD1(); const admin = harness(db, true);
@@ -428,16 +444,16 @@ test('racing submissions cannot observe uncommitted success when the database fa
   assert.equal(db.count('attempts'), 1);
 });
 
-test('delete dependencies explain blocked sessions and unpublishing preserves them', async () => {
- const db = new LocalD1(); seed(db); const admin = harness(db, true);
+test('live mock test deletion cascade-removes sessions, attempts, and analytics atomically', async () => {
+ const db = new LocalD1(); seed(db, 3, 'live'); const admin = harness(db, true);
  await harness(db)('/api/attempts/start', { examId: 'exam__test' });
  const preview = await admin('/api/generated-tests/test/deletion-info');
  assert.equal(preview.status, 200); const info = (await preview.json() as any).data;
- assert.equal(info.canDelete, false); assert.equal(info.sessions, 1);
- const blocked = await admin('/api/generated-tests/test', undefined, 'DELETE');
- assert.equal(blocked.status, 409); assert.equal((await blocked.json() as any).code, 'DELETE_BLOCKED_SESSIONS');
- assert.equal((await admin('/api/generated-tests/test/status', { status: 'paused' }, 'PUT')).status, 200);
- assert.equal(db.count('attempt_sessions'), 1); assert.equal(db.count('generated_tests'), 1);
+ assert.equal(info.canDelete, true); assert.equal(info.sessions, 1); assert.equal(info.isLive, true);
+ const deleted = await admin('/api/generated-tests/test', undefined, 'DELETE');
+ assert.equal(deleted.status, 200);
+ assert.equal(db.count('generated_tests'), 0);
+ assert.equal(db.count('attempt_sessions'), 0);
 });
 test('eligible exam deletion is atomic on database failure', async () => {
  const db = new LocalD1(); seed(db); const admin = harness(db, true);
@@ -461,26 +477,38 @@ test('reattempt preserves history and statistics with a fresh session identity',
  assert.notEqual(next.clientAttemptId, first); assert.equal(db.count('attempts'), 1);
 });
 
-test('deletion preview and unpublishing reject student access', async () => {
- const db = new LocalD1(); seed(db); const student = harness(db);
+test('deletion preview, unpublishing, and deletes strictly reject student access with 403', async () => {
+ const db = new LocalD1(); seed(db, 3, 'live'); const student = harness(db);
  for (const path of ['/api/exams/exam/deletion-info', '/api/generated-tests/test/deletion-info']) assert.equal((await student(path)).status, 403);
  assert.equal((await student('/api/exams/exam/unpublish-tests', {})).status, 403);
  assert.equal((await student('/api/exams/exam', undefined, 'DELETE')).status, 403);
+ assert.equal((await student('/api/generated-tests/test', undefined, 'DELETE')).status, 403);
 });
-test('exam dependencies explain sub-exams and completed history; unpublish never deletes history', async () => {
- const db = new LocalD1(); seed(db); const admin = harness(db, true);
- db.sqlite.exec("INSERT INTO exams (id, exam_name, category, time_limit_minutes, question_count, parent_exam_id) VALUES ('child','Child','General',10,3,'exam')");
- let response = await admin('/api/exams/exam', undefined, 'DELETE');
- assert.equal(response.status, 409); assert.equal((await response.json() as any).code, 'DELETE_BLOCKED_SUB_EXAMS');
+test('live exam cascade deletion deletes child sub-exams, tests, questions, and student attempts atomically; unpublish preserves history', async () => {
+ const db = new LocalD1(); seed(db, 3, 'live'); const admin = harness(db, true);
+ db.sqlite.exec("INSERT INTO exams (id, exam_name, category, time_limit_minutes, question_count, parent_exam_id, publish_mode) VALUES ('child','Child','General',10,3,'exam','live')");
+ db.sqlite.exec("INSERT INTO questions (id, exam_id, question_text, option_a, option_b, option_c, option_d, correct_answer) VALUES ('q_child','child','Child Q','A','B','C','D','A')");
  const student = harness(db);
  const started = (await (await student('/api/attempts/start', { examId: 'exam__test' })).json() as any).data;
  assert.equal((await student('/api/attempts/submit', { ...picks(), clientAttemptId: started.clientAttemptId })).status, 200);
- response = await admin('/api/exams/exam', undefined, 'DELETE');
- assert.equal(response.status, 409); const data = await response.json() as any;
- assert.equal(data.code, 'DELETE_BLOCKED_ATTEMPTS'); assert.ok(data.dependencies.attempts > 0);
+ const preview = await admin('/api/exams/exam/deletion-info');
+ assert.equal(preview.status, 200); const previewData = (await preview.json() as any).data;
+ assert.equal(previewData.canDelete, true); assert.ok(previewData.attempts > 0); assert.equal(previewData.subExams, 1);
+
+ // Unpublishing still preserves history
  assert.equal((await admin('/api/exams/exam/unpublish-tests', {})).status, 200);
  assert.equal(db.count('attempts'), 1); assert.equal(db.count('attempt_answers'), 3);
  assert.equal(db.sqlite.prepare("SELECT status FROM generated_tests").get()!.status, 'paused');
+
+ // Cascade delete removes live/paused exam tree, sub-exams, tests, questions, attempts, and sessions atomically
+ const response = await admin('/api/exams/exam', undefined, 'DELETE');
+ assert.equal(response.status, 200);
+ assert.equal(db.count('exams'), 0);
+ assert.equal(db.count('generated_tests'), 0);
+ assert.equal(db.count('questions'), 0);
+ assert.equal(db.count('attempts'), 0);
+ assert.equal(db.count('attempt_answers'), 0);
+ assert.equal(db.count('attempt_sessions'), 0);
 });
 test('legacy reattempt endpoint protects ongoing work, other users and the three-attempt limit', async () => {
  const db = new LocalD1(); seed(db); const student = harness(db);
@@ -496,15 +524,15 @@ test('legacy reattempt endpoint protects ongoing work, other users and the three
  assert.equal((await student('/api/attempts/start', { examId: 'exam__test' })).status, 409);
 });
 
-test('a concurrent session blocks every statement of exam deletion', async () => {
+test('cascade deletion removes concurrent ongoing session atomically with exam', async () => {
  const db = new LocalD1(); seed(db);
  db.beforeBatch = () => {
   db.beforeBatch = null;
   db.sqlite.exec("INSERT INTO attempt_sessions (id,user_id,exam_key,started_at,time_limit_seconds) VALUES ('concurrent','u','exam__test',1,600)");
  };
  const response = await harness(db, true)('/api/exams/exam', undefined, 'DELETE');
- assert.equal(response.status, 409); assert.equal((await response.json() as any).code, 'DELETE_BLOCKED_SESSIONS');
- assert.equal(db.count('exams'), 1); assert.equal(db.count('generated_tests'), 1); assert.equal(db.count('attempt_sessions'), 1);
+ assert.equal(response.status, 200);
+ assert.equal(db.count('exams'), 0); assert.equal(db.count('generated_tests'), 0); assert.equal(db.count('attempt_sessions'), 0);
 });
 test('a concurrently removed test cannot create an orphan or report a successful start', async () => {
  const db = new LocalD1(); seed(db);

@@ -4,11 +4,10 @@ import static org.telegram.messenger.AndroidUtilities.dp;
 
 import android.app.Activity;
 import android.content.Context;
-import android.text.InputType;
 import android.text.TextUtils;
+import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
-import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -22,6 +21,7 @@ import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.SimpleActionBarMenu;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.BulletinFactory;
+import org.telegram.ui.Components.EditTextEmoji;
 import org.telegram.ui.Components.FlickerLoadingView;
 import org.telegram.ui.Components.IconBackgroundColors;
 import org.telegram.ui.Components.LayoutHelper;
@@ -287,35 +287,52 @@ public class EveAdminFeedbackFragment extends BaseFragment {
         if (act == null) return;
         Theme.ResourcesProvider rp = getResourceProvider();
 
-        LinearLayout box = new LinearLayout(act);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dp(20), dp(8), dp(20), dp(8));
+        String sender = !TextUtils.isEmpty(msg.userEmail) ? msg.userEmail : "Student Feedback";
+        EveAnimatedEmojiHelper.SheetHost host = new EveAnimatedEmojiHelper.SheetHost(act, sender, rp);
 
-        EditText replyInput = new EditText(act);
-        replyInput.setHint("Write admin reply...");
-        replyInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
-        replyInput.setMinLines(2);
-        replyInput.setText(msg.adminReply);
-        replyInput.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, rp));
-        replyInput.setHintTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteHintText, rp));
-        box.addView(replyInput, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+        TextView metaView = new TextView(act);
+        metaView.setText(msg.message + "\n\nSent: " + EveAdminUiChrome.formatDateTime(msg.createdAt));
+        metaView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
+        metaView.setTextColor(Theme.getColor(Theme.key_dialogTextBlack, rp));
+        host.formColumn.addView(metaView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 12));
 
-        AlertDialog.Builder builder = new AlertDialog.Builder(act, rp);
-        builder.setTitle(!TextUtils.isEmpty(msg.userEmail) ? msg.userEmail : "Student Feedback");
-        builder.setMessage(msg.message + "\n\nSent: " + EveAdminUiChrome.formatDateTime(msg.createdAt));
-        builder.setView(box);
-        builder.setPositiveButton("Send Reply", (d, w) -> {
-            String rText = replyInput.getText().toString().trim();
+        EditTextEmoji replyInput = EveAnimatedEmojiHelper.createEditTextEmoji(
+                act, host.root, this, "Write admin reply...", msg.adminReply != null ? msg.adminReply : "", true, rp);
+        host.formColumn.addView(replyInput, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 14));
+
+        LinearLayout actions = new LinearLayout(act);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        TextView sendBtn = makeSheetActionButton(act, "Send Reply", true, false, rp);
+        actions.addView(sendBtn, LayoutHelper.createLinear(0, 42, 1f, 0, 0, 6, 0));
+        if (!msg.read) {
+            TextView readBtn = makeSheetActionButton(act, "Mark Read", false, false, rp);
+            readBtn.setOnClickListener(v -> {
+                host.sheet.dismiss();
+                runMutation(token -> repo.markFeedbackRead(token, msg.id), "Marked as read");
+            });
+            actions.addView(readBtn, LayoutHelper.createLinear(0, 42, 1f, 4, 0, 4, 0));
+        }
+        TextView deleteBtn = makeSheetActionButton(act, "Delete", false, true, rp);
+        deleteBtn.setOnClickListener(v -> {
+            host.sheet.dismiss();
+            confirmDeleteMessage(msg);
+        });
+        actions.addView(deleteBtn, LayoutHelper.createLinear(0, 42, 1f, 6, 0, 0, 0));
+        host.formColumn.addView(actions, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+
+        sendBtn.setOnClickListener(v -> {
+            String rText = EveAnimatedEmojiHelper.encode(replyInput.getText()).trim();
             if (!rText.isEmpty()) {
+                host.sheet.dismiss();
                 runMutation(token -> repo.replyFeedbackMessage(token, msg.id, rText), "Reply sent");
             }
         });
-        if (!msg.read) {
-            builder.setNeutralButton("Mark Read", (d, w) ->
-                    runMutation(token -> repo.markFeedbackRead(token, msg.id), "Marked as read"));
-        }
-        builder.setNegativeButton("Delete", (d, w) -> confirmDeleteMessage(msg));
-        showDialog(builder.create());
+        host.sheet.setOnShowListener(d -> replyInput.onResume());
+        host.sheet.setOnDismissListener(d -> {
+            replyInput.onPause();
+            replyInput.onDestroy();
+        });
+        showDialog(host.sheet);
     }
 
     private void confirmDeleteMessage(EveAdminModels.FeedbackMessageItem msg) {
@@ -340,40 +357,63 @@ public class EveAdminFeedbackFragment extends BaseFragment {
         if (act == null) return;
         Theme.ResourcesProvider rp = getResourceProvider();
 
-        LinearLayout box = new LinearLayout(act);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dp(22), dp(12), dp(22), dp(8));
+        EveAnimatedEmojiHelper.SheetHost host = new EveAnimatedEmojiHelper.SheetHost(act, "New Feedback Post", rp);
 
-        EditText titleInput = new EditText(act);
-        titleInput.setHint("Topic Title");
-        titleInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
-        titleInput.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, rp));
-        titleInput.setHintTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteHintText, rp));
-        box.addView(titleInput, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 10));
+        EditTextEmoji titleInput = EveAnimatedEmojiHelper.createEditTextEmoji(
+                act, host.root, this, "Topic Title", "", false, rp);
+        host.formColumn.addView(titleInput, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 10));
 
-        EditText bodyInput = new EditText(act);
-        bodyInput.setHint("Post message");
-        bodyInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
-        bodyInput.setMinLines(3);
-        bodyInput.setGravity(Gravity.TOP | Gravity.START);
-        bodyInput.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, rp));
-        bodyInput.setHintTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteHintText, rp));
-        box.addView(bodyInput, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+        EditTextEmoji bodyInput = EveAnimatedEmojiHelper.createEditTextEmoji(
+                act, host.root, this, "Post message", "", true, rp);
+        host.formColumn.addView(bodyInput, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 14));
 
-        AlertDialog.Builder builder = new AlertDialog.Builder(act, rp);
-        builder.setTitle("New Feedback Post");
-        builder.setView(box);
-        builder.setPositiveButton("Create", (d, w) -> {
-            String t = titleInput.getText().toString().trim();
-            String b = bodyInput.getText().toString().trim();
+        LinearLayout actions = new LinearLayout(act);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        TextView cancelBtn = makeSheetActionButton(act, "Cancel", false, false, rp);
+        TextView createBtn = makeSheetActionButton(act, "Create", true, false, rp);
+        actions.addView(cancelBtn, LayoutHelper.createLinear(0, 42, 1f, 0, 0, 8, 0));
+        actions.addView(createBtn, LayoutHelper.createLinear(0, 42, 1f, 8, 0, 0, 0));
+        host.formColumn.addView(actions, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+
+        cancelBtn.setOnClickListener(v -> host.sheet.dismiss());
+        createBtn.setOnClickListener(v -> {
+            String t = EveAnimatedEmojiHelper.encode(titleInput.getText()).trim();
+            String b = EveAnimatedEmojiHelper.encode(bodyInput.getText()).trim();
             if (t.isEmpty() || b.isEmpty()) {
                 BulletinFactory.of(this).createErrorBulletin("Title and message are required.").show();
                 return;
             }
+            host.sheet.dismiss();
             runMutation(token -> repo.createFeedbackPost(token, t, b), "Feedback post created");
         });
-        builder.setNegativeButton("Cancel", null);
-        showDialog(builder.create());
+        host.sheet.setOnShowListener(d -> {
+            titleInput.onResume();
+            bodyInput.onResume();
+        });
+        host.sheet.setOnDismissListener(d -> {
+            titleInput.onPause();
+            bodyInput.onPause();
+            titleInput.onDestroy();
+            bodyInput.onDestroy();
+        });
+        showDialog(host.sheet);
+    }
+
+    private TextView makeSheetActionButton(Context ctx, String label, boolean primary, boolean destructive, Theme.ResourcesProvider rp) {
+        TextView tv = new TextView(ctx);
+        tv.setText(label);
+        tv.setGravity(Gravity.CENTER);
+        tv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
+        tv.setTypeface(AndroidUtilities.bold());
+        int bgColor = primary
+                ? Theme.getColor(Theme.key_featuredStickers_addButton, rp)
+                : Theme.multAlpha(Theme.getColor(destructive ? Theme.key_text_RedRegular : Theme.key_windowBackgroundWhiteGrayText, rp), 0.14f);
+        int fgColor = primary
+                ? Theme.getColor(Theme.key_featuredStickers_buttonText, rp)
+                : Theme.getColor(destructive ? Theme.key_text_RedRegular : Theme.key_windowBackgroundWhiteBlackText, rp);
+        tv.setBackground(Theme.createRoundRectDrawable(dp(10), bgColor));
+        tv.setTextColor(fgColor);
+        return tv;
     }
 
     private void showPostDetailDialog(EveAdminModels.FeedbackPostItem post) {

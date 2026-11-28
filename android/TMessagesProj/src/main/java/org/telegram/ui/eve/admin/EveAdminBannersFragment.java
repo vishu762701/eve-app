@@ -9,7 +9,6 @@ import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
-import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -27,6 +26,7 @@ import org.telegram.ui.ActionBar.SimpleActionBarMenu;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.BackupImageView;
 import org.telegram.ui.Components.BulletinFactory;
+import org.telegram.ui.Components.EditTextBoldCursor;
 import org.telegram.ui.Components.FlickerLoadingView;
 import org.telegram.ui.Components.IconBackgroundColors;
 import org.telegram.ui.Components.LayoutHelper;
@@ -355,20 +355,22 @@ public class EveAdminBannersFragment extends BaseFragment {
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(22), dp(12), dp(22), dp(8));
 
-        EditText urlInput = new EditText(activity);
+        EditTextBoldCursor urlInput = new EditTextBoldCursor(activity);
         urlInput.setHint("https://... (Optional)");
         urlInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
         urlInput.setText(banner.linkUrl);
         urlInput.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, rp));
         urlInput.setHintTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteHintText, rp));
+        urlInput.setCursorColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText, rp));
         box.addView(urlInput, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 10));
 
-        EditText labelInput = new EditText(activity);
+        EditTextBoldCursor labelInput = new EditTextBoldCursor(activity);
         labelInput.setHint("Caption / Label (Optional)");
         labelInput.setInputType(InputType.TYPE_CLASS_TEXT);
         labelInput.setText(banner.linkLabel);
         labelInput.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, rp));
         labelInput.setHintTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteHintText, rp));
+        labelInput.setCursorColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText, rp));
         box.addView(labelInput, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
 
         AlertDialog.Builder builder = new AlertDialog.Builder(activity, rp);

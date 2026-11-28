@@ -7,19 +7,79 @@ import { AuthUser, Env, UserRow } from "../types";
 
 export const authRoutes = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
 
-async function getUsersTelegramLinkColumns(
-  db: D1Database
-): Promise<{ hasTelegramUserId: boolean; hasTelegramUsername: boolean }> {
+interface UsersProfileColumns {
+  hasTelegramUserId: boolean;
+  hasTelegramUsername: boolean;
+  hasPhone: boolean;
+  hasUsername: boolean;
+  hasBio: boolean;
+}
+
+async function getUsersProfileColumns(db: D1Database): Promise<UsersProfileColumns> {
   try {
     const { results } = await db.prepare("PRAGMA table_info(users)").all<{ name: string }>();
     const names = new Set((results || []).map((col) => String(col?.name || "").toLowerCase()));
     return {
       hasTelegramUserId: names.has("telegram_user_id"),
       hasTelegramUsername: names.has("telegram_username"),
+      hasPhone: names.has("phone"),
+      hasUsername: names.has("username"),
+      hasBio: names.has("bio"),
     };
   } catch {
-    return { hasTelegramUserId: false, hasTelegramUsername: false };
+    return {
+      hasTelegramUserId: false,
+      hasTelegramUsername: false,
+      hasPhone: false,
+      hasUsername: false,
+      hasBio: false,
+    };
   }
+}
+
+function parseOptionalSyncPhone(
+  raw: unknown
+): { provided: boolean; valid: boolean; value: string; error?: string } {
+  if (raw === undefined) {
+    return { provided: false, valid: true, value: "" };
+  }
+  if (raw === null || raw === "") {
+    return { provided: true, valid: true, value: "" };
+  }
+  if (typeof raw !== "string") {
+    return { provided: true, valid: false, value: "", error: "phone must be a string" };
+  }
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return { provided: true, valid: true, value: "" };
+  }
+  if (trimmed.length > 32 || !/^\+?[0-9 ()-]+$/.test(trimmed)) {
+    return { provided: true, valid: false, value: "", error: "Please enter a valid phone number (7-15 digits)" };
+  }
+  const digits = trimmed.replace(/[^0-9]/g, "");
+  if (digits.length < 7 || digits.length > 15) {
+    return { provided: true, valid: false, value: "", error: "Please enter a valid phone number (7-15 digits)" };
+  }
+  return { provided: true, valid: true, value: `+${digits}` };
+}
+
+function parseOptionalSyncBio(
+  raw: unknown
+): { provided: boolean; valid: boolean; value: string; error?: string } {
+  if (raw === undefined) {
+    return { provided: false, valid: true, value: "" };
+  }
+  if (raw === null || raw === "") {
+    return { provided: true, valid: true, value: "" };
+  }
+  if (typeof raw !== "string") {
+    return { provided: true, valid: false, value: "", error: "bio must be a string" };
+  }
+  const trimmed = raw.trim();
+  if (trimmed.length > 160) {
+    return { provided: true, valid: false, value: "", error: "bio must be at most 160 characters" };
+  }
+  return { provided: true, valid: true, value: trimmed };
 }
 
 function parseOptionalTelegramUserId(
@@ -253,9 +313,18 @@ authRoutes.post("/sync", async (c) => {
   if (!tgIdParsed.valid) {
     return c.json({ success: false, error: tgIdParsed.error }, 400);
   }
-  const tgUsernameParsed = parseOptionalTelegramUsername(body.telegramUsername);
+  const rawSyncUsername = body.username !== undefined ? body.username : body.telegramUsername;
+  const tgUsernameParsed = parseOptionalTelegramUsername(rawSyncUsername);
   if (!tgUsernameParsed.valid) {
     return c.json({ success: false, error: tgUsernameParsed.error }, 400);
+  }
+  const phoneParsed = parseOptionalSyncPhone(body.phone);
+  if (!phoneParsed.valid) {
+    return c.json({ success: false, error: phoneParsed.error }, 400);
+  }
+  const bioParsed = parseOptionalSyncBio(body.bio);
+  if (!bioParsed.valid) {
+    return c.json({ success: false, error: bioParsed.error }, 400);
   }
   const db = c.env.DB;
   const now = Date.now();
@@ -278,18 +347,43 @@ authRoutes.post("/sync", async (c) => {
 
   const eveId = await getOrAssignEveId(db, user.uid, email, displayName);
 
-  const linkCols = await getUsersTelegramLinkColumns(db);
-  const responseData: Record<string, any> = { eveId };
-  if (linkCols.hasTelegramUserId || linkCols.hasTelegramUsername) {
+  const cols = await getUsersProfileColumns(db);
+  const responseData: Record<string, any> = { eveId, displayName };
+  if (cols.hasTelegramUserId || cols.hasTelegramUsername || cols.hasPhone || cols.hasUsername || cols.hasBio) {
     const setClauses: string[] = [];
     const bindValues: any[] = [];
-    if (linkCols.hasTelegramUserId && tgIdParsed.provided) {
+    if (cols.hasTelegramUserId && tgIdParsed.provided) {
       setClauses.push("telegram_user_id = ?");
       bindValues.push(tgIdParsed.value || null);
     }
-    if (linkCols.hasTelegramUsername && tgUsernameParsed.provided) {
+    if (cols.hasTelegramUsername && tgUsernameParsed.provided) {
       setClauses.push("telegram_username = ?");
       bindValues.push(tgUsernameParsed.value || null);
+    }
+    if (cols.hasUsername && tgUsernameParsed.provided) {
+      if (!tgUsernameParsed.value) {
+        if (body.username !== undefined) {
+          setClauses.push("username = NULL");
+        }
+      } else {
+        const collision = await db
+          .prepare("SELECT id FROM users WHERE lower(username) = lower(?) AND id != ? LIMIT 1")
+          .bind(tgUsernameParsed.value, user.uid)
+          .first<{ id: string }>()
+          .catch(() => null);
+        if (!collision) {
+          setClauses.push("username = ?");
+          bindValues.push(tgUsernameParsed.value.toLowerCase());
+        }
+      }
+    }
+    if (cols.hasPhone && phoneParsed.provided) {
+      setClauses.push("phone = ?");
+      bindValues.push(phoneParsed.value || "");
+    }
+    if (cols.hasBio && bioParsed.provided) {
+      setClauses.push("bio = ?");
+      bindValues.push(bioParsed.value);
     }
     if (setClauses.length > 0) {
       bindValues.push(user.uid);
@@ -300,19 +394,45 @@ authRoutes.post("/sync", async (c) => {
         .catch(() => {});
     }
     const selectCols = [
-      linkCols.hasTelegramUserId ? "telegram_user_id" : "NULL AS telegram_user_id",
-      linkCols.hasTelegramUsername ? "telegram_username" : "NULL AS telegram_username",
+      "display_name",
+      cols.hasTelegramUserId ? "telegram_user_id" : "NULL AS telegram_user_id",
+      cols.hasTelegramUsername ? "telegram_username" : "NULL AS telegram_username",
+      cols.hasPhone ? "phone" : "NULL AS phone",
+      cols.hasUsername ? "username" : "NULL AS username",
+      cols.hasBio ? "bio" : "NULL AS bio",
     ].join(", ");
     const linkRow = await db
       .prepare(`SELECT ${selectCols} FROM users WHERE id = ?`)
       .bind(user.uid)
-      .first<{ telegram_user_id?: string | null; telegram_username?: string | null }>()
+      .first<{
+        display_name?: string | null;
+        telegram_user_id?: string | null;
+        telegram_username?: string | null;
+        phone?: string | null;
+        username?: string | null;
+        bio?: string | null;
+      }>()
       .catch(() => null);
+    if (linkRow?.display_name) {
+      responseData.displayName = String(linkRow.display_name);
+    }
     if (linkRow?.telegram_user_id) {
       responseData.telegramUserId = String(linkRow.telegram_user_id);
     }
     if (linkRow?.telegram_username) {
       responseData.telegramUsername = String(linkRow.telegram_username);
+    }
+    if (cols.hasUsername) {
+      const effectiveUsername = linkRow?.telegram_username || linkRow?.username || "";
+      if (effectiveUsername) {
+        responseData.username = String(effectiveUsername);
+      }
+    }
+    if (cols.hasPhone && linkRow?.phone) {
+      responseData.phone = String(linkRow.phone);
+    }
+    if (cols.hasBio && linkRow?.bio) {
+      responseData.bio = String(linkRow.bio);
     }
   }
 

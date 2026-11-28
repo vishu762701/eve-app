@@ -614,8 +614,12 @@ public class EveAdminStudentsFragment extends BaseFragment {
             nameView.setText(student.displayName);
 
             String baseSub;
-            if (!student.username.isEmpty()) {
-                baseSub = "@" + student.username + (!student.email.isEmpty() ? " • " + student.email : "");
+            if (!student.username.isEmpty() && !student.phone.isEmpty()) {
+                baseSub = "@" + student.username + " • " + student.phone;
+            } else if (!student.username.isEmpty()) {
+                baseSub = "@" + student.username + (!student.category.isEmpty() ? " • " + student.category : "");
+            } else if (!student.phone.isEmpty()) {
+                baseSub = student.phone + (!student.category.isEmpty() ? " • " + student.category : "");
             } else if (!student.eveId.isEmpty()) {
                 baseSub = (!student.email.isEmpty() ? student.email + " • " : "") + student.eveId;
             } else {

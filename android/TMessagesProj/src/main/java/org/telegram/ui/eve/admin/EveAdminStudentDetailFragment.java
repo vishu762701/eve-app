@@ -261,20 +261,16 @@ public class EveAdminStudentDetailFragment extends BaseFragment {
                 "EVE ID (tap to copy)"));
         items.add(TextDetailCell.Factory.of(ID_INFO_USERNAME,
                 !student.username.isEmpty() ? "@" + student.username : "Not set",
-                student.username.isEmpty() ? "Username" : "Username (tap to copy)"));
-        if (!student.phone.isEmpty()) {
-            items.add(TextDetailCell.Factory.of(ID_INFO_PHONE,
-                    student.phone,
-                    "Phone (tap to copy)"));
-        }
+                student.username.isEmpty() ? "Telegram @username" : "Telegram @username (tap to copy)"));
+        items.add(TextDetailCell.Factory.of(ID_INFO_PHONE,
+                !student.phone.isEmpty() ? student.phone : "Not linked",
+                !student.phone.isEmpty() ? "Mobile Number (tap to copy)" : "Mobile Number"));
         items.add(TextDetailCell.Factory.of(ID_INFO_CATEGORY,
                 student.category,
                 "Exam Category"));
-        if (!student.bio.isEmpty()) {
-            items.add(TextDetailCell.Factory.of(ID_INFO_BIO,
-                    student.bio,
-                    "Bio"));
-        }
+        items.add(TextDetailCell.Factory.of(ID_INFO_BIO,
+                !student.bio.isEmpty() ? student.bio : "Not set",
+                "Bio"));
         items.add(TextDetailCell.Factory.of(ID_INFO_LAST_ACTIVE,
                 EveAdminUiChrome.formatDateTime(student.lastActive),
                 "Last Active"));

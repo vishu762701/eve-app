@@ -31,6 +31,7 @@ import org.telegram.ui.ActionBar.SimpleActionBarMenu;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.BackupImageView;
 import org.telegram.ui.Components.BulletinFactory;
+import org.telegram.ui.Components.EditTextBoldCursor;
 import org.telegram.ui.Components.EditTextEmoji;
 import org.telegram.ui.Components.EmojiView;
 import org.telegram.ui.Components.FlickerLoadingView;
@@ -57,6 +58,7 @@ public class EveAdminBroadcastsFragment extends BaseFragment {
     private static final int ID_CHANNEL_AVATAR = 102;
     private static final int ID_CHANNEL_NAME = 103;
     private static final int ID_STUDENT_QUIZZES = 104;
+    private static final int ID_OFFICIAL_TG_CHANNEL = 105;
     private static final int BASE_ITEM_ID = 1000;
 
     private final EveAdminRepository repo = EveAdminRepository.getInstance();
@@ -311,7 +313,17 @@ public class EveAdminBroadcastsFragment extends BaseFragment {
     private void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
         EveAdminUiChrome.addTopSpace(items);
 
-        items.add(UItem.asHeader("Announcements Channel Identity"));
+        items.add(UItem.asHeader("Official Telegram Channel & Quizzes"));
+        String tgChannel = appConfig != null ? appConfig.officialTelegramChannelUsername : "";
+        items.add(SettingsActivity.SettingCell.Factory.of(
+                ID_OFFICIAL_TG_CHANNEL,
+                IconBackgroundColors.CYAN.top, IconBackgroundColors.CYAN.bottom,
+                R.drawable.msg_channel,
+                "Official Telegram Channel",
+                TextUtils.isEmpty(tgChannel)
+                        ? "Not linked — tap to connect @channel for real Telegram quizzes & posts"
+                        : (tgChannel + " \u2022 Tapping Announcements opens real Telegram Chat"),
+                TextUtils.isEmpty(tgChannel) ? "Link" : "Edit"));
         String chName = appConfig != null && !TextUtils.isEmpty(appConfig.announcementChannelName)
                 ? appConfig.announcementChannelName : "Announcements";
         String chAvatar = appConfig != null ? appConfig.announcementChannelAvatarUrl : "";
@@ -395,6 +407,10 @@ public class EveAdminBroadcastsFragment extends BaseFragment {
             reload();
             return;
         }
+        if (item.id == ID_OFFICIAL_TG_CHANNEL) {
+            showEditOfficialTelegramChannelDialog();
+            return;
+        }
         if (item.id == ID_CHANNEL_AVATAR) {
             boolean hasAvatar = appConfig != null && !TextUtils.isEmpty(appConfig.announcementChannelAvatarUrl);
             if (channelAvatarPicker != null) {
@@ -414,6 +430,76 @@ public class EveAdminBroadcastsFragment extends BaseFragment {
         if (idx >= 0 && idx < broadcasts.size()) {
             showBroadcastDetail(broadcasts.get(idx));
         }
+    }
+
+    private void showEditOfficialTelegramChannelDialog() {
+        Activity activity = getParentActivity();
+        if (activity == null) return;
+        Theme.ResourcesProvider rp = getResourceProvider();
+
+        LinearLayout box = new LinearLayout(activity);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(22), dp(8), dp(22), dp(4));
+
+        EditTextBoldCursor input = new EditTextBoldCursor(activity);
+        input.setHint("@channel_username or https://t.me/...");
+        input.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_URI);
+        input.setSingleLine(true);
+        input.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16);
+        input.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, rp));
+        input.setHintTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteHintText, rp));
+        input.setCursorColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText, rp));
+        String current = appConfig != null ? appConfig.officialTelegramChannelUsername : "";
+        input.setText(current);
+        input.setSelection(input.getText() != null ? input.getText().length() : 0);
+        box.addView(input, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(activity, rp);
+        builder.setTitle("Official Telegram Channel");
+        builder.setMessage("Enter @username or t.me link for your Telegram Announcements & Native Quizzes channel. Leave blank to fall back to built-in EVE Announcements.");
+        builder.setView(box);
+        builder.setPositiveButton("Save", (d, w) -> {
+            String nextChannel = input.getText() != null ? input.getText().toString().trim() : "";
+            EveAdminModels.AppConfigModel baseCfg = appConfig != null ? appConfig : repo.getCachedAppConfig();
+            EveAdminRepository.ResultCallback<EveAdminModels.AppConfigModel> cb =
+                    new EveAdminRepository.ResultCallback<EveAdminModels.AppConfigModel>() {
+                        @Override
+                        public void onSuccess(EveAdminModels.AppConfigModel data) {
+                            if (destroyed) return;
+                            if (data != null) appConfig = data;
+                            updateList();
+                            BulletinFactory.of(EveAdminBroadcastsFragment.this)
+                                    .createSimpleBulletin(
+                                            R.raw.contact_check,
+                                            data != null && !TextUtils.isEmpty(data.officialTelegramChannelUsername)
+                                                    ? ("Linked " + data.officialTelegramChannelUsername)
+                                                    : "Telegram Channel unlinked")
+                                    .show();
+                        }
+
+                        @Override
+                        public void onError(String message, int httpStatus) {
+                            if (destroyed) return;
+                            BulletinFactory.of(EveAdminBroadcastsFragment.this)
+                                    .createErrorBulletin(message != null ? message : "Update failed.").show();
+                        }
+                    };
+            repo.runWithAdminToken(cb, token -> {
+                EveAdminModels.AppConfigModel latest = baseCfg != null ? baseCfg : repo.fetchAppConfig(token);
+                int minVer = latest != null ? Math.max(1, latest.minSupportedVersionCode) : 1;
+                boolean maint = latest != null && latest.maintenanceMode;
+                String maintMsg = latest != null ? latest.maintenanceMessage : "";
+                String pubMode = latest != null && !TextUtils.isEmpty(latest.defaultPublishMode) ? latest.defaultPublishMode : "paused";
+                String supportUser = latest != null ? latest.officialTelegramSupportUsername : "";
+                String aiProv = latest != null && !TextUtils.isEmpty(latest.aiProvider) ? latest.aiProvider : "auto";
+                String aiMod = latest != null ? latest.aiModel : "";
+                EveAdminModels.AppConfigModel updated = repo.updateAppConfig(
+                        token, minVer, maint, maintMsg, pubMode, nextChannel, supportUser, aiProv, aiMod);
+                repo.postSuccess(cb, updated);
+            });
+        });
+        builder.setNegativeButton("Cancel", null);
+        showDialog(builder.create());
     }
 
     private void showEditChannelNameDialog() {
