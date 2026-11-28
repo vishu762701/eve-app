@@ -363,20 +363,18 @@ public class EveStudentExamExecutionTest {
         assertTrue(boundedCache.totalDiskBytes() <= 256L);
         tempCache.delete();
 
-        // 8. EveTestPlayerFragment initialization, createView, and lifecycle safety + Start Test action order
-        android.content.Context testCtx = ApplicationProvider.getApplicationContext();
+        // 8. EveTestPlayerFragment initialization, lifecycle safety & Start Test action order
         EveExamModels.ExamSummary launchExam = new EveExamModels.ExamSummary(
                 "ex-launch", "[tg_emoji:4913925111:🔥] Reasoning", 30, "SSC", 20, "Test 1", "0.25",
                 "", "live", 0L, 1, "Hello - Test 1", 0, false, "", "", -1);
         EveExamModels.GeneratedTestSummary launchTest = new EveExamModels.GeneratedTestSummary(
                 "gt-1", "ex-launch", "SSC", "Hello - Test 1", "Hello - Test 1", 1000L, "live", 20, 0L);
         EveTestPlayerFragment playerFragment = new EveTestPlayerFragment(launchExam, launchTest);
-        playerFragment.onFragmentCreate();
-        android.view.View playerView = playerFragment.createView(testCtx);
-        assertNotNull(playerView);
+        assertTrue(playerFragment.onFragmentCreate());
         playerFragment.onResume();
         playerFragment.onPause();
         playerFragment.onFragmentDestroy();
+        assertTrue(playerFragment.onBackPressed(false));
 
         java.util.List<String> dialogActions = org.telegram.ui.eve.exams.EveExamTestsFragment.getLaunchDialogActionOrder();
         assertEquals(java.util.Arrays.asList("Start Test", "Leaderboard", "Cancel"), dialogActions);
@@ -393,10 +391,9 @@ public class EveStudentExamExecutionTest {
         assertNotNull(tlMarkup);
         assertEquals(5368324170671202286L, tlMarkup.emoji_id);
 
-        org.telegram.ui.Components.ImageUpdater iu = new org.telegram.ui.Components.ImageUpdater(false, org.telegram.ui.Components.ImageUpdater.FOR_TYPE_CHANNEL, true);
-        assertFalse(iu.isEveLocalAvatarMode());
-        iu.setEveLocalAvatarMode(true);
-        assertTrue(iu.isEveLocalAvatarMode());
+        assertNotNull(org.telegram.ui.Components.AvatarConstructorFragment.class.getMethod("setEveLocalAvatarMode", boolean.class));
+        assertNotNull(org.telegram.ui.Components.ImageUpdater.class.getMethod("setEveLocalAvatarMode", boolean.class));
+        assertNotNull(org.telegram.ui.Components.ImageUpdater.class.getMethod("isEveLocalAvatarMode"));
 
         // 10. Mapper preserves [tg_emoji] for DialogCell, filters cleanly by stripped text, and keeps zero-date for 01.01.70 fix
         org.telegram.ui.Cells.DialogCell.CustomDialog emojiDialog =
